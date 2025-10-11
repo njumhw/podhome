@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  username     String       @unique
+  passwordHash String
+  role         UserRole     @default(USER)
+  isBanned     Boolean      @default(false)
+  lastLoginAt  DateTime?
+  uploadCount  Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  accessLogs   AccessLog[]
+  inviteCodes  InviteCode[] @relation("UserInviteCodes")
+  invitesUsed  InviteCode[] @relation("InviteUsedBy")
+  podcasts     Podcast[]
+}
+
+model InviteCode {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  maxUses     Int       @default(1)
+  uses        Int       @default(0)
+  createdById String?
+  usedById    String?
+  createdBy   User?     @relation("UserInviteCodes", fields: [createdById], references: [id])
+  usedBy      User?     @relation("InviteUsedBy", fields: [usedById], references: [id])
+}
+
+model Topic {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  color       String?
+  approved    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  podcasts    Podcast[]
+  audioCaches AudioCache[]
+}
+
+model Prompt {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  content     String
+  category    String   // 如: "report_generation", "transcript_cleaning", "final_integration"
+  version     Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?  // 创建者ID
+  updatedBy   String?  // 最后更新者ID
+}
+
+model Podcast {
+  id                    String            @id @default(cuid())
+  title                 String
+  sourceUrl             String
+  audioUrl              String?
+  description           String?
+  guests                String?
+  publishedAt           DateTime?
+  episodeNumber         String?
+  duration              Int?
+  fileSize              BigInt?
+  language              String?           @default("zh")
+  status                PodcastStatus     @default(PROCESSING)
+  originalTranscript    String?
+  transcript            String?
+  summary               String?
+  processingStartedAt   DateTime?
+  processingCompletedAt DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  createdById           String?
+  topicId               String?
+  showAuthor            String?
+  showTitle             String?
+  accessLogs            AccessLog[]
+  createdBy             User?             @relation(fields: [createdById], references: [id])
+  topic                 Topic?            @relation(fields: [topicId], references: [id])
+  taskLogs              TaskLog[]
+  chunks                TranscriptChunk[]
+}
+
+model TranscriptChunk {
+  id        String  @id @default(cuid())
+  podcastId String
+  startSec  Int
+  endSec    Int
+  text      String
+  podcast   Podcast @relation(fields: [podcastId], references: [id])
+
+  @@index([podcastId])
+}
+
+model AccessLog {
+  id        String   @id @default(cuid())
+  podcastId String
+  userId    String?
+  createdAt DateTime @default(now())
+  podcast   Podcast  @relation(fields: [podcastId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([podcastId, createdAt])
+}
+
+model TaskLog {
+  id         String     @id @default(cuid())
+  podcastId  String
+  type       TaskType
+  status     TaskStatus @default(PENDING)
+  durationMs Int?
+  error      String?
+  attempts   Int        @default(0)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  podcast    Podcast    @relation(fields: [podcastId], references: [id])
+
+  @@index([podcastId, type, createdAt])
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ApiUsage {
+  id        String   @id @default(cuid())
+  service   String
+  endpoint  String
+  tokens    Int?
+  duration  Int?
+  cost      Decimal?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([service, createdAt])
+}
+
+model ApiUsageLog {
+  id        String   @id @default(cuid())
+  apiType   String
+  duration  Int?
+  tokens    Int?
+  timestamp DateTime @default(now())
+
+  @@index([apiType, timestamp])
+}
+
+model AudioCache {
+  id          String   @id @default(cuid())
+  audioUrl    String   @unique
+  title       String?
+  author      String?
+  duration    Int?
+  transcript  String?
+  script      String?
+  summary     String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  report      String?
+  originalUrl String?
+  publishedAt DateTime?
+  topicId     String?
+  topic       Topic?   @relation(fields: [topicId], references: [id])
+
+  @@index([audioUrl])
+  @@index([originalUrl])
+  @@index([topicId])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  GUEST
+}
+
+enum PodcastStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum TaskType {
+  TRANSCRIBE
+  CLEAN
+  IDENTIFY
+  SUMMARIZE
+  CHUNK
+  EMBED
+}
+
+enum TaskStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}

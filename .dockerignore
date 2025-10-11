@@ -1,0 +1,9 @@
+node_modules
+.pnpm-store
+.next
+out
+.git
+.env
+.vscode
+*.log
+Dockerfile
