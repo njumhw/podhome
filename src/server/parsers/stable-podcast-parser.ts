@@ -378,8 +378,8 @@ export class StablePodcastParser {
     if (result.description) completenessScore += 0.1;
     
     // 如果数据不完整，降低可信度
-    if (completenessScore < 0.7) {
-      result.confidence = Math.max(0, result.confidence - 0.3);
+    if (completenessScore < 0.5) {
+      result.confidence = Math.max(0, result.confidence - 0.2);
     } else {
       result.confidence = Math.min(1, result.confidence + 0.2);
     }

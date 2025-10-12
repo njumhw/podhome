@@ -11,9 +11,25 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     let whereClause: any = {};
+    let topicId: string | null = null;
     
-    if (type === 'topics' && topic) {
-      whereClause.topic = { name: { contains: topic, mode: 'insensitive' } };
+    if (topic) {
+      // 先根据主题名称查找主题ID
+      const topicRecord = await prisma.topic.findFirst({
+        where: { 
+          name: { contains: topic, mode: 'insensitive' },
+          approved: true 
+        },
+        select: { id: true }
+      });
+      
+      if (topicRecord) {
+        topicId = topicRecord.id;
+        whereClause.topicId = topicId;
+      } else {
+        // 如果找不到主题，返回空结果
+        whereClause.topicId = 'nonexistent';
+      }
     }
 
     let orderBy: any = { updatedAt: 'desc' };
@@ -26,8 +42,20 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // 先查Podcast表
-    const [podcastItems, podcastTotal] = await Promise.all([
+    // 构建AudioCache的查询条件
+    let audioCacheWhere: any = {
+      // 只返回有访谈全文和标题的播客（报告可以为空）
+      script: { not: null },
+      title: { not: null }
+    };
+    
+    // 如果有主题筛选，添加到AudioCache查询条件中
+    if (topicId) {
+      audioCacheWhere.topicId = topicId;
+    }
+
+    // 同时查询Podcast表和AudioCache表
+    const [podcastItems, podcastTotal, audioCacheItems, audioCacheTotal] = await Promise.all([
       prisma.podcast.findMany({
         where: whereClause,
         select: {
@@ -45,45 +73,38 @@ export async function GET(request: NextRequest) {
         skip: offset,
         take: limit
       }),
-      prisma.podcast.count({ where: whereClause })
+      prisma.podcast.count({ where: whereClause }),
+      prisma.audioCache.findMany({
+        where: audioCacheWhere,
+        select: {
+          id: true,
+          title: true,
+          author: true,
+          publishedAt: true,
+          audioUrl: true,
+          summary: true,
+          topic: { select: { name: true } },
+          updatedAt: true
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip: offset,
+        take: limit
+      }),
+      prisma.audioCache.count({
+        where: audioCacheWhere
+      })
     ]);
 
-    // 如果Podcast表没有数据，查AudioCache表
-    let items = podcastItems;
-    let total = podcastTotal;
+    // 合并两个表的结果
+    let items: any[] = [];
+    let total = 0;
 
-    if (podcastTotal === 0) {
-      const [audioCacheItems, audioCacheTotal] = await Promise.all([
-        prisma.audioCache.findMany({
-          where: {
-            // 只返回完全处理完成的播客
-            script: { not: null },
-            report: { not: null },
-            title: { not: null }
-          },
-          select: {
-            id: true,
-            title: true,
-            author: true,
-            publishedAt: true,
-            audioUrl: true,
-            summary: true,
-            updatedAt: true
-          },
-          orderBy: { updatedAt: 'desc' },
-          skip: offset,
-          take: limit
-        }),
-        prisma.audioCache.count({
-          where: {
-            // 只计算完全处理完成的播客
-            script: { not: null },
-            report: { not: null },
-            title: { not: null }
-          }
-        })
-      ]);
-
+    // 优先使用Podcast表的数据
+    if (podcastTotal > 0) {
+      items = podcastItems;
+      total = podcastTotal;
+    } else {
+      // 如果Podcast表没有数据，使用AudioCache表的数据
       items = audioCacheItems.map(item => ({
         id: item.id,
         title: item.title || '未知标题',
@@ -92,7 +113,7 @@ export async function GET(request: NextRequest) {
         audioUrl: item.audioUrl,
         sourceUrl: item.audioUrl, // 暂时使用audioUrl，后续会改进
         summary: item.summary,
-        topic: null,
+        topic: item.topic,
         updatedAt: item.updatedAt
       }));
       total = audioCacheTotal;

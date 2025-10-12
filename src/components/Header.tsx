@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ProcessingStatus } from "./ProcessingStatus";
+import { EnhancedProcessingStatus } from "./EnhancedProcessingStatus";
 import { AboutModal } from "./AboutModal";
 
 export function Header() {
@@ -245,9 +245,35 @@ export function Header() {
 				</div>
 			</header>
 			
-			<ProcessingStatus 
+			<EnhancedProcessingStatus 
 				isVisible={showProcessingStatus} 
-				onClose={() => setShowProcessingStatus(false)} 
+				onClose={() => setShowProcessingStatus(false)}
+				onCancel={async (id) => {
+					try {
+						const response = await fetch('/api/process-audio/cancel', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ processingId: id })
+						});
+						
+						if (response.ok) {
+							// 更新本地状态
+							const stored = localStorage.getItem('processingPodcasts');
+							if (stored) {
+								const items = JSON.parse(stored);
+								const updatedItems = items.map((item: any) => 
+									item.id === id 
+										? { ...item, status: 'failed', error: '用户取消' }
+										: item
+								);
+								localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+								window.dispatchEvent(new Event('storage'));
+							}
+						}
+					} catch (error) {
+						console.error('取消处理失败:', error);
+					}
+				}}
 			/>
 			
 			<AboutModal 

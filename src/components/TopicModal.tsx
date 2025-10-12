@@ -1,15 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useToast } from './Toast';
 
 interface Topic {
   id: string;
   name: string;
   description?: string;
   color?: string;
-  _count?: {
-    podcasts: number;
-  };
 }
 
 interface TopicModalProps {
@@ -31,6 +29,7 @@ export default function TopicModal({
   const [loading, setLoading] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const toast = useToast();
   // 预设的专题颜色，与应用气质相符
   const presetColors = [
     { name: '深蓝', value: '#1E40AF', bg: 'bg-blue-800', text: 'text-white' },
@@ -61,7 +60,7 @@ export default function TopicModal({
   const loadTopics = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/public/topics?includeCount=true');
+      const response = await fetch('/api/public/topics');
       const data = await response.json();
       
       if (data.success) {
@@ -100,13 +99,13 @@ export default function TopicModal({
       } else {
         // 失败时回滚UI状态
         onTopicChange(currentTopic);
-        alert(data.error || '保存失败');
+        toast.error('保存失败', data.error || '保存失败');
       }
     } catch (error) {
       console.error('保存失败:', error);
       // 失败时回滚UI状态
       onTopicChange(currentTopic);
-      alert('保存失败');
+      toast.error('保存失败', '网络错误，请重试');
     } finally {
       setLoading(false);
     }
@@ -114,7 +113,7 @@ export default function TopicModal({
 
   const handleCreateTopic = async () => {
     if (!newTopic.name.trim()) {
-      alert('请输入主题名称');
+      toast.warning('请输入主题名称');
       return;
     }
 
@@ -129,16 +128,16 @@ export default function TopicModal({
       const data = await response.json();
       
       if (data.success) {
-        alert('主题创建成功，等待审核通过后即可使用');
+        toast.success('主题创建成功', '等待审核通过后即可使用');
         setShowCreateForm(false);
         setNewTopic({ name: '', description: '', color: '#3B82F6' });
         loadTopics();
       } else {
-        alert(data.error || '创建失败');
+        toast.error('创建失败', data.error || '创建失败');
       }
     } catch (error) {
       console.error('创建失败:', error);
-      alert('创建失败');
+      toast.error('创建失败', '网络错误，请重试');
     } finally {
       setLoading(false);
     }
@@ -197,7 +196,7 @@ export default function TopicModal({
                 <option value="">不设置专题</option>
                 {topics.map((topic) => (
                   <option key={topic.id} value={topic.id}>
-                    {topic.name} ({topic._count?.podcasts || 0}个播客)
+                    {topic.name}
                   </option>
                 ))}
               </select>

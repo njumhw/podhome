@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useToast } from './Toast';
 
 type Prompt = {
   id: string;
@@ -32,6 +33,7 @@ export function PromptManager() {
     content: '',
     category: ''
   });
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
 
   // 预定义的提示词类别
@@ -84,7 +86,7 @@ export function PromptManager() {
 
   const handleSave = async () => {
     if (!formData.name || !formData.content || !formData.category) {
-      alert('请填写所有必填字段');
+      toast.warning('请填写所有必填字段');
       return;
     }
 
@@ -107,13 +109,13 @@ export function PromptManager() {
         await loadPrompts();
         setShowCreateForm(false);
         setEditingPrompt(null);
-        alert(editingPrompt ? '提示词更新成功' : '提示词创建成功');
+        toast.success(editingPrompt ? '提示词更新成功' : '提示词创建成功');
       } else {
-        alert(data.error || '操作失败');
+        toast.error('操作失败', data.error || '操作失败');
       }
     } catch (error) {
       console.error('Failed to save prompt:', error);
-      alert('操作失败');
+      toast.error('操作失败', '网络错误，请重试');
     } finally {
       setSaving(false);
     }
@@ -132,13 +134,13 @@ export function PromptManager() {
       const data = await response.json();
       if (data.success) {
         await loadPrompts();
-        alert('提示词删除成功');
+        toast.success('提示词删除成功');
       } else {
-        alert(data.error || '删除失败');
+        toast.error('删除失败', data.error || '删除失败');
       }
     } catch (error) {
       console.error('Failed to delete prompt:', error);
-      alert('删除失败');
+      toast.error('删除失败', '网络错误，请重试');
     }
   };
 
@@ -157,11 +159,11 @@ export function PromptManager() {
       if (data.success) {
         await loadPrompts();
       } else {
-        alert(data.error || '操作失败');
+        toast.error('操作失败', data.error || '操作失败');
       }
     } catch (error) {
       console.error('Failed to toggle prompt:', error);
-      alert('操作失败');
+      toast.error('操作失败', '网络错误，请重试');
     }
   };
 

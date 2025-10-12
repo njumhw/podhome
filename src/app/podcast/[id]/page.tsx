@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import TopicModal from '@/components/TopicModal';
+import { useToast } from '@/components/Toast';
 
 type Topic = {
   id: string;
@@ -56,6 +57,7 @@ export default function PodcastDetailPage() {
   const [showFullscreenReport, setShowFullscreenReport] = useState(false);
   const [showFullscreenScript, setShowFullscreenScript] = useState(false);
   const [copySuccess, setCopySuccess] = useState('');
+  const [downloadStatus, setDownloadStatus] = useState('');
   const [editData, setEditData] = useState({
     title: '',
     author: '',
@@ -65,6 +67,7 @@ export default function PodcastDetailPage() {
   });
   const [isAdmin, setIsAdmin] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const toast = useToast();
   
   const [showTopicModal, setShowTopicModal] = useState(false);
 
@@ -188,6 +191,29 @@ export default function PodcastDetailPage() {
     }
   };
 
+  const handleDownload = async () => {
+    if (!podcast?.audioUrl) return;
+    
+    setDownloadStatus('准备下载...');
+    try {
+      // 在新标签页中打开音频链接，让浏览器处理下载
+      const link = document.createElement('a');
+      link.href = podcast.audioUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.download = `${podcast.title.replace(/[^\w\s-]/g, '').trim()}.m4a`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setDownloadStatus('下载已开始');
+      setTimeout(() => setDownloadStatus(''), 3000);
+    } catch (err) {
+      setDownloadStatus('下载失败，请重试');
+      setTimeout(() => setDownloadStatus(''), 3000);
+    }
+  };
+
   // 编辑相关函数
   const handleEdit = () => {
     if (podcast) {
@@ -245,10 +271,10 @@ export default function PodcastDetailPage() {
       });
       
       setIsEditing(false);
-      alert('保存成功！');
+      toast.success('保存成功！');
     } catch (error: any) {
       console.error('保存失败:', error);
-      alert('保存失败: ' + error.message);
+      toast.error('保存失败', error.message);
     } finally {
       setIsSaving(false);
     }
@@ -327,14 +353,75 @@ export default function PodcastDetailPage() {
                 </div>
               ) : (
                 <>
-                  <h1 className="text-3xl font-bold text-gray-900 mb-2">{podcast.title}</h1>
-                  <div className="flex items-center gap-4 text-sm text-gray-700 mb-3">
+                  <h1 className="text-3xl font-bold text-gray-900 mb-3">{podcast.title}</h1>
+                  <div className="flex items-center gap-4 text-sm text-gray-700 mb-4">
                     <span>作者：{podcast.author}</span>
                     <span>发布时间：{podcast.publishedAt ? new Date(podcast.publishedAt).toLocaleDateString() : '未知时间'}</span>
                   </div>
+                  
+                  {/* 操作按钮区域 */}
+                  <div className="flex items-center gap-1.5 mb-4">
+                    {isAdmin && (
+                      <>
+                        {isEditing ? (
+                          <>
+                            <button
+                              onClick={handleSaveEdit}
+                              disabled={isSaving}
+                              className="p-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                              title={isSaving ? '保存中...' : '保存'}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="p-1.5 bg-slate-500 text-white rounded-md hover:bg-slate-600 transition-colors"
+                              title="取消"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={handleEdit}
+                            className="p-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 transition-colors"
+                            title="编辑"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {podcast?.audioUrl && (
+                      <button
+                        onClick={handleDownload}
+                        className="p-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 transition-colors"
+                        title="下载音频"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </button>
+                    )}
+                    <Link
+                      href="/home"
+                      className="p-1.5 bg-slate-500 text-white rounded-md hover:bg-slate-600 transition-colors"
+                      title="返回首页"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                      </svg>
+                    </Link>
+                  </div>
                 </>
               )}
-              <div className="flex items-center gap-3 mt-3">
+              <div className="flex items-center gap-3">
                 {podcast.topic ? (
                   <span 
                     className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium"
@@ -355,45 +442,6 @@ export default function PodcastDetailPage() {
                   管理专题
                 </button>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {isAdmin && (
-                <>
-                  {isEditing ? (
-                    <>
-                      <button
-                        onClick={handleSaveEdit}
-                        disabled={isSaving}
-                        className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-                      >
-                        {isSaving ? '保存中...' : '保存'}
-                      </button>
-                      <button
-                        onClick={handleCancelEdit}
-                        className="px-4 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                      >
-                        取消
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={handleEdit}
-                      className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      编辑
-                    </button>
-                  )}
-                </>
-              )}
-              <Link
-                href="/home"
-                className="px-4 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                返回首页
-              </Link>
             </div>
           </div>
           
@@ -694,6 +742,13 @@ export default function PodcastDetailPage() {
       {copySuccess && (
         <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 transition-opacity duration-300">
           {copySuccess}
+        </div>
+      )}
+
+      {/* 下载状态提示 */}
+      {downloadStatus && (
+        <div className="fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 transition-opacity duration-300">
+          {downloadStatus}
         </div>
       )}
 

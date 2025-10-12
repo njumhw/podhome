@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
+import { useToast } from '@/components/Toast';
 
 type PodcastItem = {
   id: string;
@@ -40,19 +41,36 @@ export default function HomePage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const toast = useToast();
 
   const [latest, setLatest] = useState<PodcastItem[]>([]);
   const [hot, setHot] = useState<PodcastItem[]>([]);
   const [allPodcasts, setAllPodcasts] = useState<PodcastItem[]>([]);
   const [showAllPodcasts, setShowAllPodcasts] = useState(false);
   const [allPodcastsPage, setAllPodcastsPage] = useState(1);
+  const [selectedTopic, setSelectedTopic] = useState<string>('');
+  const [topics, setTopics] = useState<Array<{id: string, name: string, color?: string}>>([]);
   const [allPodcastsTotal, setAllPodcastsTotal] = useState(0);
   const [loading, setLoading] = useState({ latest: false, hot: false, allPodcasts: false });
+
+  // 加载主题列表
+  const loadTopics = async () => {
+    try {
+      const response = await fetch('/api/public/topics');
+      const data = await response.json();
+      if (data.success) {
+        setTopics(data.topics);
+      }
+    } catch (error) {
+      console.error('加载主题失败:', error);
+    }
+  };
 
   // 加载首页数据
   useEffect(() => {
     loadLatest();
     loadHot();
+    loadTopics();
     
     // 检查用户登录状态
     const checkUser = async () => {
@@ -101,10 +119,14 @@ export default function HomePage() {
   };
 
 
-  const loadAllPodcasts = async (page = 1) => {
+  const loadAllPodcasts = async (page = 1, topic = '') => {
     setLoading(prev => ({ ...prev, allPodcasts: true }));
     try {
-      const res = await fetch(`/api/public/list?type=latest&limit=10&page=${page}`);
+      let url = `/api/public/list?type=latest&limit=10&page=${page}`;
+      if (topic) {
+        url += `&topic=${encodeURIComponent(topic)}`;
+      }
+      const res = await fetch(url);
       if (res.ok) {
         const data: ListResult = await res.json();
         setAllPodcasts(data.items || []);
@@ -189,7 +211,13 @@ export default function HomePage() {
       // 更新处理状态为完成
       const updatedItems = items.map((item: any) => 
         item.id === processingId 
-          ? { ...item, status: 'completed', progress: 100, title: result.title }
+          ? { 
+              ...item, 
+              status: 'completed', 
+              progress: 100, 
+              title: result.title,
+              completedAt: Date.now() // 添加完成时间戳
+            }
           : item
       );
       localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
@@ -222,12 +250,16 @@ export default function HomePage() {
       // 显示友好的错误信息
       const errorMessage = error.message || '处理失败，请重试';
       if (errorMessage.includes('请先登录')) {
-        alert('请先登录后再处理播客');
-        window.location.href = '/login';
+        toast.error('请先登录', '请先登录后再处理播客', {
+          action: {
+            label: '去登录',
+            onClick: () => window.location.href = '/login'
+          }
+        });
       } else if (errorMessage.includes('额度已用完')) {
-        alert('今日处理额度已用完，请明天再试');
+        toast.warning('今日额度已用完', '今日处理额度已用完，请明天再试');
       } else {
-        alert(errorMessage);
+        toast.error('处理失败', errorMessage);
       }
     } finally {
       setIsProcessing(false);
@@ -244,7 +276,13 @@ export default function HomePage() {
   };
 
   const handlePageChange = (page: number) => {
-    loadAllPodcasts(page);
+    loadAllPodcasts(page, selectedTopic);
+  };
+
+  const handleTopicChange = (topic: string) => {
+    setSelectedTopic(topic);
+    setAllPodcastsPage(1);
+    loadAllPodcasts(1, topic);
   };
 
   return (
@@ -447,6 +485,38 @@ export default function HomePage() {
           {showAllPodcasts && (
             <div className="mt-4 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-900">所有播客</h2>
+              
+              {/* 主题筛选器 */}
+              <div className="mb-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-sm font-medium text-gray-700">按主题筛选：</span>
+                  <select
+                    value={selectedTopic}
+                    onChange={(e) => handleTopicChange(e.target.value)}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                  >
+                    <option value="">全部主题</option>
+                    {topics.map((topic) => (
+                      <option key={topic.id} value={topic.name}>
+                        {topic.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTopic && (
+                    <button
+                      onClick={() => handleTopicChange('')}
+                      className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors"
+                    >
+                      清除筛选
+                    </button>
+                  )}
+                </div>
+                {selectedTopic && (
+                  <div className="text-sm text-gray-600">
+                    当前筛选：<span className="font-medium text-gray-900">{selectedTopic}</span>
+                  </div>
+                )}
+              </div>
               
               {loading.allPodcasts ? (
                 <div className="space-y-3">

@@ -73,7 +73,7 @@ async function resolvePodcast(url: string) {
         const stableResult = await parseStablePodcast(url);
         
         // 如果稳定解析器成功获取到音频链接，使用其结果
-        if (stableResult.audioUrl && stableResult.confidence > 0.7) {
+        if (stableResult.audioUrl && stableResult.confidence > 0.5) {
             console.log(`稳定解析器成功: 可信度=${stableResult.confidence}, 方法=${stableResult.extractionMethod}`);
             return {
                 audioUrl: stableResult.audioUrl,
