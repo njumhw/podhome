@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { 
   getProcessingEstimate, 
+  getConservativeProcessingEstimate,
   formatTime, 
   formatElapsedTime, 
   getStepStatus, 
@@ -65,12 +66,53 @@ export function EnhancedProcessingStatus({ isVisible, onClose, onCancel }: Enhan
     }
   };
 
-  const enhanceProcessingItem = (item: any): ProcessingItem => {
-    const elapsed = Date.now() - item.startTime;
-    const elapsedSeconds = elapsed / 1000;
+  // 使用实时进度数据增强处理项目
+  const enhanceWithRealTimeData = async (item: any, elapsedSeconds: number): Promise<ProcessingItem> => {
+    try {
+      const response = await fetch(`/api/real-time-progress?podcastId=${item.podcastId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          const progress = data.progress;
+          
+          // 转换为组件格式
+          const steps: ProcessingStep[] = progress.steps.map((step: any) => ({
+            id: step.id,
+            name: step.name,
+            description: step.description,
+            status: step.status,
+            progress: step.progress,
+            estimatedTime: step.estimatedDuration ? 
+              parseInt(step.estimatedDuration.replace(/[^\d]/g, '')) : undefined,
+            actualTime: step.actualDuration ? 
+              parseInt(step.actualDuration.replace(/[^\d]/g, '')) : undefined
+          }));
+          
+          return {
+            ...item,
+            steps,
+            currentStep: progress.currentStep,
+            progress: progress.overallProgress,
+            estimatedTotalTime: progress.totalDuration ? 
+              parseInt(progress.totalDuration.replace(/[^\d]/g, '')) : undefined,
+            estimatedRemainingTime: progress.estimatedRemainingTime ? 
+              parseInt(progress.estimatedRemainingTime.replace(/[^\d]/g, '')) : undefined,
+            canCancel: progress.overallStatus === 'processing'
+          };
+        }
+      }
+    } catch (error) {
+      console.error('获取实时进度失败:', error);
+    }
     
-    // 使用智能估算系统
-    const estimate = getProcessingEstimate(elapsedSeconds);
+    // 如果实时数据获取失败，回退到估算系统
+    return enhanceWithEstimation(item, elapsedSeconds);
+  };
+
+  // 使用估算系统增强处理项目
+  const enhanceWithEstimation = (item: any, elapsedSeconds: number): ProcessingItem => {
+    // 使用更保守的估算
+    const estimate = getConservativeProcessingEstimate(elapsedSeconds);
     
     // 转换为组件需要的步骤格式
     const steps: ProcessingStep[] = estimate.steps.map((step, index) => {
@@ -101,6 +143,23 @@ export function EnhancedProcessingStatus({ isVisible, onClose, onCancel }: Enhan
         accumulatedTime
       );
       
+      // 计算实际时间 - 基于实际经过的时间
+      let actualTime = 0;
+      if (status === 'completed') {
+        // 已完成的步骤：显示实际经过的时间
+        const stepStartTime = accumulatedTime;
+        const stepEndTime = Math.min(accumulatedTime + step.estimatedTime, elapsedSeconds);
+        actualTime = Math.max(0, stepEndTime - stepStartTime);
+      } else if (status === 'active') {
+        // 当前活跃的步骤：显示实际经过的时间
+        const stepStartTime = accumulatedTime;
+        const stepElapsed = Math.max(0, elapsedSeconds - stepStartTime);
+        actualTime = Math.min(stepElapsed, step.estimatedTime);
+      } else if (status === 'pending') {
+        // pending状态的步骤显示0
+        actualTime = 0;
+      }
+      
       return {
         id: step.id,
         name: step.name,
@@ -108,8 +167,7 @@ export function EnhancedProcessingStatus({ isVisible, onClose, onCancel }: Enhan
         status,
         progress: Math.round(progress),
         estimatedTime: step.estimatedTime,
-        actualTime: status === 'completed' ? step.estimatedTime : 
-                   status === 'active' ? Math.min(step.estimatedTime, elapsedSeconds - accumulatedTime) : 0
+        actualTime: Math.round(actualTime)
       };
     });
 
@@ -117,14 +175,32 @@ export function EnhancedProcessingStatus({ isVisible, onClose, onCancel }: Enhan
     const allStepsCompleted = steps.every(step => step.status === 'completed');
     let overallProgress = Math.round(estimate.overallProgress * 100);
     
-    // 如果状态仍为processing，但估算进度达到100%，说明可能还在等待服务器响应
-    // 在这种情况下，我们应该显示一个合理的进度（比如95%），而不是100%
-    if (item.status === 'processing' && overallProgress >= 100) {
-      overallProgress = 95; // 显示95%，表示接近完成但还在处理中
-    }
-    
-    // 只有当实际状态为completed时，才显示100%
-    if (item.status === 'completed') {
+    // 修复进度显示逻辑 - 更保守的估算
+    if (item.status === 'processing') {
+      // 如果所有步骤都显示完成，但状态还是processing，说明后端可能还在处理
+      if (allStepsCompleted && overallProgress >= 100) {
+        // 检查是否已经超过预计时间很多
+        const estimatedTotalSeconds = estimate.totalEstimatedTime;
+        const timeOverrun = elapsedSeconds - estimatedTotalSeconds;
+        
+        if (timeOverrun > 600) { // 超过10分钟
+          // 可能卡住了，显示85%并提示可能的问题
+          overallProgress = 85;
+        } else if (timeOverrun > 300) { // 超过5分钟
+          // 明显超时，显示90%
+          overallProgress = 90;
+        } else if (timeOverrun > 120) { // 超过2分钟
+          // 稍微超时，显示95%
+          overallProgress = 95;
+        } else {
+          // 正常范围内，显示98%
+          overallProgress = 98;
+        }
+      } else if (overallProgress >= 100) {
+        // 即使估算显示100%，如果还在处理中，最多显示95%
+        overallProgress = 95;
+      }
+    } else if (item.status === 'completed') {
       overallProgress = 100;
     }
 
@@ -140,9 +216,28 @@ export function EnhancedProcessingStatus({ isVisible, onClose, onCancel }: Enhan
       currentStep: currentStepDisplay,
       progress: overallProgress,
       estimatedTotalTime: estimate.totalEstimatedTime,
-      estimatedRemainingTime: item.status === 'processing' ? Math.max(30, estimate.estimatedRemainingTime) : 0,
+      estimatedRemainingTime: item.status === 'processing' ? 
+        (allStepsCompleted && overallProgress >= 95 ? 
+          Math.max(120, Math.min(600, estimate.estimatedRemainingTime)) : // 如果接近完成，显示2-10分钟
+          Math.max(60, estimate.estimatedRemainingTime)) : 0,
       canCancel: item.status === 'processing'
     };
+  };
+
+  const enhanceProcessingItem = (item: any): ProcessingItem => {
+    const elapsed = Date.now() - item.startTime;
+    const elapsedSeconds = elapsed / 1000;
+    
+    // 检查是否有实时进度数据
+    const hasRealTimeData = item.podcastId && item.useRealTimeProgress;
+    
+    if (hasRealTimeData) {
+      // 使用实时进度数据（异步，需要特殊处理）
+      // 暂时使用估算系统，实时数据在useEffect中处理
+    }
+    
+    // 使用智能估算系统
+    return enhanceWithEstimation(item, elapsedSeconds);
   };
 
   // 定期更新进度
@@ -367,7 +462,7 @@ function EnhancedProcessingItemCard({
           </p>
           <div className="flex items-center gap-4 mt-2">
             <span className="text-sm font-medium text-blue-600">
-              处理中
+              阿茂在听啦
             </span>
             <span className="text-xs text-gray-500">
               已用时: {formatDuration(item.startTime)}
@@ -448,11 +543,9 @@ function EnhancedProcessingItemCard({
                 }`}>
                   {step.name}
                 </span>
-                {step.actualTime && step.actualTime > 0 && (
-                  <span className="text-xs text-gray-500">
-                    {Math.round(step.actualTime)}秒
-                  </span>
-                )}
+                <span className="text-xs text-gray-500">
+                  {step.actualTime > 0 ? `${Math.round(step.actualTime)}秒` : '0秒'}
+                </span>
               </div>
               <p className="text-xs text-gray-500 mt-0.5">{step.description}</p>
             </div>

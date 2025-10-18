@@ -57,7 +57,7 @@ export async function PUT(req: NextRequest) {
       data: {
         title,
         author,
-        report: summary, // 修复：将summary保存到report字段
+        summary: summary, // 使用summary字段
         script,
         // AudioCache表没有publishedAt字段，可以存储在metadata中
         metadata: {

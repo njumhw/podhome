@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
 import { useToast } from '@/components/Toast';
+import { useUser } from '@/hooks/useUser';
 
 type PodcastItem = {
   id: string;
@@ -40,7 +41,7 @@ export default function HomePage() {
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const { user } = useUser();
   const toast = useToast();
 
   const [latest, setLatest] = useState<PodcastItem[]>([]);
@@ -66,34 +67,51 @@ export default function HomePage() {
     }
   };
 
-  // 加载首页数据
+  // 加载首页数据 - 优化并行加载
   useEffect(() => {
-    loadLatest();
-    loadHot();
-    loadTopics();
-    
-    // 检查用户登录状态
-    const checkUser = async () => {
+    const loadInitialData = async () => {
       try {
-        const res = await fetch("/api/auth/me");
-        const data = await res.json();
-        if (data.user) {
-          setUser(data.user);
-        } else {
-          setUser(null);
+        // 并行加载所有数据
+        const [latestRes, hotRes, topicsRes, userRes] = await Promise.allSettled([
+          fetch('/api/public/list?type=latest&limit=10'),
+          fetch('/api/public/list?type=hot&limit=10'),
+          fetch('/api/public/topics'),
+          fetch("/api/auth/me")
+        ]);
+
+        // 处理最新播客
+        if (latestRes.status === 'fulfilled' && latestRes.value.ok) {
+          const data = await latestRes.value.json();
+          setLatest(data.items || []);
         }
+
+        // 处理热门播客
+        if (hotRes.status === 'fulfilled' && hotRes.value.ok) {
+          const data = await hotRes.value.json();
+          setHot(data.items || []);
+        }
+
+        // 处理主题
+        if (topicsRes.status === 'fulfilled' && topicsRes.value.ok) {
+          const data = await topicsRes.value.json();
+          if (data.success) {
+            setTopics(data.topics);
+          }
+        }
+
+        // 用户状态由useUser hook管理，这里不需要处理
       } catch (error) {
-        setUser(null);
+        console.error('Failed to load initial data:', error);
       }
     };
-    
-    checkUser();
+
+    loadInitialData();
   }, []);
 
   const loadLatest = async () => {
     setLoading(prev => ({ ...prev, latest: true }));
     try {
-      const res = await fetch('/api/public/list?type=latest&limit=6');
+      const res = await fetch('/api/public/list?type=latest&limit=10');
       const data: ListResult = await res.json();
       setLatest(data.items || []);
     } catch (error) {
@@ -107,7 +125,7 @@ export default function HomePage() {
   const loadHot = async () => {
     setLoading(prev => ({ ...prev, hot: true }));
     try {
-      const res = await fetch('/api/public/list?type=hot&limit=6');
+      const res = await fetch('/api/public/list?type=hot&limit=10');
       const data: ListResult = await res.json();
       setHot(data.items || []);
     } catch (error) {
@@ -130,8 +148,18 @@ export default function HomePage() {
       if (res.ok) {
         const data: ListResult = await res.json();
         setAllPodcasts(data.items || []);
-        setAllPodcastsTotal(data.pagination.total);
+        // 安全地访问pagination，避免undefined错误
+        if (data.pagination && typeof data.pagination.total === 'number') {
+          setAllPodcastsTotal(data.pagination.total);
+        } else {
+          console.warn('API响应缺少pagination信息:', data);
+          setAllPodcastsTotal(0);
+        }
         setAllPodcastsPage(page);
+      } else {
+        console.error('API请求失败:', res.status, res.statusText);
+        setAllPodcasts([]);
+        setAllPodcastsTotal(0);
       }
     } catch (error) {
       console.error('Failed to load all podcasts:', error);
@@ -172,7 +200,17 @@ export default function HomePage() {
   };
 
   const handleProcessPodcast = async (url: string) => {
-    setIsProcessing(true);
+    // 检查是否已经在处理这个URL
+    const existing = localStorage.getItem('processingPodcasts');
+    const items = existing ? JSON.parse(existing) : [];
+    const alreadyProcessing = items.some((item: any) => 
+      item.url === url && item.status === 'processing'
+    );
+    
+    if (alreadyProcessing) {
+      toast.warning('已在处理中', '这个播客链接已经在处理队列中了');
+      return;
+    }
 
     // 创建处理项目
     const processingId = `processing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -181,12 +219,11 @@ export default function HomePage() {
       url: url,
       status: 'processing' as const,
       progress: 0,
-      startTime: Date.now()
+      startTime: Date.now(),
+      taskId: null as string | null
     };
 
     // 保存到localStorage
-    const existing = localStorage.getItem('processingPodcasts');
-    const items = existing ? JSON.parse(existing) : [];
     items.push(processingItem);
     localStorage.setItem('processingPodcasts', JSON.stringify(items));
 
@@ -194,7 +231,8 @@ export default function HomePage() {
     window.dispatchEvent(new Event('storage'));
 
     try {
-      const res = await fetch('/api/process-audio', {
+      // 使用异步处理API
+      const res = await fetch('/api/process-audio-async', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
@@ -208,32 +246,24 @@ export default function HomePage() {
 
       const result = await res.json();
       
-      // 更新处理状态为完成
+      // 更新处理项目，添加taskId
       const updatedItems = items.map((item: any) => 
         item.id === processingId 
           ? { 
               ...item, 
-              status: 'completed', 
-              progress: 100, 
-              title: result.title,
-              completedAt: Date.now() // 添加完成时间戳
+              taskId: result.taskId,
+              status: 'processing' // 保持processing状态，等待后台处理
             }
           : item
       );
       localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
       window.dispatchEvent(new Event('storage'));
       
-      // 刷新首页数据
-      loadLatest();
-      loadHot();
+      // 开始轮询任务状态
+      pollTaskStatus(result.taskId, processingId);
       
-      // 触发storage事件，通知Header组件更新使用量
-      window.dispatchEvent(new Event('storage'));
-      
-      // 跳转到详情页
-      setTimeout(() => {
-        window.location.href = `/podcast/${result.id}`;
-      }, 1000);
+      // 显示成功消息
+      toast.success('任务已提交', '播客处理任务已提交，正在后台处理中...');
 
     } catch (error) {
       console.error('Processing failed:', error);
@@ -258,12 +288,95 @@ export default function HomePage() {
         });
       } else if (errorMessage.includes('额度已用完')) {
         toast.warning('今日额度已用完', '今日处理额度已用完，请明天再试');
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('超时')) {
+        toast.error('阿茂去摸鱼了', '不好意思，阿茂好像去摸鱼了，请联系下阿茅吧', {
+          action: {
+            label: '联系阿茅',
+            onClick: () => alert('请联系阿茅：maoweihao@example.com 或微信：your_wechat_id')
+          }
+        });
       } else {
-        toast.error('处理失败', errorMessage);
+        toast.error('阿茂去摸鱼了', '不好意思，阿茂好像去摸鱼了，请联系下阿茅吧', {
+          action: {
+            label: '联系阿茅',
+            onClick: () => alert('请联系阿茅：maoweihao@example.com 或微信：your_wechat_id')
+          }
+        });
       }
-    } finally {
-      setIsProcessing(false);
     }
+  };
+
+  // 轮询任务状态
+  const pollTaskStatus = async (taskId: string, processingId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/task-status?taskId=${taskId}`);
+        if (!res.ok) return;
+        
+        const taskStatus = await res.json();
+        
+        if (taskStatus.status === 'COMPLETED') {
+          clearInterval(pollInterval);
+          
+          // 更新处理状态为完成
+          const existing = localStorage.getItem('processingPodcasts');
+          const items = existing ? JSON.parse(existing) : [];
+          const updatedItems = items.map((item: any) => 
+            item.id === processingId 
+              ? { 
+                  ...item, 
+                  status: 'completed', 
+                  progress: 100, 
+                  title: taskStatus.result?.title,
+                  completedAt: Date.now()
+                }
+              : item
+          );
+          localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+          window.dispatchEvent(new Event('storage'));
+          
+          // 刷新首页数据
+          loadLatest();
+          loadHot();
+          
+          // 跳转到详情页
+          if (taskStatus.result?.id) {
+            setTimeout(() => {
+              window.location.href = `/podcast/${taskStatus.result.id}`;
+            }, 1000);
+          }
+          
+        } else if (taskStatus.status === 'FAILED') {
+          clearInterval(pollInterval);
+          
+          // 更新处理状态为失败
+          const existing = localStorage.getItem('processingPodcasts');
+          const items = existing ? JSON.parse(existing) : [];
+          const updatedItems = items.map((item: any) => 
+            item.id === processingId 
+              ? { 
+                  ...item, 
+                  status: 'failed', 
+                  progress: 0, 
+                  error: taskStatus.error || '处理失败'
+                }
+              : item
+          );
+          localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+          window.dispatchEvent(new Event('storage'));
+          
+          toast.error('处理失败', taskStatus.error || '播客处理失败');
+        }
+        
+      } catch (error) {
+        console.error('轮询任务状态失败:', error);
+      }
+    }, 3000); // 每3秒轮询一次
+    
+    // 设置超时，避免无限轮询
+    setTimeout(() => {
+      clearInterval(pollInterval);
+    }, 30 * 60 * 1000); // 30分钟超时
   };
 
   const handleShowAllPodcasts = () => {
@@ -369,10 +482,9 @@ export default function HomePage() {
                   {user ? (
                     <button
                       onClick={() => handleProcessPodcast(searchQuery)}
-                      disabled={isProcessing}
-                      className="px-6 py-3 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                      className="px-6 py-3 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors duration-200"
                     >
-                      {isProcessing ? '处理中...' : '未找到相关播客，交给阿茂吧（每小时播客需约12分钟）'}
+                      未找到相关播客，交给阿茂吧（每小时播客需约12分钟）
                     </button>
                   ) : (
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">

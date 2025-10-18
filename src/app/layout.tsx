@@ -4,6 +4,11 @@ import "./globals.css";
 import { Header } from "@/components/Header";
 import { ToastProvider } from "@/components/Toast";
 
+// 在服务器端初始化应用
+if (typeof window === 'undefined') {
+  import("@/server/startup");
+}
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],

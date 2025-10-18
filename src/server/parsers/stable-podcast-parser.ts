@@ -141,6 +141,18 @@ export class StablePodcastParser {
     const platformResult = this.extractPlatformSpecific(html, url);
     this.mergeResults(result, platformResult);
 
+    // 5. 如果还没有音频URL，尝试从页面内容中提取
+    if (!result.audioUrl) {
+      const audioUrlMatch = html.match(/https?:\/\/[^\s"']+\.(m4a|mp3|aac)(\?[^\s"']*)?/i);
+      if (audioUrlMatch) {
+        result.audioUrl = audioUrlMatch[0];
+        // 降低可信度，因为这是从页面内容中提取的
+        if (result.confidence > 0.8) {
+          result.confidence = 0.8;
+        }
+      }
+    }
+
     // 后处理
     this.postProcess(result);
 

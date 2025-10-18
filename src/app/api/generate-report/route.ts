@@ -70,24 +70,24 @@ export async function POST(req: NextRequest) {
 		
 		// 如果文本较短，直接生成报告
 		if (textLength <= 8000) {
-			const { report } = await generateInterviewReportSimple(transcript, title);
+			const { summary } = await generateInterviewReportSimple(transcript, title);
 			console.log(`访谈报告生成完成，总耗时: ${Date.now() - startTime}ms`);
 			
 			// 记录LLM API使用情况
-			const estimatedTokens = Math.ceil((transcript.length + report.length) / 2);
+			const estimatedTokens = Math.ceil((transcript.length + summary.length) / 2);
 			await recordLLMUsage(estimatedTokens);
 			
 			// 缓存生成的报告
 			if (audioUrl) {
-				await setCachedAudio(audioUrl, { report });
+				await setCachedAudio(audioUrl, { summary });
 			}
 			
 			return Response.json({
 				success: true,
-				report,
+				summary,
 				stats: {
 					originalLength: transcript.length,
-					reportLength: report.length,
+					reportLength: summary.length,
 					processingTime: Date.now() - startTime,
 					estimatedTokens,
 					method: "single"
@@ -119,6 +119,12 @@ export async function POST(req: NextRequest) {
 3. **专业格式**：采用学术报告或商业分析报告的格式
 4. **结构化组织**：按主题和逻辑关系组织内容
 5. **客观表达**：以第三人称客观视角呈现观点
+
+**格式要求：**
+- 适当使用项目符号（•）来组织要点，提高可读性
+- 在列举多个观点、论据或案例时使用项目符号
+- 项目符号不要过于频繁，主要用于关键信息的分组
+- 保持内容的层次感和结构清晰
 
 **输出要求：**
 - 只输出这个片段的专业报告内容
@@ -184,12 +190,12 @@ export async function POST(req: NextRequest) {
 		
 		// 缓存生成的报告
 		if (audioUrl) {
-			await setCachedAudio(audioUrl, { report: finalReport });
+			await setCachedAudio(audioUrl, { summary: finalReport });
 		}
 		
 		return Response.json({
 			success: true,
-			report: finalReport,
+			summary: finalReport,
 			stats: {
 				originalLength: transcript.length,
 				reportLength: finalReport.length,
@@ -208,7 +214,7 @@ export async function POST(req: NextRequest) {
 }
 
 // 简单报告生成函数（用于短文本）
-async function generateInterviewReportSimple(transcript: string, title?: string): Promise<{ report: string }> {
+async function generateInterviewReportSimple(transcript: string, title?: string): Promise<{ summary: string }> {
 	// 获取动态系统提示词
 	let systemPrompt: string;
 	try {
@@ -229,6 +235,12 @@ async function generateInterviewReportSimple(transcript: string, title?: string)
 3. **专业格式**：采用学术报告或商业分析报告的格式
 4. **结构化组织**：按主题和逻辑关系组织内容
 5. **客观表达**：以第三人称客观视角呈现观点
+
+**格式要求：**
+- 适当使用项目符号（•）来组织要点，提高可读性
+- 在列举多个观点、论据或案例时使用项目符号
+- 项目符号不要过于频繁，主要用于关键信息的分组
+- 保持内容的层次感和结构清晰
 
 **报告结构：**
 - 引言：简要概述访谈主题和背景
@@ -264,7 +276,7 @@ ${transcript}
 	];
 	
 	const report = await qwenChat(messages, { maxTokens: 3000 });
-	return { report };
+	return { summary: report };
 }
 
 // 最终报告整合函数
@@ -301,6 +313,12 @@ async function generateFinalReport(combinedChunks: string, title?: string): Prom
 **格式统一**：使用一致的 Markdown 标题与分点结构。
 
 **严禁外部引用**：报告中不得出现任何外部资料或拓展内容。
+
+**格式要求：**
+- 适当使用项目符号（•）来组织要点，提高可读性
+- 在列举多个观点、论据或案例时使用项目符号
+- 项目符号不要过于频繁，主要用于关键信息的分组
+- 保持内容的层次感和结构清晰
 
 **报告结构：**
 

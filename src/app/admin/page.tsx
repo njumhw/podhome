@@ -42,7 +42,7 @@ type User = {
 };
 
 export default function AdminPage() {
-	const [active, setActive] = useState<"invites" | "topics" | "users" | "tasks" | "cost" | "audio" | "prompts">("invites");
+	const [active, setActive] = useState<"invites" | "topics" | "users" | "tasks" | "cost" | "audio" | "prompts" | "podcasts">("invites");
 
 	return (
 		<div className="space-y-6">
@@ -59,7 +59,7 @@ export default function AdminPage() {
 				</Link>
 			</div>
 			<div className="inline-flex rounded-xl border border-black/10 dark:border-white/10 p-1 bg-white/60 dark:bg-black/40 backdrop-blur">
-				{(["invites","topics","users","tasks","cost","audio","prompts"] as const).map(k => (
+				{(["invites","topics","users","tasks","cost","audio","prompts","podcasts"] as const).map(k => (
 					<button key={k} onClick={() => setActive(k)} className={`px-3 py-1.5 text-sm rounded-lg ${active===k?"bg-black text-white dark:bg-white dark:text-black":"text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10"}`}>{label(k)}</button>
 				))}
 			</div>
@@ -71,6 +71,7 @@ export default function AdminPage() {
 			{active === "cost" && <CostPanel />}
 			{active === "audio" && <AudioConfigPanel />}
 			{active === "prompts" && <PromptManager />}
+			{active === "podcasts" && <PodcastsPanel />}
 		</div>
 	);
 }
@@ -85,6 +86,7 @@ function label(k: string) {
 			cost: "成本监控",
 			audio: "音频配置",
 			prompts: "提示词管理",
+			podcasts: "播客管理",
 		} as Record<string, string>
 	)[k];
 }
@@ -611,6 +613,254 @@ function CostPanel() {
 					<div>次数 {v.count} · 耗时 {v.durationMs}ms · 估算 ${v.estUSD.toFixed(4)}</div>
 				</div>
 			))}
+		</div>
+	);
+}
+
+// 播客管理面板
+function PodcastsPanel() {
+	const [podcasts, setPodcasts] = useState<any[]>([]);
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [page, setPage] = useState(1);
+	const [totalPages, setTotalPages] = useState(1);
+	const [status, setStatus] = useState('all');
+	const [search, setSearch] = useState('');
+	const [stats, setStats] = useState<any>({});
+
+	const loadPodcasts = async () => {
+		setLoading(true);
+		setError(null);
+		try {
+			const params = new URLSearchParams({
+				page: page.toString(),
+				limit: '20',
+				status,
+				...(search && { search })
+			});
+
+			const res = await fetch(`/api/admin/podcasts?${params}`);
+			if (!res.ok) {
+				const errorData = await res.json();
+				throw new Error(errorData.error || '加载失败');
+			}
+
+			const data = await res.json();
+			setPodcasts(data.podcasts || []);
+			setTotalPages(data.pagination?.totalPages || 1);
+			setStats(data.stats || {});
+		} catch (err: any) {
+			setError(err.message);
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	useEffect(() => {
+		loadPodcasts();
+	}, [page, status, search]);
+
+	const deletePodcast = async (id: string, title: string) => {
+		if (!confirm(`确定要删除播客 "${title}" 吗？\n\n此操作将删除播客及其所有相关数据（访问日志、任务日志、转录片段等），且无法恢复。`)) {
+			return;
+		}
+
+		try {
+			const res = await fetch(`/api/admin/podcasts?id=${id}`, {
+				method: 'DELETE'
+			});
+
+			if (!res.ok) {
+				const errorData = await res.json();
+				throw new Error(errorData.error || '删除失败');
+			}
+
+			// 重新加载列表
+			loadPodcasts();
+		} catch (err: any) {
+			setError(err.message);
+		}
+	};
+
+	const getStatusBadge = (status: string) => {
+		const statusMap = {
+			'PENDING': { text: '等待中', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300' },
+			'PROCESSING': { text: '处理中', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' },
+			'COMPLETED': { text: '已完成', color: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' },
+			'FAILED': { text: '失败', color: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300' }
+		};
+
+		const statusInfo = statusMap[status as keyof typeof statusMap] || { text: status, color: 'bg-gray-100 text-gray-800' };
+		
+		return (
+			<span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+				{statusInfo.text}
+			</span>
+		);
+	};
+
+	const formatDuration = (seconds: number | null) => {
+		if (!seconds) return '-';
+		const minutes = Math.floor(seconds / 60);
+		const remainingSeconds = seconds % 60;
+		return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+	};
+
+	const formatDate = (date: string | null) => {
+		if (!date) return '-';
+		return new Date(date).toLocaleString('zh-CN');
+	};
+
+	return (
+		<div className="space-y-6">
+			{error && (
+				<div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
+					{error}
+				</div>
+			)}
+
+			{/* 统计信息 */}
+			<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+				<div className="bg-white border border-gray-200 rounded-lg p-4">
+					<div className="text-2xl font-bold text-gray-900">{stats.total || 0}</div>
+					<div className="text-sm text-gray-600">总播客数</div>
+				</div>
+				<div className="bg-white border border-gray-200 rounded-lg p-4">
+					<div className="text-2xl font-bold text-green-600">{stats.COMPLETED || 0}</div>
+					<div className="text-sm text-gray-600">已完成</div>
+				</div>
+				<div className="bg-white border border-gray-200 rounded-lg p-4">
+					<div className="text-2xl font-bold text-blue-600">{stats.PROCESSING || 0}</div>
+					<div className="text-sm text-gray-600">处理中</div>
+				</div>
+				<div className="bg-white border border-gray-200 rounded-lg p-4">
+					<div className="text-2xl font-bold text-red-600">{stats.FAILED || 0}</div>
+					<div className="text-sm text-gray-600">失败</div>
+				</div>
+			</div>
+
+			{/* 筛选和搜索 */}
+			<div className="bg-white border border-gray-200 rounded-lg p-4">
+				<div className="flex flex-col md:flex-row gap-4">
+					<div className="flex-1">
+						<input
+							type="text"
+							placeholder="搜索播客标题、作者或URL..."
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+						/>
+					</div>
+					<div>
+						<select
+							value={status}
+							onChange={(e) => setStatus(e.target.value)}
+							className="p-2 border border-gray-300 rounded-lg text-sm"
+						>
+							<option value="all">全部状态</option>
+							<option value="PENDING">等待中</option>
+							<option value="PROCESSING">处理中</option>
+							<option value="COMPLETED">已完成</option>
+							<option value="FAILED">失败</option>
+						</select>
+					</div>
+				</div>
+			</div>
+
+			{/* 播客列表 */}
+			<div className="bg-white border border-gray-200 rounded-lg">
+				<div className="p-4 border-b border-gray-200">
+					<h3 className="font-medium">播客列表</h3>
+				</div>
+				
+				{loading ? (
+					<div className="p-8 text-center text-gray-500">加载中...</div>
+				) : podcasts.length === 0 ? (
+					<div className="p-8 text-center text-gray-500">暂无播客</div>
+				) : (
+					<div className="divide-y divide-gray-200">
+						{podcasts.map((podcast) => (
+							<div key={podcast.id} className="p-4 hover:bg-gray-50">
+								<div className="flex items-start justify-between">
+									<div className="flex-1 min-w-0">
+										<div className="flex items-center gap-2 mb-2">
+											<h4 className="font-medium text-gray-900 truncate" title={podcast.title}>
+												{podcast.title}
+											</h4>
+											{getStatusBadge(podcast.status)}
+										</div>
+										
+										<div className="text-sm text-gray-600 space-y-1">
+											<div>作者: {podcast.showAuthor || '-'}</div>
+											<div>时长: {formatDuration(podcast.duration)}</div>
+											<div>创建时间: {formatDate(podcast.createdAt)}</div>
+											{podcast.processingCompletedAt && (
+												<div>完成时间: {formatDate(podcast.processingCompletedAt)}</div>
+											)}
+											{podcast.topic && (
+												<div className="flex items-center gap-2">
+													<span>主题:</span>
+													<span 
+														className="px-2 py-1 rounded-full text-xs"
+														style={{ 
+															backgroundColor: podcast.topic.color + '20',
+															color: podcast.topic.color 
+														}}
+													>
+														{podcast.topic.name}
+													</span>
+												</div>
+											)}
+											<div className="text-xs text-gray-500">
+												创建者: {podcast.createdBy?.username || '系统'}
+											</div>
+										</div>
+									</div>
+									
+									<div className="flex items-center gap-2 ml-4">
+										<Link
+											href={`/podcast/${podcast.id}`}
+											target="_blank"
+											className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+										>
+											查看
+										</Link>
+										<button
+											onClick={() => deletePodcast(podcast.id, podcast.title)}
+											className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+										>
+											删除
+										</button>
+									</div>
+								</div>
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+
+			{/* 分页 */}
+			{totalPages > 1 && (
+				<div className="flex items-center justify-center gap-2">
+					<button
+						onClick={() => setPage(Math.max(1, page - 1))}
+						disabled={page === 1}
+						className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						上一页
+					</button>
+					<span className="px-3 py-1.5 text-sm text-gray-600">
+						{page} / {totalPages}
+					</span>
+					<button
+						onClick={() => setPage(Math.min(totalPages, page + 1))}
+						disabled={page === totalPages}
+						className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						下一页
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }

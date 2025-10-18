@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/CopyButton";
 import { EditMeta } from "./EditMeta";
+import { SummaryDisplay } from "@/components/SummaryDisplay";
 
 type Detail = {
 	id: string;
@@ -46,9 +47,13 @@ export default function PodcastDetail({ params }: { params: { id: string } }) {
 					</section>
 					<aside className="space-y-3">
 						<h3 className="text-base font-semibold">总结</h3>
-						<div className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-sm leading-6 bg-white/60 dark:bg-black/40 whitespace-pre-wrap">
-							{detail.summary || "总结内容暂未生成。"}
-						</div>
+						<SummaryDisplay 
+							summary={detail.summary}
+							report={detail.summary}
+							className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-sm leading-6 bg-white/60 dark:bg-black/40"
+							showMarkdown={false}
+							fallbackText="总结内容暂未生成。"
+						/>
 						{detail.summary && <CopyButton text={detail.summary} label="一键复制总结" />}
 						<div className="pt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
                             <EditMeta id={id} detail={detail} onUpdated={(d)=>setDetail(d)} />

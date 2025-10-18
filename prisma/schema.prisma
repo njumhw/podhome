@@ -22,6 +22,8 @@ model User {
   inviteCodes  InviteCode[] @relation("UserInviteCodes")
   invitesUsed  InviteCode[] @relation("InviteUsedBy")
   podcasts     Podcast[]
+  comments     Comment[]
+  commentLikes CommentLike[]
 }
 
 model InviteCode {
@@ -44,8 +46,8 @@ model Topic {
   color       String?
   approved    Boolean      @default(false)
   createdAt   DateTime     @default(now())
-  podcasts    Podcast[]
   audioCaches AudioCache[]
+  podcasts    Podcast[]
 }
 
 model Prompt {
@@ -53,13 +55,13 @@ model Prompt {
   name        String   @unique
   description String?
   content     String
-  category    String   // 如: "report_generation", "transcript_cleaning", "final_integration"
+  category    String
   version     Int      @default(1)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  createdBy   String?  // 创建者ID
-  updatedBy   String?  // 最后更新者ID
+  createdBy   String?
+  updatedBy   String?
 }
 
 model Podcast {
@@ -91,6 +93,7 @@ model Podcast {
   topic                 Topic?            @relation(fields: [topicId], references: [id])
   taskLogs              TaskLog[]
   chunks                TranscriptChunk[]
+  comments              Comment[]
 }
 
 model TranscriptChunk {
@@ -105,14 +108,18 @@ model TranscriptChunk {
 }
 
 model AccessLog {
-  id        String   @id @default(cuid())
-  podcastId String
-  userId    String?
-  createdAt DateTime @default(now())
-  podcast   Podcast  @relation(fields: [podcastId], references: [id])
-  user      User?    @relation(fields: [userId], references: [id])
+  id           String      @id @default(cuid())
+  podcastId    String?
+  userId       String?
+  createdAt    DateTime    @default(now())
+  audioCacheId String?
+  audioCache   AudioCache? @relation(fields: [audioCacheId], references: [id])
+  podcast      Podcast?    @relation(fields: [podcastId], references: [id])
+  user         User?       @relation(fields: [userId], references: [id])
 
   @@index([podcastId, createdAt])
+  @@index([audioCacheId, createdAt])
+  @@index([createdAt])
 }
 
 model TaskLog {
@@ -162,26 +169,95 @@ model ApiUsageLog {
 }
 
 model AudioCache {
-  id          String   @id @default(cuid())
-  audioUrl    String   @unique
+  id          String      @id @default(cuid())
+  audioUrl    String      @unique
   title       String?
   author      String?
   duration    Int?
   transcript  String?
   script      String?
   summary     String?
+  segments    String[]    @default([])  // ASR分段数据
   metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  report      String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   originalUrl String?
-  publishedAt DateTime?
   topicId     String?
-  topic       Topic?   @relation(fields: [topicId], references: [id])
+  publishedAt DateTime?
+  accessLogs  AccessLog[]
+  topic       Topic?      @relation(fields: [topicId], references: [id])
+  comments    Comment[]
 
   @@index([audioUrl])
   @@index([originalUrl])
   @@index([topicId])
+  @@index([updatedAt])
+}
+
+model QualityLog {
+  id             String   @id @default(cuid())
+  podcastId      String
+  completeness   Float
+  consistency    Float
+  accuracy       Float
+  overall        Float
+  processingTime Int
+  createdAt      DateTime @default(now())
+
+  @@index([podcastId])
+  @@index([createdAt])
+  @@index([overall])
+}
+
+model TaskQueue {
+  id          String    @id @default(cuid())
+  type        String
+  status      String
+  data        Json
+  result      Json?
+  error       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  podcastId String?
+  audioCacheId String?
+  userId    String
+  likes     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user      User     @relation(fields: [userId], references: [id])
+  podcast   Podcast? @relation(fields: [podcastId], references: [id])
+  audioCache AudioCache? @relation(fields: [audioCacheId], references: [id])
+  commentLikes CommentLike[]
+
+  @@index([podcastId, createdAt])
+  @@index([audioCacheId, createdAt])
+  @@index([userId])
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+  
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
 }
 
 enum UserRole {

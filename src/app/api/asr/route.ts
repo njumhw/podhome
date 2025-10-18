@@ -31,8 +31,8 @@ export async function POST(req: NextRequest) {
 
   const { audioUrl, segmentDuration, language } = parsed.data;
 
-  // concurrency from config or default 8
-  const maxConcurrent = parseInt(await getConfig(CONFIG_KEYS.AUDIO_MAX_CONCURRENT, "5") || "5"); // 保守设置，避免超过API限制
+  // concurrency from config or default 10
+  const maxConcurrent = parseInt(await getConfig(CONFIG_KEYS.AUDIO_MAX_CONCURRENT, "10") || "10"); // 优化并发数，平衡效率与稳定性
 
   // Helpers for local download & cutting
   function getFfmpegPath(): string {
@@ -208,11 +208,14 @@ export async function POST(req: NextRequest) {
     return jsonError('ASR 失败: 所有分段均无有效文本', 500);
   }
 
-  const merged = nonEmpty
+  // 保持ASR片段数组，不进行拼接
+  const asrSegments = nonEmpty
     .sort((a,b)=>a.index-b.index)
     .map(r=>r.text?.trim())
-    .filter(Boolean)
-    .join("\n");
+    .filter(Boolean);
+
+  // 为了兼容性，也提供拼接版本
+  const merged = asrSegments.join("\n\n");
 
   // cleanup local source file
   fs.promises.unlink(localFile).catch(()=>{});
@@ -227,10 +230,16 @@ export async function POST(req: NextRequest) {
   // 缓存转写结果
   await setCachedAudio(audioUrl, {
     transcript: merged,
+    segments: asrSegments, // 新增：保存片段数组
     duration: Math.round(duration)
   });
 
-  return Response.json({ success: true, transcript: merged, language: language === "auto" ? (nonEmpty.find(r=>r.language)?.language ?? undefined) : language });
+  return Response.json({ 
+    success: true, 
+    transcript: merged, 
+    segments: asrSegments, // 新增：返回片段数组
+    language: language === "auto" ? (nonEmpty.find(r=>r.language)?.language ?? undefined) : language 
+  });
 }
 
 

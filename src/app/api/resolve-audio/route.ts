@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
                 transcript: cached.transcript || null,
                 script: cached.script || null,
                 summary: cached.summary || null,
-                report: cached.report || null,
+                report: cached.summary || null,
             });
         }
 
@@ -76,12 +76,15 @@ async function resolvePodcast(url: string) {
         if (stableResult.audioUrl && stableResult.confidence > 0.5) {
             console.log(`稳定解析器成功: 可信度=${stableResult.confidence}, 方法=${stableResult.extractionMethod}`);
             return {
+                success: true,
                 audioUrl: stableResult.audioUrl,
                 title: stableResult.title,
                 podcastTitle: stableResult.podcastTitle,
                 author: stableResult.author,
                 description: stableResult.description,
                 publishedAt: stableResult.publishedAt,
+                confidence: stableResult.confidence,
+                extractionMethod: stableResult.extractionMethod,
             };
         }
         

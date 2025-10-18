@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { getConservativeProcessingEstimate, formatTime } from '@/utils/processing-estimator';
 
 type ProcessingItem = {
   id: string;
@@ -59,14 +60,14 @@ export function ProcessingStatus({ isVisible, onClose }: ProcessingStatusProps) 
             const elapsed = Date.now() - item.startTime;
             const elapsedMinutes = elapsed / (1000 * 60);
             
-            // 模拟进度：前2分钟快速到30%，然后缓慢增长到90%
-            let progress = 0;
-            if (elapsedMinutes < 2) {
-              progress = Math.min(30, (elapsedMinutes / 2) * 30);
-            } else {
-              // 2分钟后缓慢增长到90%（留10%给实际完成）
-              const remainingTime = Math.max(0, 8 - elapsedMinutes);
-              progress = Math.min(90, 30 + ((6 - remainingTime) / 6) * 60);
+            // 使用基于实际数据的进度估算
+            const elapsedSeconds = elapsed / 1000;
+            const estimate = getConservativeProcessingEstimate(elapsedSeconds);
+            let progress = Math.round(estimate.overallProgress * 100);
+            
+            // 如果还在阿茂在听啦但进度达到100%，限制在95%
+            if (item.status === 'processing' && progress >= 100) {
+              progress = 95;
             }
             
             return { ...item, progress: Math.round(progress) };
@@ -92,7 +93,7 @@ export function ProcessingStatus({ isVisible, onClose }: ProcessingStatusProps) 
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'processing': return '处理中';
+      case 'processing': return '阿茂在听啦';
       case 'completed': return '已完成';
       case 'failed': return '失败';
       default: return '未知';
@@ -205,7 +206,7 @@ export function ProcessingStatus({ isVisible, onClose }: ProcessingStatusProps) 
 function ProcessingItemCard({ item, removeItem }: { item: ProcessingItem; removeItem: (id: string) => void }) {
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'processing': return '处理中';
+      case 'processing': return '阿茂在听啦';
       case 'completed': return '已完成';
       case 'failed': return '失败';
       default: return '未知';

@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import TopicModal from '@/components/TopicModal';
 import { useToast } from '@/components/Toast';
+import { SummaryDisplay } from '@/components/SummaryDisplay';
 
 type Topic = {
   id: string;
@@ -25,7 +26,7 @@ type PodcastDetail = {
   summary: string | null;
   topic: Topic | null;
   script: string | null;
-  report: string | null;
+  // report字段已删除，只使用summary
   updatedAt: string;
 };
 
@@ -58,6 +59,7 @@ export default function PodcastDetailPage() {
   const [showFullscreenScript, setShowFullscreenScript] = useState(false);
   const [copySuccess, setCopySuccess] = useState('');
   const [downloadStatus, setDownloadStatus] = useState('');
+  const [shareSuccess, setShareSuccess] = useState('');
   const [editData, setEditData] = useState({
     title: '',
     author: '',
@@ -74,20 +76,47 @@ export default function PodcastDetailPage() {
   useEffect(() => {
     if (id) {
       loadPodcast();
-      loadComments();
       checkUser();
     }
   }, [id]);
 
+  // 当播客数据加载完成后，再加载评论
+  useEffect(() => {
+    if (podcast?.id) {
+      loadComments();
+    }
+  }, [podcast?.id]);
+
 
   const loadPodcast = async () => {
     try {
-      const res = await fetch(`/api/public/podcast?id=${id}`);
+      // 添加时间戳防止缓存
+      const res = await fetch(`/api/public/podcast?id=${id}&t=${Date.now()}`);
       if (!res.ok) {
-        throw new Error('播客不存在');
+        if (res.status === 404) {
+          throw new Error('播客不存在');
+        } else if (res.status === 503) {
+          throw new Error('数据库连接问题，请稍后重试');
+        } else {
+          throw new Error(`服务器错误 (${res.status})`);
+        }
       }
       const data = await res.json();
       setPodcast(data);
+      
+      // 记录访问日志
+      try {
+        await fetch('/api/public/access-log', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ audioCacheId: id }),
+        });
+      } catch (logError) {
+        // 访问日志记录失败不影响主要功能
+        console.warn('记录访问日志失败:', logError);
+      }
     } catch (error) {
       console.error('Failed to load podcast:', error);
       setError('加载播客失败');
@@ -98,28 +127,33 @@ export default function PodcastDetailPage() {
 
   const loadComments = async () => {
     try {
-      // 模拟评论数据，实际应该从API获取
-      const mockComments: Comment[] = [
-        {
-          id: '1',
-          content: '这个播客分析得很深入，特别是关于技术趋势的讨论很有价值。',
-          author: '用户A',
-          likes: 5,
-          createdAt: '2024-01-15T10:30:00Z',
-          liked: false
-        },
-        {
-          id: '2',
-          content: '主持人的提问很有水平，嘉宾的回答也很专业。',
-          author: '用户B',
-          likes: 3,
-          createdAt: '2024-01-15T11:15:00Z',
-          liked: true
-        }
-      ];
-      setComments(mockComments.sort((a, b) => b.likes - a.likes));
+      // 如果播客数据还没有加载，直接返回
+      if (!podcast?.id) {
+        setComments([]);
+        return;
+      }
+
+      const params = new URLSearchParams();
+      // 检查是Podcast还是AudioCache
+      if (podcast.id.startsWith('cmg')) {
+        // 这是AudioCache ID
+        params.append('audioCacheId', podcast.id);
+      } else {
+        // 这是Podcast ID
+        params.append('podcastId', podcast.id);
+      }
+
+      const res = await fetch(`/api/comments?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setComments(data.comments || []);
+      } else {
+        console.error('Failed to load comments:', res.statusText);
+        setComments([]);
+      }
     } catch (error) {
       console.error('Failed to load comments:', error);
+      setComments([]);
     }
   };
 
@@ -137,40 +171,84 @@ export default function PodcastDetailPage() {
   };
 
   const handleSubmitComment = async () => {
-    if (!newComment.trim() || !user) return;
+    if (!newComment.trim() || !user || !podcast) return;
     
     setIsSubmittingComment(true);
     try {
-      // 模拟提交评论
-      const newCommentObj: Comment = {
-        id: Date.now().toString(),
+      const body: any = {
         content: newComment.trim(),
-        author: user.username || '匿名用户',
-        likes: 0,
-        createdAt: new Date().toISOString(),
-        liked: false
       };
-      
-      setComments(prev => [newCommentObj, ...prev]);
-      setNewComment('');
+
+      // 根据ID类型设置正确的字段
+      if (podcast.id.startsWith('cmg')) {
+        body.audioCacheId = podcast.id;
+      } else {
+        body.podcastId = podcast.id;
+      }
+
+      const res = await fetch('/api/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setComments(prev => [data.comment, ...prev]);
+        setNewComment('');
+        toast.success('评论发表成功！');
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.error || '发表评论失败');
+      }
     } catch (error) {
       console.error('Failed to submit comment:', error);
+      toast.error('发表评论失败');
     } finally {
       setIsSubmittingComment(false);
     }
   };
 
-  const handleLikeComment = (commentId: string) => {
-    setComments(prev => prev.map(comment => {
-      if (comment.id === commentId) {
-        return {
-          ...comment,
-          likes: comment.liked ? comment.likes - 1 : comment.likes + 1,
-          liked: !comment.liked
-        };
+  const handleLikeComment = async (commentId: string) => {
+    if (!user) {
+      toast.error('请先登录');
+      return;
+    }
+
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment) return;
+
+    const action = comment.liked ? 'unlike' : 'like';
+
+    try {
+      const res = await fetch('/api/comments', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          commentId,
+          action,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setComments(prev => prev.map(c => 
+          c.id === commentId 
+            ? { ...c, likes: data.likes, liked: data.liked }
+            : c
+        ));
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.error || '操作失败');
       }
-      return comment;
-    }));
+    } catch (error) {
+      console.error('Failed to like/unlike comment:', error);
+      toast.error('操作失败');
+    }
   };
 
   const handleTopicChange = (topic: Topic | null) => {
@@ -214,6 +292,18 @@ export default function PodcastDetailPage() {
     }
   };
 
+  const handleShare = async () => {
+    try {
+      const currentUrl = window.location.href;
+      await navigator.clipboard.writeText(currentUrl);
+      setShareSuccess('链接已复制');
+      setTimeout(() => setShareSuccess(''), 1500);
+    } catch (err) {
+      setShareSuccess('复制失败');
+      setTimeout(() => setShareSuccess(''), 1500);
+    }
+  };
+
   // 编辑相关函数
   const handleEdit = () => {
     if (podcast) {
@@ -221,7 +311,7 @@ export default function PodcastDetailPage() {
         title: podcast.title,
         author: podcast.author,
         publishedAt: podcast.publishedAt ? new Date(podcast.publishedAt).toISOString().split('T')[0] : '',
-        summary: podcast.report || '', // 修复：使用 report 而不是 summary
+        summary: podcast.summary || '', // 使用 summary 字段
         script: podcast.script || '',
       });
       setIsEditing(true);
@@ -353,7 +443,29 @@ export default function PodcastDetailPage() {
                 </div>
               ) : (
                 <>
-                  <h1 className="text-3xl font-bold text-gray-900 mb-3">{podcast.title}</h1>
+                  <div className="flex justify-between items-start mb-3">
+                    <h1 className="text-3xl font-bold text-gray-900 flex-1">{podcast.title}</h1>
+                    <div className="flex items-center gap-2 ml-4">
+                      <button
+                        onClick={handleShare}
+                        className="p-1.5 bg-slate-500 text-white rounded-md hover:bg-slate-600 transition-colors"
+                        title="分享播客"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                        </svg>
+                      </button>
+                      <Link
+                        href="/home"
+                        className="p-1.5 bg-slate-500 text-white rounded-md hover:bg-slate-600 transition-colors"
+                        title="返回首页"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                      </Link>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-4 text-sm text-gray-700 mb-4">
                     <span>作者：{podcast.author}</span>
                     <span>发布时间：{podcast.publishedAt ? new Date(podcast.publishedAt).toLocaleDateString() : '未知时间'}</span>
@@ -409,15 +521,6 @@ export default function PodcastDetailPage() {
                         </svg>
                       </button>
                     )}
-                    <Link
-                      href="/home"
-                      className="p-1.5 bg-slate-500 text-white rounded-md hover:bg-slate-600 transition-colors"
-                      title="返回首页"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                      </svg>
-                    </Link>
                   </div>
                 </>
               )}
@@ -445,12 +548,6 @@ export default function PodcastDetailPage() {
             </div>
           </div>
           
-          {podcast.summary && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="font-medium text-gray-900 mb-2">简介</h3>
-              <p className="text-gray-700">{podcast.summary}</p>
-            </div>
-          )}
         </div>
 
         {/* 报告和全文 */}
@@ -460,10 +557,10 @@ export default function PodcastDetailPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-900">播客总结</h2>
-              {podcast.report && !isEditing && (
+              {podcast.summary && !isEditing && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleCopy(podcast.report, '播客总结')}
+                    onClick={() => handleCopy(podcast.summary, '播客总结')}
                     className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
                     title="复制全文"
                   >
@@ -493,57 +590,11 @@ export default function PodcastDetailPage() {
                 />
               </div>
             ) : (
-              podcast.report ? (
-                <div 
-                  className="prose prose-sm max-w-none whitespace-pre-wrap overflow-y-auto overflow-x-hidden border border-gray-200 rounded-lg p-4"
-                  style={{ height: '400px', wordWrap: 'break-word', overflowWrap: 'break-word' }}
-                  onWheel={(e) => {
-                    e.stopPropagation();
-                  }}
-                >
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      p: ({ children }) => (
-                        <p style={{ wordWrap: 'break-word', overflowWrap: 'break-word', whiteSpace: 'pre-wrap', color: '#1f2937', fontSize: '14px', lineHeight: '1.6' }}>
-                          {children}
-                        </p>
-                      ),
-                      li: ({ children }) => (
-                        <li style={{ wordWrap: 'break-word', overflowWrap: 'break-word', color: '#1f2937', fontSize: '14px', lineHeight: '1.6' }}>
-                          {children}
-                        </li>
-                      ),
-                      strong: ({ children }) => (
-                        <strong style={{ wordWrap: 'break-word', overflowWrap: 'break-word', color: '#111827', fontSize: '14px', lineHeight: '1.6' }}>
-                          {children}
-                        </strong>
-                      ),
-                      h1: ({ children }) => (
-                        <h1 style={{ color: '#111827', fontSize: '18px', fontWeight: 'bold', marginBottom: '12px', marginTop: '16px' }}>
-                          {children}
-                        </h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 style={{ color: '#111827', fontSize: '16px', fontWeight: 'bold', marginBottom: '10px', marginTop: '14px' }}>
-                          {children}
-                        </h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 style={{ color: '#111827', fontSize: '15px', fontWeight: 'bold', marginBottom: '8px', marginTop: '12px' }}>
-                          {children}
-                        </h3>
-                      )
-                    }}
-                  >
-                    {podcast.report}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <div className="text-gray-600 text-center py-8">
-                  暂无播客总结
-                </div>
-              )
+              <SummaryDisplay 
+                summary={podcast.summary}
+                report={podcast.summary}
+                fallbackText="暂无播客总结"
+              />
             )}
           </div>
 
@@ -586,8 +637,15 @@ export default function PodcastDetailPage() {
             ) : (
               podcast.script ? (
                 <div 
-                  className="prose prose-sm max-w-none whitespace-pre-wrap overflow-y-auto overflow-x-hidden border border-gray-200 rounded-lg p-4"
-                  style={{ height: '500px', wordWrap: 'break-word', overflowWrap: 'break-word' }}
+                  className="max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded-lg p-4"
+                  style={{ 
+                    height: '500px', 
+                    wordWrap: 'break-word', 
+                    overflowWrap: 'break-word',
+                    backgroundColor: '#ffffff',
+                    color: '#1f2937',
+                    lineHeight: '1.3'
+                  }}
                   onWheel={(e) => {
                     e.stopPropagation();
                   }}
@@ -596,32 +654,75 @@ export default function PodcastDetailPage() {
                     remarkPlugins={[remarkGfm]}
                     components={{
                       p: ({ children }) => (
-                        <p style={{ wordWrap: 'break-word', overflowWrap: 'break-word', whiteSpace: 'pre-wrap', color: '#1f2937', fontSize: '14px', lineHeight: '1.6' }}>
+                        <p style={{ 
+                          wordWrap: 'break-word', 
+                          overflowWrap: 'break-word', 
+                          whiteSpace: 'normal', 
+                          color: '#1f2937 !important', 
+                          fontSize: '14px', 
+                          lineHeight: '1.3',
+                          margin: '0 0 8px 0'
+                        }}>
                           {children}
                         </p>
                       ),
                       li: ({ children }) => (
-                        <li style={{ wordWrap: 'break-word', overflowWrap: 'break-word', color: '#1f2937', fontSize: '14px', lineHeight: '1.6' }}>
+                        <li style={{ 
+                          wordWrap: 'break-word', 
+                          overflowWrap: 'break-word', 
+                          color: '#1f2937 !important', 
+                          fontSize: '14px', 
+                          lineHeight: '1.3',
+                          margin: '0 0 2px 0'
+                        }}>
                           {children}
                         </li>
                       ),
                       strong: ({ children }) => (
-                        <strong style={{ wordWrap: 'break-word', overflowWrap: 'break-word', color: '#111827', fontSize: '14px', lineHeight: '1.6' }}>
+                        <strong style={{ 
+                          wordWrap: 'break-word', 
+                          overflowWrap: 'break-word', 
+                          color: '#111827 !important', 
+                          fontSize: '14px', 
+                          lineHeight: '1.3',
+                          fontWeight: 'bold'
+                        }}>
                           {children}
                         </strong>
                       ),
                       h1: ({ children }) => (
-                        <h1 style={{ color: '#111827', fontSize: '18px', fontWeight: 'bold', marginBottom: '12px', marginTop: '16px' }}>
+                        <h1 style={{ 
+                          color: '#111827 !important', 
+                          fontSize: '18px', 
+                          fontWeight: 'bold', 
+                          lineHeight: '1.2',
+                          marginBottom: '6px', 
+                          marginTop: '8px' 
+                        }}>
                           {children}
                         </h1>
                       ),
                       h2: ({ children }) => (
-                        <h2 style={{ color: '#111827', fontSize: '16px', fontWeight: 'bold', marginBottom: '10px', marginTop: '14px' }}>
+                        <h2 style={{ 
+                          color: '#111827 !important', 
+                          fontSize: '16px', 
+                          fontWeight: 'bold', 
+                          lineHeight: '1.2',
+                          marginBottom: '4px', 
+                          marginTop: '6px' 
+                        }}>
                           {children}
                         </h2>
                       ),
                       h3: ({ children }) => (
-                        <h3 style={{ color: '#111827', fontSize: '15px', fontWeight: 'bold', marginBottom: '8px', marginTop: '12px' }}>
+                        <h3 style={{ 
+                          color: '#111827 !important', 
+                          fontSize: '15px', 
+                          fontWeight: 'bold', 
+                          lineHeight: '1.2',
+                          marginBottom: '2px', 
+                          marginTop: '4px' 
+                        }}>
                           {children}
                         </h3>
                       )
@@ -678,9 +779,8 @@ export default function PodcastDetailPage() {
                 </div>
               ) : (
                 <>
-                  {/* 按点赞数排序，默认显示前5条 */}
+                  {/* 按点赞数排序（后端已排序），默认显示前5条 */}
                   {comments
-                    .sort((a, b) => b.likes - a.likes)
                     .slice(0, showAllComments ? comments.length : 5)
                     .map((comment) => (
                     <div key={comment.id} className="border-b border-gray-100 pb-4 last:border-b-0">
@@ -752,6 +852,12 @@ export default function PodcastDetailPage() {
         </div>
       )}
 
+      {shareSuccess && (
+        <div className="fixed top-4 right-4 bg-gray-800 text-white px-3 py-1.5 rounded-md shadow-lg z-50 transition-opacity duration-300 text-xs">
+          {shareSuccess}
+        </div>
+      )}
+
       {/* 全屏播客总结模态框 */}
       {showFullscreenReport && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -760,7 +866,7 @@ export default function PodcastDetailPage() {
               <h2 className="text-2xl font-bold text-gray-900">播客总结</h2>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => handleCopy(podcast.report, '播客总结')}
+                  onClick={() => handleCopy(podcast.summary, '播客总结')}
                   className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
                   title="复制全文"
                 >
@@ -814,7 +920,7 @@ export default function PodcastDetailPage() {
                     )
                   }}
                 >
-                  {podcast.report}
+                  {podcast.summary}
                 </ReactMarkdown>
               </div>
             </div>

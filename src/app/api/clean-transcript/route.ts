@@ -26,6 +26,35 @@ function splitByTokensApprox(text: string, targetTokens = 3000, overlapTokens = 
 	return chunks;
 }
 
+// 批量处理文本优化函数
+async function batchProcessText<T>(
+	items: T[], 
+	processor: (item: T, index: number) => Promise<string>, 
+	batchSize: number = 3
+): Promise<string[]> {
+	const results: string[] = [];
+	
+	for (let i = 0; i < items.length; i += batchSize) {
+		const batch = items.slice(i, i + batchSize);
+		const batchNumber = Math.floor(i / batchSize) + 1;
+		const totalBatches = Math.ceil(items.length / batchSize);
+		
+		console.log(`处理批次 ${batchNumber}/${totalBatches}: 项目 ${i + 1}-${Math.min(i + batchSize, items.length)}`);
+		
+		const batchPromises = batch.map(async (item, idx) => {
+			const globalIndex = i + idx;
+			return await processor(item, globalIndex);
+		});
+		
+		const batchResults = await Promise.all(batchPromises);
+		results.push(...batchResults);
+		
+		console.log(`批次 ${batchNumber} 完成`);
+	}
+	
+	return results;
+}
+
 export async function generateScript(transcript: string, language: string = "zh", audioUrl?: string) {
     const startTime = Date.now();
     try {
@@ -73,52 +102,41 @@ export async function generateScript(transcript: string, language: string = "zh"
 			content: systemPrompt,
 		};
 
-		// 分批处理，提高并行度，增加重试机制
-		const cleaned: string[] = [];
-		for (let i = 0; i < chunks.length; i += batchSize) {
-			const batch = chunks.slice(i, i + batchSize);
-			console.log(`处理批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(chunks.length / batchSize)}: 块 ${i + 1}-${Math.min(i + batchSize, chunks.length)}`);
+		// 优化后的批量处理，提高并行度和错误处理
+		const cleaned: string[] = await batchProcessText(chunks, async (chunk, index) => {
+			console.log(`  处理块 ${index + 1}: ${chunk.length} 字符`);
 			
-			const batchPromises = batch.map(async (ck, idx) => {
-				const chunkIndex = i + idx + 1;
-				console.log(`  处理块 ${chunkIndex}: ${ck.length} 字符`);
-				
-				// 重试机制：最多重试3次
-				let lastError: any = null;
-				for (let attempt = 1; attempt <= 3; attempt++) {
-					try {
-						const result = await qwenChat([
-							system,
-						{ role: "user", content: `请清洗以下片段，删除赘词与口头禅，重写断句与转场，统一术语与人称，不改变事实。\n\n识别规则：\n- 优先识别主持人/嘉宾，并尽量在括号中填入可识别的姓名；\n- 若无法判断姓名，仅写主持人/嘉宾；再无法判断用说话人A/B/C；\n- 全文保持同一人的标签稳定一致。\n\n输出格式：\n- 使用Markdown列表格式：- **说话人X（角色或姓名）：** 内容\n- 说话人名称使用粗体\n\n转写内容：\n${ck}` },
-						], { model: "qwen-plus", temperature: 0.3, maxTokens: 2500 });
-						
-						// 验证结果
-						if (!result || result.trim().length === 0) {
-							throw new Error(`清洗结果为空 (尝试 ${attempt}/3)`);
-						}
-						
-						console.log(`  块 ${chunkIndex} 处理成功 (尝试 ${attempt}/3)`);
-						return result;
-					} catch (error: any) {
-						lastError = error;
-						console.warn(`  块 ${chunkIndex} 处理失败 (尝试 ${attempt}/3):`, error.message);
-						
-						if (attempt < 3) {
-							// 减少等待时间，提高处理速度
-							await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-						}
+			// 重试机制：最多重试3次
+			let lastError: any = null;
+			for (let attempt = 1; attempt <= 3; attempt++) {
+				try {
+					const result = await qwenChat([
+						system,
+						{ role: "user", content: `请清洗以下片段，删除赘词与口头禅，重写断句与转场，统一术语与人称，不改变事实。\n\n识别规则：\n- 优先识别主持人/嘉宾，并尽量在括号中填入可识别的姓名；\n- 若无法判断姓名，仅写主持人/嘉宾；再无法判断用说话人A/B/C；\n- 全文保持同一人的标签稳定一致。\n\n输出格式：\n- 使用Markdown列表格式：- **说话人X（角色或姓名）：** 内容\n- 说话人名称使用粗体\n- 适当使用项目符号（•）来组织要点，提高可读性\n- 在列举多个观点、论据或案例时使用项目符号\n- 项目符号不要过于频繁，主要用于关键信息的分组\n\n转写内容：\n${chunk}` },
+					], { model: "qwen-plus", temperature: 0.3, maxTokens: 6000 }); // 增加输出限制，确保内容完整性
+					
+					// 验证结果
+					if (!result || result.trim().length === 0) {
+						throw new Error(`清洗结果为空 (尝试 ${attempt}/3)`);
+					}
+					
+					console.log(`  块 ${index + 1} 处理成功 (尝试 ${attempt}/3)`);
+					return result;
+				} catch (error: any) {
+					lastError = error;
+					console.warn(`  块 ${index + 1} 处理失败 (尝试 ${attempt}/3):`, error.message);
+					
+					if (attempt < 3) {
+						// 指数退避重试
+						await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, attempt - 1)));
 					}
 				}
-				
-				// 所有重试都失败了，返回原始文本
-				console.error(`  块 ${chunkIndex} 处理失败，使用原始文本`);
-				return ck;
-			});
-
-			const batchResults = await Promise.all(batchPromises);
-			cleaned.push(...batchResults);
-			console.log(`批次 ${Math.floor(i / batchSize) + 1} 完成`);
-		}
+			}
+			
+			// 所有重试都失败了，返回原始文本
+			console.error(`  块 ${index + 1} 处理失败，使用原始文本`);
+			return chunk;
+		}, batchSize);
 
 		// 去重处理：移除重复的段落和句子
 		function deduplicateText(text: string): string {

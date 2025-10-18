@@ -1,66 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { EnhancedProcessingStatus } from "./EnhancedProcessingStatus";
+import SimpleProcessingStatus from "./SimpleProcessingStatus";
 import { AboutModal } from "./AboutModal";
+import { useUser } from "@/hooks/useUser";
 
 export function Header() {
-	const [user, setUser] = useState<any>(null);
-	const [isLoading, setIsLoading] = useState(true);
+	const { user, dailyUsage, isLoading } = useUser();
 	const [showProcessingStatus, setShowProcessingStatus] = useState(false);
 	const [showAboutModal, setShowAboutModal] = useState(false);
 	const [processingCount, setProcessingCount] = useState(0);
-	const [dailyUsage, setDailyUsage] = useState({ used: 0, limit: 0 });
 
 	useEffect(() => {
-		// 检查用户登录状态
-		const checkUser = async () => {
-			try {
-				const res = await fetch("/api/auth/me");
-				const data = await res.json();
-				if (data.user) {
-					setUser(data.user);
-					// 获取用户使用量
-					await fetchDailyUsage(data.user);
-					// 如果是管理员，在 footer 中添加管理后台链接
-					if (data.user.role === "ADMIN") {
-						addAdminFooterLink();
-					} else {
-						removeAdminFooterLink();
-					}
-				} else {
-					setUser(null);
-					setDailyUsage({ used: 0, limit: 0 });
-					removeAdminFooterLink();
-				}
-			} catch (error) {
-				setUser(null);
-				setDailyUsage({ used: 0, limit: 0 });
-				removeAdminFooterLink();
-			} finally {
-				setIsLoading(false);
-			}
-		};
-
-		// 获取用户每日使用量
-		const fetchDailyUsage = async (user: any) => {
-			try {
-				const res = await fetch("/api/user/daily-usage");
-				const data = await res.json();
-				if (data.success) {
-					setDailyUsage({ used: data.used, limit: data.limit });
-				}
-			} catch (error) {
-				console.error('Failed to fetch daily usage:', error);
-			}
-		};
-		
-		checkUser();
+		// 如果是管理员，在 footer 中添加管理后台链接
+		if (user?.role === "ADMIN") {
+			addAdminFooterLink();
+		} else {
+			removeAdminFooterLink();
+		}
 		
 		// 监听页面可见性变化，重新检查用户状态
 		const handleVisibilityChange = () => {
 			if (!document.hidden) {
-				checkUser();
 				updateProcessingCount(); // 页面重新获得焦点时也更新处理状态
 			}
 		};
@@ -89,21 +50,14 @@ export function Header() {
 		// 监听localStorage变化
 		const handleStorageChange = () => {
 			updateProcessingCount();
-			// 同时刷新使用量
-			if (user) {
-				fetchDailyUsage(user);
-			}
 		};
 		
 		document.addEventListener('visibilitychange', handleVisibilityChange);
 		window.addEventListener('storage', handleStorageChange);
 		
-		// 定期检查处理状态和使用量
+		// 定期检查处理状态
 		const interval = setInterval(() => {
 			updateProcessingCount();
-			if (user) {
-				fetchDailyUsage(user);
-			}
 		}, 5000); // 每5秒检查一次
 		
 		return () => {
@@ -111,7 +65,7 @@ export function Header() {
 			window.removeEventListener('storage', handleStorageChange);
 			clearInterval(interval);
 		};
-	}, []);
+	}, [user]);
 
 	const handleLogout = async () => {
 		await fetch("/api/auth/logout", { method: "POST" });
@@ -245,7 +199,7 @@ export function Header() {
 				</div>
 			</header>
 			
-			<EnhancedProcessingStatus 
+			<SimpleProcessingStatus 
 				isVisible={showProcessingStatus} 
 				onClose={() => setShowProcessingStatus(false)}
 				onCancel={async (id) => {

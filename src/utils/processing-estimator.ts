@@ -57,19 +57,21 @@ const PROCESSING_STEPS: ProcessingStep[] = [
 
 // 根据音频时长调整ASR时间
 export function adjustASRTimeForDuration(durationSeconds: number): number {
-  // 基础时间 + 音频时长 * 处理速度
-  // 假设处理速度是音频时长的 0.1 倍（即10倍速处理）
-  const baseTime = 60; // 基础处理时间60秒
-  const processingSpeed = 0.1; // 处理速度系数
-  return Math.max(baseTime, durationSeconds * processingSpeed);
+  // 基于实际观察：1小时音频15-20分钟处理完成
+  // 使用更保守的估算，确保不会过早显示100%
+  const totalProcessingTime = durationSeconds / 3.0; // 3倍速处理（保守估算）
+  const asrTime = totalProcessingTime * 0.6; // ASR占60%
+  return Math.max(60, asrTime); // 最少1分钟
 }
 
 // 根据文本长度调整总结时间
 export function adjustSummaryTimeForText(textLength: number): number {
-  // 基础时间 + 文本长度 * 处理速度
-  const baseTime = 30; // 基础处理时间30秒
-  const processingSpeed = 0.01; // 每100字符增加1秒
-  return Math.max(baseTime, textLength * processingSpeed);
+  // 基于实际观察：使用保守估算确保不会过早显示100%
+  // 假设每分钟音频产生800字符
+  const estimatedAudioDuration = textLength / 800; // 估算音频时长
+  const totalProcessingTime = estimatedAudioDuration * 60 / 3.0; // 3倍速处理（保守估算）
+  const summaryTime = totalProcessingTime * 0.15; // 总结占15%
+  return Math.max(30, summaryTime); // 最少30秒
 }
 
 // 获取处理进度估算
@@ -218,4 +220,69 @@ export function getStepProgress(
     const stepElapsed = elapsedTime - stepStartTime;
     return (stepElapsed / stepEstimatedTime) * 100;
   }
+}
+
+// 获取基于实际数据的处理进度估算
+export function getConservativeProcessingEstimate(
+  elapsedTime: number,
+  audioDuration?: number,
+  textLength?: number
+): ProcessingEstimate {
+  const steps = [...PROCESSING_STEPS];
+  
+  // 根据音频时长调整ASR时间 - 使用保守估算
+  if (audioDuration) {
+    const asrStep = steps.find(step => step.id === 'asr');
+    if (asrStep) {
+      // 使用保守估算：3倍速处理，ASR占60%
+      const totalProcessingTime = audioDuration / 3.0;
+      asrStep.estimatedTime = Math.max(60, totalProcessingTime * 0.6);
+    }
+  }
+  
+  // 根据文本长度调整总结时间 - 使用保守估算
+  if (textLength) {
+    const summaryStep = steps.find(step => step.id === 'summarize');
+    if (summaryStep) {
+      // 使用保守估算：总结占15%
+      const estimatedAudioDuration = textLength / 800; // 每分钟800字符
+      const totalProcessingTime = estimatedAudioDuration * 60 / 3.0;
+      summaryStep.estimatedTime = Math.max(30, totalProcessingTime * 0.15);
+    }
+  }
+  
+  const totalEstimatedTime = steps.reduce((sum, step) => sum + step.estimatedTime, 0);
+  
+  // 计算当前步骤和进度
+  let currentStep = 'parse';
+  let overallProgress = 0;
+  let estimatedRemainingTime = totalEstimatedTime;
+  
+  let accumulatedTime = 0;
+  for (const step of steps) {
+    if (elapsedTime <= accumulatedTime + step.estimatedTime) {
+      currentStep = step.id;
+      const stepProgress = Math.min(1, (elapsedTime - accumulatedTime) / step.estimatedTime);
+      overallProgress = accumulatedTime / totalEstimatedTime + (stepProgress * step.weight);
+      estimatedRemainingTime = totalEstimatedTime - elapsedTime;
+      break;
+    }
+    accumulatedTime += step.estimatedTime;
+    overallProgress += step.weight;
+  }
+  
+  // 如果超过总预计时间，标记为完成
+  if (elapsedTime >= totalEstimatedTime) {
+    currentStep = 'completed';
+    overallProgress = 1;
+    estimatedRemainingTime = 0;
+  }
+  
+  return {
+    steps,
+    totalEstimatedTime,
+    currentStep,
+    overallProgress: Math.min(1, overallProgress),
+    estimatedRemainingTime: Math.max(0, estimatedRemainingTime)
+  };
 }

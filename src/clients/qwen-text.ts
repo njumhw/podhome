@@ -50,7 +50,13 @@ export async function cleanTranscript(input: CleanTranscriptInput): Promise<Clea
 	const messages: ChatMessage[] = [
 		{
 			role: "system",
-			content: "你是播客文案编辑。将口语化转写清洗为专业播客讲稿：删赘词口头禅、重写断句与转场、统一术语与人称，不改变事实，保证信息密度与逻辑。"
+			content: `你是播客文案编辑。将口语化转写清洗为专业播客讲稿：删赘词口头禅、重写断句与转场、统一术语与人称，不改变事实，保证信息密度与逻辑。
+
+**格式要求：**
+- 适当使用项目符号（•）来组织要点，提高可读性
+- 在列举多个观点、论据或案例时使用项目符号
+- 项目符号不要过于频繁，主要用于关键信息的分组
+- 保持内容的层次感和结构清晰`
 		},
 		{
 			role: "user", 
@@ -73,7 +79,19 @@ export async function summarize(input: SummarizeInput): Promise<SummarizeOutput>
 	} catch (error) {
 		console.warn('Failed to get dynamic prompt, using fallback:', error);
 		// 回退到硬编码提示词
-		systemPrompt = "你是播客内容总结专家。请为播客内容生成简洁、准确的总结，突出核心观点和关键信息。";
+		systemPrompt = `你是播客内容总结专家。请为播客内容生成简洁、准确的总结，突出核心观点和关键信息。
+
+**格式要求：**
+- 适当使用项目符号（•）来组织要点，提高可读性
+- 在列举多个观点、论据或案例时使用项目符号
+- 项目符号不要过于频繁，主要用于关键信息的分组
+- 保持内容的层次感和结构清晰
+
+**总结要求：**
+- 突出核心观点和关键信息
+- 语言简洁明了
+- 结构清晰，便于快速阅读
+- 保留最重要的内容要点`;
 	}
 
 	const messages: ChatMessage[] = [
@@ -136,7 +154,7 @@ export async function answerQA(input: AnswerQAInput): Promise<AnswerQAOutput> {
 }
 
 export type GenerateInterviewReportInput = { transcript: string; title?: string };
-export type GenerateInterviewReportOutput = { report: string };
+export type GenerateInterviewReportOutput = { summary: string };
 
 export async function generateInterviewReport(input: GenerateInterviewReportInput): Promise<GenerateInterviewReportOutput> {
 	const messages: ChatMessage[] = [
@@ -178,5 +196,5 @@ ${input.transcript}
 	];
 	
 	const report = await qwenChat(messages, { maxTokens: 3000 });
-	return { report };
+	return { summary: report };
 }

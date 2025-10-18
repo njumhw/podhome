@@ -1,4 +1,5 @@
 import { db } from "@/server/db";
+import { onSummaryGenerated } from "./summary-sync";
 
 export interface AudioCacheData {
 	title?: string;
@@ -8,6 +9,7 @@ export interface AudioCacheData {
 	script?: string;
 	summary?: string;
 	report?: string;
+	segments?: string[]; // ASR分段数据
 	originalUrl?: string; // 原始页面URL
 	publishedAt?: string; // 发布时间 (ISO string)
 	metadata?: any;
@@ -39,7 +41,8 @@ export async function getCachedAudio(audioUrl: string): Promise<AudioCacheData |
 			transcript: cached.transcript || undefined,
 			script: cached.script || undefined,
 			summary: cached.summary || undefined,
-			report: cached.report || undefined,
+			report: cached.summary || undefined,
+			segments: cached.segments || undefined,
 			originalUrl: cached.originalUrl || undefined,
 			publishedAt: cached.publishedAt || undefined,
 			metadata: cached.metadata as any
@@ -62,7 +65,8 @@ export async function setCachedAudio(audioUrl: string, data: AudioCacheData): Pr
 				transcript: data.transcript,
 				script: data.script,
 				summary: data.summary,
-				report: data.report,
+				segments: data.segments,
+				// report字段已删除，只使用summary
 				originalUrl: data.originalUrl,
 				publishedAt: data.publishedAt,
 				metadata: data.metadata,
@@ -76,12 +80,15 @@ export async function setCachedAudio(audioUrl: string, data: AudioCacheData): Pr
 				transcript: data.transcript,
 				script: data.script,
 				summary: data.summary,
-				report: data.report,
+				segments: data.segments,
+				// report字段已删除，只使用summary
 				originalUrl: data.originalUrl,
 				publishedAt: data.publishedAt,
 				metadata: data.metadata
 			}
 		});
+
+		// 总结内容已统一到summary字段，无需同步
 	} catch (error) {
 		console.error("Failed to cache audio:", error);
 	}

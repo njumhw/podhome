@@ -53,7 +53,8 @@ export async function GET(request: NextRequest) {
           audioUrl: true,
           summary: true,
           script: true,
-          report: true,
+          transcript: true,  // 添加transcript字段
+          // report字段已删除
           publishedAt: true,
           metadata: true,
           updatedAt: true,
@@ -71,8 +72,9 @@ export async function GET(request: NextRequest) {
           sourceUrl: audioCache.audioUrl,
           summary: audioCache.summary,
           topic: audioCache.topic,
-          transcript: audioCache.script,
-          report: audioCache.report,
+          transcript: audioCache.transcript,  // 原始ASR转录文本
+          script: audioCache.script,  // 优化后的访谈记录
+          report: audioCache.summary,
           updatedAt: audioCache.updatedAt
         };
       }
@@ -85,7 +87,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       id: podcast.id,
       title: podcast.title,
       author: podcast.showAuthor,
@@ -94,12 +96,29 @@ export async function GET(request: NextRequest) {
       originalUrl: podcast.sourceUrl,
       summary: podcast.summary,
       topic: podcast.topic,
-      script: podcast.transcript,
-      report: podcast.report,
+      script: podcast.script,
+      report: podcast.summary,
       updatedAt: podcast.updatedAt
     });
+    
+    // 添加缓存控制头，确保不缓存
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
   } catch (error) {
     console.error('Podcast fetch error:', error);
+    
+    // 检查是否是数据库连接问题
+    if (error.message?.includes('Can\'t reach database server') || 
+        error.message?.includes('connection pool')) {
+      return NextResponse.json(
+        { error: '数据库连接问题，请稍后重试' },
+        { status: 503 } // Service Unavailable
+      );
+    }
+    
     return NextResponse.json(
       { error: '获取播客详情失败' },
       { status: 500 }

@@ -16,7 +16,7 @@ interface ProcessResult {
 		audioUrl: string;
 		transcript: string;
 		script: string;
-		report: string | null;
+		summary: string | null;
 		duration: number;
 		cached: boolean;
 	};
@@ -110,7 +110,7 @@ export default function TestAudioPage() {
 				setAuthor(j.author || j.audioInfo?.author || "");
 				setPublishedAt(j.publishedAt || j.audioInfo?.publishedAt || "");
 				setAudioUrl(audio);
-				// 不阻塞后续流程：立即展示“已获取元信息，继续处理中”
+				// 不阻塞后续流程：立即展示"已获取元信息，继续处理中"
 				setCurrentStep("已获取标题与音频链接，正在转写与生成...");
 				setProgress(10);
 			} else {
@@ -129,38 +129,100 @@ export default function TestAudioPage() {
 		}, 1200);
 
 		try {
-			const res = await fetch("/api/process-audio", {
+			// 使用异步处理API
+			const res = await fetch("/api/process-audio-async", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ url }),
 			});
 			
-			clearInterval(progressInterval);
-			setProgress(100);
-			
 			const data = await res.json();
 			
-			if (data.success) {
-				setResult(data);
-				// 若后端已返回更准确的时长，记录以优化 ETA
-				if (data?.data?.duration) setDurationSec(data.data.duration);
-				// 将解析阶段的可编辑值用后端结果兜底
-				if (!title && data?.data?.title) setTitle(data.data.title);
-				if (!author && data?.data?.author) setAuthor(data.data.author);
-				if (!publishedAt && data?.data?.publishedAt) setPublishedAt(data.data.publishedAt);
-				if (!audioUrl && data?.data?.audioUrl) setAudioUrl(data.data.audioUrl);
-				setCurrentStep("处理完成！");
+			if (data.success && data.taskId) {
+				setCurrentStep("任务已提交，正在后台处理中...");
+				setProgress(20);
+				
+				// 开始轮询任务状态
+				pollTaskStatus(data.taskId);
 			} else {
+				clearInterval(progressInterval);
 				setError(data.error || "处理失败");
 				setCurrentStep("处理失败");
+				setLoading(false);
 			}
 		} catch (err: any) {
 			clearInterval(progressInterval);
 			setError(err.message);
 			setCurrentStep("处理失败");
-		} finally {
 			setLoading(false);
 		}
+	};
+
+	// 轮询任务状态
+	const pollTaskStatus = async (taskId: string) => {
+		const pollInterval = setInterval(async () => {
+			try {
+				const res = await fetch(`/api/task-status?taskId=${taskId}`);
+				if (!res.ok) return;
+				
+				const taskStatus = await res.json();
+				
+				if (taskStatus.status === 'COMPLETED') {
+					clearInterval(pollInterval);
+					setProgress(100);
+					setCurrentStep("处理完成！");
+					
+					// 构造结果对象
+					const result: ProcessResult = {
+						success: true,
+						step: "completed",
+						progress: 100,
+						data: {
+							podcastTitle: taskStatus.result?.title || title,
+							title: taskStatus.result?.title || title,
+							author: taskStatus.result?.author || author,
+							publishedAt: taskStatus.result?.publishedAt || publishedAt,
+							audioUrl: taskStatus.result?.audioUrl || audioUrl,
+							transcript: taskStatus.result?.transcript || "",
+							script: taskStatus.result?.script || "",
+							summary: taskStatus.result?.summary || null,
+							duration: taskStatus.result?.duration || 0,
+							cached: false
+						},
+						stats: {
+							totalTime: taskStatus.result?.totalTime || 0,
+							fromCache: false
+						}
+					};
+					
+					setResult(result);
+					
+					// 若后端已返回更准确的时长，记录以优化 ETA
+					if (taskStatus.result?.duration) setDurationSec(taskStatus.result.duration);
+					
+					setLoading(false);
+					
+				} else if (taskStatus.status === 'FAILED') {
+					clearInterval(pollInterval);
+					setError(taskStatus.error || "处理失败");
+					setCurrentStep("处理失败");
+					setLoading(false);
+				}
+				
+			} catch (error) {
+				console.error('轮询任务状态失败:', error);
+			}
+		}, 3000); // 每3秒轮询一次
+		
+		// 设置超时，避免无限轮询
+		setTimeout(() => {
+			clearInterval(pollInterval);
+			if (loading) {
+				setError("处理超时");
+				setCurrentStep("处理超时");
+				setLoading(false);
+			}
+		}, 30 * 60 * 1000); // 30分钟超时
 	};
 
 	return (
@@ -188,7 +250,7 @@ export default function TestAudioPage() {
 						disabled={loading || !url.trim()}
 						className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-lg font-semibold rounded-lg shadow-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
 					>
-						{loading ? "处理中..." : "🚀 交给阿茂吧"}
+						{loading ? "阿茂在听啦，先看看其他的播客吧" : "🚀 交给阿茂吧"}
 					</button>
 				</div>
 
@@ -310,7 +372,7 @@ export default function TestAudioPage() {
 						</div>
 
 						{/* 整体报告 */}
-					{result.data.report && (
+					{result.data.summary && (
 					<div className="bg-white p-6 rounded-lg border border-gray-300 shadow-sm">
 								<h3 className="text-lg font-semibold mb-4">📊 整体报告</h3>
 							<div className="p-4 bg-gray-100 rounded border border-gray-300 max-h-60 overflow-y-auto">
@@ -332,7 +394,7 @@ export default function TestAudioPage() {
 												pre: ({ children }) => <pre className="bg-gray-100 p-3 rounded overflow-x-auto mb-4">{children}</pre>,
 											}}
 										>
-											{result.data.report}
+											{result.data.summary}
 										</ReactMarkdown>
 									</div>
 								</div>
