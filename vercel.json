@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "NEXTAUTH_SECRET": "@nextauth_secret",
+    "NEXTAUTH_URL": "@nextauth_url",
+    "QWEN_API_KEY": "@qwen_api_key",
+    "ALIYUN_ASR_ACCESS_KEY_ID": "@aliyun_asr_access_key_id",
+    "ALIYUN_ASR_ACCESS_KEY_SECRET": "@aliyun_asr_access_key_secret",
+    "ALIYUN_OSS_ACCESS_KEY_ID": "@aliyun_oss_access_key_id",
+    "ALIYUN_OSS_ACCESS_KEY_SECRET": "@aliyun_oss_access_key_secret",
+    "ALIYUN_OSS_BUCKET": "@aliyun_oss_bucket",
+    "ALIYUN_OSS_REGION": "@aliyun_oss_region"
+  },
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 300
+    }
+  },
+  "regions": ["hkg1", "sin1"],
+  "framework": "nextjs"
+}

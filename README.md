@@ -1,60 +1,109 @@
-# PodHome
+# 播客智能处理系统
 
-极简的播客转写、总结与跨播客 QA 应用。
+一个基于 AI 的播客内容处理平台，支持自动转录、智能总结和角色识别。
+
+## 功能特性
+
+- 🎙️ **智能转录**: 支持多种播客平台链接，自动提取音频并转录
+- 🤖 **AI 总结**: 基于通义千问生成详细的播客总结
+- 👥 **角色识别**: 自动识别主持人、嘉宾等角色
+- 📱 **响应式设计**: 支持桌面和移动端访问
+- 🔐 **用户系统**: 支持注册、登录和权限管理
+- ⚡ **异步处理**: 支持长时间播客的后台处理
 
 ## 技术栈
-- Next.js (App Router, TypeScript)
-- TailwindCSS + shadcn/ui（后续接入）
-- Postgres（开发使用 Supabase，支持 pgvector）
-- 向量检索：pgvector
-- AI：阿里云 ASR、通义千问（文本 & 向量）
+
+- **前端**: Next.js 15, React, TypeScript, Tailwind CSS
+- **后端**: Next.js API Routes, Prisma ORM
+- **数据库**: PostgreSQL (Supabase)
+- **AI 服务**: 通义千问 (Qwen)
+- **语音识别**: 阿里云 ASR
+- **文件存储**: 阿里云 OSS
+- **部署**: Vercel
 
 ## 本地开发
+
+### 环境要求
+
+- Node.js 18+
+- pnpm
+- PostgreSQL 数据库
+
+### 安装依赖
+
 ```bash
-cp .env.example .env
 pnpm install
-pnpm db:push
-# 首次向量列与索引初始化
-node -e "import('./dist/server/vector.js').then(m=>m.ensureVectorSetup())"
+```
+
+### 环境配置
+
+复制 `env.example` 为 `.env.local` 并配置相关环境变量：
+
+```bash
+cp env.example .env.local
+```
+
+### 数据库设置
+
+```bash
+# 生成 Prisma 客户端
+pnpm prisma generate
+
+# 推送数据库模式
+pnpm prisma db push
+```
+
+### 启动开发服务器
+
+```bash
 pnpm dev
 ```
 
-## Docker 运行
-```bash
-# 构建镜像
-docker build -t podroom:local .
-# 运行
-docker run --env-file ./.env -p 3000:3000 podroom:local
-```
-
-## 环境变量说明
-见 `.env.example`。所有敏感信息必须通过环境变量管理，不得硬编码。
-
-## 认证与权限
-- 注册 `POST /api/auth/register`（需邀请码）
-- 登录 `POST /api/auth/login`
-- 退出 `POST /api/auth/logout`
-- 游客可浏览内容；上传 `/api/upload` 与 QA `/api/qa` 需登录
-
-## 管理后台（API）
-- 邀请码创建 `POST /api/admin/invite/create`
-- 主题审核 `POST /api/admin/topics/pending`、`POST /api/admin/topics/approve`
-- 用户管理 `GET/PATCH /api/admin/users`
-- 任务重跑 `POST /api/pipeline/run`
-- 成本统计 `GET /api/admin/cost`
-均需 `adminSecret`。
+访问 http://localhost:3000
 
 ## 部署
-- 多阶段 Dockerfile，使用 Next.js standalone 输出
-- 运行时读取 `process.env`，无需在镜像内打包密钥
 
-## 目录结构
-- `src/app`: 页面与路由
-- `src/components`: 复用组件
-- `src/features`: 业务功能模块
-- `src/stores`: 状态管理
-- `src/utils`: 工具（包含环境变量校验、HTTP 错误工具）
+### Vercel 部署
 
-## 约定
-- 使用 pnpm 管理依赖
-- 严禁将 `.env` 提交到仓库，提交 `.env.example`
+1. 将代码推送到 GitHub
+2. 在 Vercel 中导入项目
+3. 配置环境变量
+4. 部署
+
+### 环境变量配置
+
+在 Vercel 项目设置中配置以下环境变量：
+
+- `DATABASE_URL`: PostgreSQL 数据库连接字符串
+- `NEXTAUTH_SECRET`: NextAuth 密钥
+- `NEXTAUTH_URL`: 应用 URL
+- `QWEN_API_KEY`: 通义千问 API 密钥
+- `ALIYUN_ASR_ACCESS_KEY_ID`: 阿里云 ASR Access Key ID
+- `ALIYUN_ASR_ACCESS_KEY_SECRET`: 阿里云 ASR Access Key Secret
+- `ALIYUN_OSS_ACCESS_KEY_ID`: 阿里云 OSS Access Key ID
+- `ALIYUN_OSS_ACCESS_KEY_SECRET`: 阿里云 OSS Access Key Secret
+- `ALIYUN_OSS_BUCKET`: 阿里云 OSS 存储桶名称
+- `ALIYUN_OSS_REGION`: 阿里云 OSS 区域
+
+## 项目结构
+
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── api/               # API 路由
+│   ├── admin/             # 管理后台
+│   ├── home/              # 首页
+│   └── podcast/           # 播客详情页
+├── components/            # React 组件
+├── clients/               # 外部服务客户端
+├── server/                # 服务器端工具
+└── utils/                 # 工具函数
+```
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+## 许可证
+
+MIT License
