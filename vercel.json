@@ -5,6 +5,5 @@
       "maxDuration": 300
     }
   },
-  "regions": ["hkg1", "sin1"],
   "framework": "nextjs"
 }
