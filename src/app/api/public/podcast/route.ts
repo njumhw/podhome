@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let whereClause: any = {};
+    let whereClause: { id?: string; OR?: Array<{ sourceUrl?: string; audioUrl?: string }> } = {};
     
     if (id) {
       whereClause.id = id;
@@ -52,8 +52,8 @@ export async function GET(request: NextRequest) {
           author: true,
           audioUrl: true,
           summary: true,
-          script: true,
-          transcript: true,  // 添加transcript字段
+        script: true,
+        transcript: true
           // report字段已删除
           publishedAt: true,
           metadata: true,
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
           id: audioCache.id,
           title: audioCache.title || '未知标题',
           showAuthor: audioCache.author || '未知作者',
-          publishedAt: audioCache.publishedAt || (audioCache.metadata as any)?.publishedAt,
+          publishedAt: audioCache.publishedAt || (audioCache.metadata as { publishedAt?: string })?.publishedAt,
           audioUrl: audioCache.audioUrl,
           sourceUrl: audioCache.audioUrl,
           summary: audioCache.summary,

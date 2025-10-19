@@ -276,7 +276,7 @@ export async function processAudioInternal(url: string, userId?: string) {
 						description: meta.description || meta.summary || null,
 						publishedAt: meta.publishedAt ? new Date(meta.publishedAt) : null,
 						duration: asrData.duration,
-						status: 'COMPLETED',
+						status: 'READY',
 						originalTranscript: asrData.transcript,
 						transcript: scriptData.script,
 						summary: reportData?.summary || null,
@@ -326,7 +326,7 @@ export async function processAudioInternal(url: string, userId?: string) {
 			estimatedTokens: estimatedTokens + (reportData ? Math.ceil((optimizedScript.length + reportData.summary.length) / 2) : 0)
 		};
 		
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("内部处理失败:", error);
 		throw error;
 	}
@@ -432,7 +432,7 @@ export async function POST(req: NextRequest) {
 			}
 		});
 		
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("同步处理失败:", error);
 		return jsonError(error?.message || "处理失败", 500);
 	}

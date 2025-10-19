@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 		};
 
 		return Response.json({ config });
-	} catch (error: any) {
+	} catch (error: unknown) {
 		return new Response(error.message, { status: 500 });
 	}
 }
@@ -42,7 +42,7 @@ export async function PATCH(req: NextRequest) {
 		await setConfig("AUDIO_MAX_CONCURRENT", maxConcurrentSegments.toString());
 
 		return Response.json({ success: true });
-	} catch (error: any) {
+	} catch (error: unknown) {
 		return new Response(error.message, { status: 500 });
 	}
 }
