@@ -55,7 +55,7 @@ async function batchProcessText<T>(
 	return results;
 }
 
-export async function generateScript(transcript: string, language: string = "zh", audioUrl?: string) {
+async function generateScript(transcript: string, language: string = "zh", audioUrl?: string) {
     const startTime = Date.now();
     try {
         if (!transcript.trim()) throw new Error("缺少 transcript");

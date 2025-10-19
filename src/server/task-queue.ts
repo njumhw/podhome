@@ -348,7 +348,7 @@ class TaskQueue {
   private async processPodcastInternal(url: string, userId?: string) {
     try {
       // 直接调用现有的处理逻辑，而不是通过HTTP请求
-      const { processAudioInternal } = await import('@/app/api/process-audio/route');
+      const { processAudioInternal } = await import('@/server/audio-processor');
       
       // 调用内部处理函数
       const result = await processAudioInternal(url, userId);
