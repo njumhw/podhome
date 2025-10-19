@@ -19,8 +19,12 @@ type Detail = {
 	audioUrl?: string | null;
 };
 
-export default function PodcastDetail({ params }: { params: { id: string } }) {
-	const { id } = params;
+export default function PodcastDetail({ params }: { params: Promise<{ id: string }> }) {
+	const [id, setId] = useState<string>('');
+	
+	useEffect(() => {
+		params.then(({ id }) => setId(id));
+	}, [params]);
 	const [detail, setDetail] = useState<Detail | null>(null);
 
 	useEffect(() => {
