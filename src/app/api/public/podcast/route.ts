@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
           audioUrl: true,
           summary: true,
         script: true,
-        transcript: true
+        transcript: true,
           // report字段已删除
           publishedAt: true,
           metadata: true,
