@@ -3,9 +3,10 @@ import { db } from "@/server/db";
 import { getSessionUser, requireUser } from "@/server/auth";
 import { z } from "zod";
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+	const { id } = await params;
 	const item = await db.podcast.findUnique({
-		where: { id: params.id },
+		where: { id },
 		include: {
 			chunks: { select: { id: true, startSec: true, endSec: true, text: true }, take: 200 },
 			accessLogs: { select: { id: true, createdAt: true }, take: 5, orderBy: { createdAt: "desc" } },
@@ -17,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 	(async () => {
 		try {
 			const user = await getSessionUser();
-			await db.accessLog.create({ data: { podcastId: params.id, userId: user?.id ?? null } });
+			await db.accessLog.create({ data: { podcastId: id, userId: user?.id ?? null } });
 		} catch {}
 	})();
 
@@ -30,7 +31,8 @@ const updateSchema = z.object({
 	publishedAt: z.string().optional(), // expect YYYY-MM-DD
 });
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+	const { id } = await params;
 	const user = await requireUser().catch(() => null);
 	if (!user) return new Response("Unauthorized", { status: 401 });
 
@@ -46,6 +48,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 		if (!isNaN(d.getTime())) data.publishedAt = d;
 	}
 
-	const updated = await db.podcast.update({ where: { id: params.id }, data });
+	const updated = await db.podcast.update({ where: { id }, data });
 	return Response.json({ item: updated });
 }

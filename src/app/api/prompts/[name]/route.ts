@@ -4,10 +4,10 @@ import { db } from "@/server/db";
 // 根据名称获取提示词（用于后端服务）
 export async function GET(
   req: NextRequest,
-  { params }: { params: { name: string } }
+  { params }: { params: Promise<{ name: string }> }
 ) {
   try {
-    const { name } = params;
+    const { name } = await params;
 
     const prompt = await db.prompt.findUnique({
       where: { 
