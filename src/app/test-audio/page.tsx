@@ -167,7 +167,7 @@ export default function TestAudioPage() {
 				
 				const taskStatus = await res.json();
 				
-				if (taskStatus.status === 'COMPLETED') {
+				if (taskStatus.status === 'READY') {
 					clearInterval(pollInterval);
 					setProgress(100);
 					setCurrentStep("处理完成！");

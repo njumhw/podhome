@@ -31,7 +31,6 @@ export async function analyzeProcessingPerformance(
         createdAt: true,
         updatedAt: true,
         transcript: true,
-        script: true,
         summary: true
       }
     });

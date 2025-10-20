@@ -315,7 +315,7 @@ export default function HomePage() {
         
         const taskStatus = await res.json();
         
-        if (taskStatus.status === 'COMPLETED') {
+        if (taskStatus.status === 'READY') {
           clearInterval(pollInterval);
           
           // 更新处理状态为完成

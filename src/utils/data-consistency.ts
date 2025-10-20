@@ -24,7 +24,6 @@ export async function checkPodcastDataConsistency(audioCacheId: string): Promise
         id: true,
         title: true,
         transcript: true,
-        script: true,
         summary: true,
         audioUrl: true
       }
@@ -111,17 +110,17 @@ export async function autoFixDataConsistency(audioCacheId: string): Promise<bool
       
       const audioCache = await db.audioCache.findUnique({
         where: { id: audioCacheId },
-        select: { script: true, title: true, audioUrl: true }
+        select: { transcript: true, title: true, audioUrl: true }
       });
 
-      if (audioCache?.script) {
+      if (audioCache?.transcript) {
         try {
           // 调用总结生成API
           const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/generate-report`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              transcript: audioCache.script,
+              transcript: audioCache.transcript,
               title: audioCache.title,
               audioUrl: audioCache.audioUrl
             })

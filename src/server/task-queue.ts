@@ -4,7 +4,7 @@ import { db } from "@/server/db";
 export interface Task {
   id: string;
   type: 'PODCAST_PROCESSING';
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  status: 'PENDING' | 'RUNNING' | 'READY' | 'FAILED';
   data: {
     url: string;
     userId?: string;
@@ -106,7 +106,7 @@ class TaskQueue {
       return {
         id: taskRecord.id,
         type: taskRecord.type as 'PODCAST_PROCESSING',
-        status: taskRecord.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        status: taskRecord.status as 'PENDING' | 'RUNNING' | 'READY' | 'FAILED',
         data: taskRecord.data as any,
         result: taskRecord.result as any,
         error: taskRecord.error || undefined,
@@ -131,7 +131,7 @@ class TaskQueue {
       const [pending, running, completed, failed] = await Promise.all([
         db.taskQueue.count({ where: { status: 'PENDING' } }),
         db.taskQueue.count({ where: { status: 'RUNNING' } }),
-        db.taskQueue.count({ where: { status: 'COMPLETED' } }),
+        db.taskQueue.count({ where: { status: 'READY' } }),
         db.taskQueue.count({ where: { status: 'FAILED' } })
       ]);
 
@@ -327,7 +327,7 @@ class TaskQueue {
       await db.taskQueue.update({
         where: { id: taskRecord.id },
         data: {
-          status: 'COMPLETED',
+          status: 'READY',
           result: result,
           completedAt: new Date(),
           updatedAt: new Date()

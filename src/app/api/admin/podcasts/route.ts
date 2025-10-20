@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
       title: cache.title || '未知标题',
       showAuthor: cache.author || '未知作者',
       sourceUrl: cache.audioUrl,
-      status: 'COMPLETED' as const, // AudioCache中的数据都是已完成的
+      status: 'READY' as const, // AudioCache中的数据都是已完成的
       publishedAt: cache.publishedAt,
       duration: cache.duration,
       createdAt: cache.createdAt,

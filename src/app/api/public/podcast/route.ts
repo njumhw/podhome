@@ -52,7 +52,6 @@ export async function GET(request: NextRequest) {
           author: true,
           audioUrl: true,
           summary: true,
-        script: true,
         transcript: true,
           // report字段已删除
           publishedAt: true,

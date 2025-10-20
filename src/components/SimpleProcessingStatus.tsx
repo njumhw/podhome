@@ -92,7 +92,7 @@ export default function SimpleProcessingStatus({
             if (res.ok) {
               const taskStatus = await res.json();
               
-              if (taskStatus.status === 'COMPLETED') {
+              if (taskStatus.status === 'READY') {
                 // 任务已完成，更新状态
                 const updatedItem = {
                   ...item,
@@ -177,12 +177,12 @@ export default function SimpleProcessingStatus({
           const res = await fetch(`/api/task-status?taskId=${task.taskId}`);
           if (res.ok) {
             const taskStatus = await res.json();
-            if (taskStatus.status === 'COMPLETED' || taskStatus.status === 'FAILED') {
+            if (taskStatus.status === 'READY' || taskStatus.status === 'FAILED') {
               // 任务已完成，更新状态
               const updatedItem = {
                 ...task,
-                status: taskStatus.status === 'COMPLETED' ? 'completed' : 'failed',
-                progress: taskStatus.status === 'COMPLETED' ? 100 : 0,
+                status: taskStatus.status === 'READY' ? 'completed' : 'failed',
+                progress: taskStatus.status === 'READY' ? 100 : 0,
                 title: taskStatus.result?.title,
                 completedAt: Date.now()
               };
