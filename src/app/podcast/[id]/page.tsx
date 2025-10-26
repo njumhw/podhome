@@ -57,6 +57,10 @@ export default function PodcastDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showFullscreenReport, setShowFullscreenReport] = useState(false);
   const [showFullscreenScript, setShowFullscreenScript] = useState(false);
+  const [showFullscreenASR, setShowFullscreenASR] = useState(false);
+  const [showCleaned, setShowCleaned] = useState(false); // 折叠清洗版
+  const [showASR, setShowASR] = useState(false);
+  const [asrText, setAsrText] = useState<string>('');
   const [copySuccess, setCopySuccess] = useState('');
   const [downloadStatus, setDownloadStatus] = useState('');
   const [shareSuccess, setShareSuccess] = useState('');
@@ -167,6 +171,20 @@ export default function PodcastDetailPage() {
       }
     } catch (error) {
       console.error('Failed to check user:', error);
+    }
+  };
+
+
+  const loadASR = async () => {
+    try {
+      if (!podcast?.originalUrl) return;
+      const res = await fetch(`/api/public/podcast/asr?url=${encodeURIComponent(podcast.originalUrl)}&t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAsrText(data.asr || '');
+      }
+    } catch (e) {
+      console.warn('加载ASR失败', e);
     }
   };
 
@@ -362,9 +380,9 @@ export default function PodcastDetailPage() {
       
       setIsEditing(false);
       toast.success('保存成功！');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('保存失败:', error);
-      toast.error('保存失败', error.message);
+      toast.error('保存失败', error instanceof Error ? error.message : String(error));
     } finally {
       setIsSaving(false);
     }
@@ -444,7 +462,9 @@ export default function PodcastDetailPage() {
               ) : (
                 <>
                   <div className="flex justify-between items-start mb-3">
-                    <h1 className="text-3xl font-bold text-gray-900 flex-1">{podcast.title}</h1>
+                    <div className="flex items-center gap-3 flex-1">
+                      <h1 className="text-3xl font-bold text-gray-900">{podcast.title}</h1>
+                    </div>
                     <div className="flex items-center gap-2 ml-4">
                       <button
                         onClick={handleShare}
@@ -470,6 +490,7 @@ export default function PodcastDetailPage() {
                     <span>作者：{podcast.author}</span>
                     <span>发布时间：{podcast.publishedAt ? new Date(podcast.publishedAt).toLocaleDateString() : '未知时间'}</span>
                   </div>
+                  
                   
                   {/* 操作按钮区域 */}
                   <div className="flex items-center gap-1.5 mb-4">
@@ -553,14 +574,14 @@ export default function PodcastDetailPage() {
         {/* 报告和全文 */}
         {/* 主要内容区域 - 上下布局 */}
         <div className="space-y-8">
-          {/* 播客总结 */}
+          {/* 播客总结 - 提高可视高度 */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-900">播客总结</h2>
               {podcast.summary && !isEditing && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleCopy(podcast.summary, '播客总结')}
+                    onClick={() => handleCopy(podcast.summary || '', '播客总结')}
                     className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
                     title="复制全文"
                   >
@@ -590,35 +611,46 @@ export default function PodcastDetailPage() {
                 />
               </div>
             ) : (
-              <SummaryDisplay 
-                summary={podcast.summary}
-                report={podcast.summary}
-                fallbackText="暂无播客总结"
-              />
+              <div className="max-h-[720px] overflow-y-auto">
+                <SummaryDisplay 
+                  summary={podcast.summary}
+                  report={podcast.summary}
+                  fallbackText="暂无播客总结"
+                />
+              </div>
             )}
           </div>
 
           {/* 访谈全文 */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">访谈全文</h2>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-gray-900">访谈全文</h2>
               {podcast.script && !isEditing && (
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleCopy(podcast.script, '访谈全文')}
-                    className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
+                    onClick={() => setShowCleaned(!showCleaned)}
+                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                  >
+                    {showCleaned ? '收起' : '展开清洗版'}
+                  </button>
+                  <button
+                    onClick={() => { setShowASR(!showASR); if (!asrText && !showASR) loadASR(); }}
+                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                  >
+                    {showASR ? '收起' : '展开ASR'}
+                  </button>
+                  <button
+                    onClick={() => handleCopy(podcast.script || '', '访谈全文')}
+                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
                     title="复制全文"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
                     复制
                   </button>
                   <button
                     onClick={() => setShowFullscreenScript(true)}
-                    className="text-sm text-blue-600 hover:text-blue-800 px-3 py-1 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors"
+                    className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
                   >
-                    全屏阅读
+                    全屏
                   </button>
                 </div>
               )}
@@ -635,16 +667,16 @@ export default function PodcastDetailPage() {
                 />
               </div>
             ) : (
-              podcast.script ? (
+              podcast.script && showCleaned ? (
                 <div 
-                  className="max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded-lg p-4"
+                  className="max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded p-3"
                   style={{ 
-                    height: '500px', 
+                    height: '400px', 
                     wordWrap: 'break-word', 
                     overflowWrap: 'break-word',
                     backgroundColor: '#ffffff',
                     color: '#1f2937',
-                    lineHeight: '1.3'
+                    lineHeight: '1.4'
                   }}
                   onWheel={(e) => {
                     e.stopPropagation();
@@ -658,10 +690,11 @@ export default function PodcastDetailPage() {
                           wordWrap: 'break-word', 
                           overflowWrap: 'break-word', 
                           whiteSpace: 'normal', 
-                          color: '#1f2937 !important', 
+                          color: '#1f2937', 
                           fontSize: '14px', 
                           lineHeight: '1.3',
-                          margin: '0 0 8px 0'
+                          margin: '0 0 8px 0',
+                          textDecoration: 'none'
                         }}>
                           {children}
                         </p>
@@ -670,10 +703,11 @@ export default function PodcastDetailPage() {
                         <li style={{ 
                           wordWrap: 'break-word', 
                           overflowWrap: 'break-word', 
-                          color: '#1f2937 !important', 
+                          color: '#1f2937', 
                           fontSize: '14px', 
                           lineHeight: '1.3',
-                          margin: '0 0 2px 0'
+                          margin: '0 0 2px 0',
+                          textDecoration: 'none'
                         }}>
                           {children}
                         </li>
@@ -682,46 +716,50 @@ export default function PodcastDetailPage() {
                         <strong style={{ 
                           wordWrap: 'break-word', 
                           overflowWrap: 'break-word', 
-                          color: '#111827 !important', 
+                          color: '#111827', 
                           fontSize: '14px', 
                           lineHeight: '1.3',
-                          fontWeight: 'bold'
+                          fontWeight: 'bold',
+                          textDecoration: 'none'
                         }}>
                           {children}
                         </strong>
                       ),
                       h1: ({ children }) => (
                         <h1 style={{ 
-                          color: '#111827 !important', 
+                          color: '#111827', 
                           fontSize: '18px', 
                           fontWeight: 'bold', 
                           lineHeight: '1.2',
                           marginBottom: '6px', 
-                          marginTop: '8px' 
+                          marginTop: '8px',
+                          textDecoration: 'none'
                         }}>
                           {children}
                         </h1>
                       ),
                       h2: ({ children }) => (
                         <h2 style={{ 
-                          color: '#111827 !important', 
+                          color: '#111827', 
                           fontSize: '16px', 
                           fontWeight: 'bold', 
                           lineHeight: '1.2',
                           marginBottom: '4px', 
-                          marginTop: '6px' 
+                          marginTop: '6px',
+                          textDecoration: 'none'
                         }}>
                           {children}
                         </h2>
                       ),
                       h3: ({ children }) => (
                         <h3 style={{ 
-                          color: '#111827 !important', 
+                          color: '#111827', 
                           fontSize: '15px', 
                           fontWeight: 'bold', 
                           lineHeight: '1.2',
                           marginBottom: '2px', 
-                          marginTop: '4px' 
+                          marginTop: '4px',
+                          textDecoration: 'none'
                         }}>
                           {children}
                         </h3>
@@ -732,12 +770,36 @@ export default function PodcastDetailPage() {
                   </ReactMarkdown>
                 </div>
               ) : (
-                <div className="text-gray-600 text-center py-8">
-                  暂无访谈全文
-                </div>
+                <div className="text-gray-500 text-sm">{podcast.script ? '点击上方"展开清洗版"查看' : '暂无访谈全文'}</div>
               )
             )}
           </div>
+          {showASR && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-base font-semibold text-gray-900">ASR原文</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleCopy(asrText, 'ASR原文')}
+                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                    title="复制ASR原文"
+                  >
+                    复制
+                  </button>
+                  <button
+                    onClick={() => setShowFullscreenASR(true)}
+                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                    title="全屏查看ASR原文"
+                  >
+                    全屏
+                  </button>
+                </div>
+              </div>
+              <div className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed max-h-[300px] overflow-y-auto border border-gray-100 rounded p-3">
+                {asrText || '加载中...'}
+              </div>
+            </div>
+          )}
           {/* 评论区 */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">评论区</h2>
@@ -866,7 +928,7 @@ export default function PodcastDetailPage() {
               <h2 className="text-2xl font-bold text-gray-900">播客总结</h2>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => handleCopy(podcast.summary, '播客总结')}
+                    onClick={() => handleCopy(podcast.summary || '', '播客总结')}
                   className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
                   title="复制全文"
                 >
@@ -936,7 +998,7 @@ export default function PodcastDetailPage() {
               <h2 className="text-2xl font-bold text-gray-900">访谈全文</h2>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => handleCopy(podcast.script, '访谈全文')}
+                    onClick={() => handleCopy(podcast.script || '', '访谈全文')}
                   className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
                   title="复制全文"
                 >
@@ -992,6 +1054,40 @@ export default function PodcastDetailPage() {
                 >
                   {podcast.script}
                 </ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 全屏ASR原文模态框 */}
+      {showFullscreenASR && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg w-full h-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-2xl font-bold text-gray-900">ASR原文</h2>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleCopy(asrText, 'ASR原文')}
+                  className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
+                  title="复制ASR原文"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  复制
+                </button>
+                <button
+                  onClick={() => setShowFullscreenASR(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
+                {asrText || '加载中...'}
               </div>
             </div>
           </div>

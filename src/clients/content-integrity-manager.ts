@@ -87,7 +87,7 @@ export function analyzeContentForIntegrity(
     meetsTranscriptToSummary: taskType === 'transcript-to-summary'
       ? expectedOutputTokens <= 8000
       : true,
-    issues: []
+    issues: [] as string[]
   };
   
   if (!integrityCheck.meetsTranscriptToScript && taskType === 'transcript-to-script') {

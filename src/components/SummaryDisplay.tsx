@@ -36,7 +36,7 @@ export function SummaryDisplay({
       <div 
         className={`max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded-lg p-4 ${className}`}
         style={{ 
-          height: '400px', 
+          height: '900px', // 提高默认高度
           wordWrap: 'break-word', 
           overflowWrap: 'break-word',
           backgroundColor: '#ffffff',
@@ -56,10 +56,11 @@ export function SummaryDisplay({
                 wordWrap: 'break-word', 
                 overflowWrap: 'break-word', 
                 whiteSpace: 'normal', 
-                color: '#1f2937 !important', 
+                color: '#111827', 
                 fontSize: '14px', 
                 lineHeight: '1.3',
-                margin: '0 0 8px 0'
+                margin: '0 0 8px 0',
+                textDecoration: 'none'
               }}>
                 {children}
               </p>
@@ -68,46 +69,50 @@ export function SummaryDisplay({
               <li style={{ 
                 wordWrap: 'break-word', 
                 overflowWrap: 'break-word', 
-                color: '#1f2937 !important', 
+                color: '#111827', 
                 fontSize: '14px', 
                 lineHeight: '1.3',
-                margin: '0 0 2px 0'
+                margin: '0 0 2px 0',
+                textDecoration: 'none'
               }}>
                 {children}
               </li>
             ),
             h1: ({ children }) => (
               <h1 style={{ 
-                color: '#111827 !important', 
+                color: '#111827', 
                 fontSize: '18px', 
                 fontWeight: 'bold', 
                 lineHeight: '1.2',
                 marginBottom: '6px', 
-                marginTop: '8px' 
+                marginTop: '8px',
+                textDecoration: 'none'
               }}>
                 {children}
               </h1>
             ),
             h2: ({ children }) => (
               <h2 style={{ 
-                color: '#111827 !important', 
+                color: '#111827', 
                 fontSize: '16px', 
                 fontWeight: 'bold', 
                 lineHeight: '1.2',
                 marginBottom: '4px', 
-                marginTop: '6px' 
+                marginTop: '6px',
+                textDecoration: 'none'
               }}>
                 {children}
               </h2>
             ),
             h3: ({ children }) => (
               <h3 style={{ 
-                color: '#111827 !important', 
+                color: '#111827', 
                 fontSize: '15px', 
                 fontWeight: 'bold', 
                 lineHeight: '1.2',
                 marginBottom: '2px', 
-                marginTop: '4px' 
+                marginTop: '4px',
+                textDecoration: 'none'
               }}>
                 {children}
               </h3>
@@ -116,10 +121,11 @@ export function SummaryDisplay({
               <strong style={{ 
                 wordWrap: 'break-word', 
                 overflowWrap: 'break-word', 
-                color: '#111827 !important', 
+                color: '#111827', 
                 fontSize: '14px', 
                 lineHeight: '1.3',
-                fontWeight: 'bold'
+                fontWeight: 'bold',
+                textDecoration: 'none'
               }}>
                 {children}
               </strong>
@@ -128,10 +134,11 @@ export function SummaryDisplay({
               <em style={{ 
                 wordWrap: 'break-word', 
                 overflowWrap: 'break-word', 
-                color: '#1f2937 !important', 
+                color: '#111827', 
                 fontSize: '14px', 
                 lineHeight: '1.3',
-                fontStyle: 'italic'
+                fontStyle: 'italic',
+                textDecoration: 'none'
               }}>
                 {children}
               </em>
@@ -140,39 +147,42 @@ export function SummaryDisplay({
               <blockquote style={{ 
                 wordWrap: 'break-word', 
                 overflowWrap: 'break-word', 
-                color: '#374151 !important', 
+                color: '#374151', 
                 fontSize: '14px', 
                 lineHeight: '1.3',
                 borderLeft: '4px solid #e5e7eb',
                 paddingLeft: '16px',
                 margin: '4px 0',
-                backgroundColor: '#f9fafb'
+                backgroundColor: '#f9fafb',
+                textDecoration: 'none'
               }}>
                 {children}
               </blockquote>
             ),
             code: ({ children }) => (
               <code style={{ 
-                color: '#111827 !important', 
+                color: '#111827', 
                 fontSize: '13px', 
                 backgroundColor: '#f3f4f6',
                 padding: '2px 4px',
                 borderRadius: '4px',
-                fontFamily: 'monospace'
+                fontFamily: 'monospace',
+                textDecoration: 'none'
               }}>
                 {children}
               </code>
             ),
             pre: ({ children }) => (
               <pre style={{ 
-                color: '#111827 !important', 
+                color: '#111827', 
                 fontSize: '13px', 
                 backgroundColor: '#f3f4f6',
                 padding: '12px',
                 borderRadius: '6px',
                 fontFamily: 'monospace',
                 overflow: 'auto',
-                margin: '16px 0'
+                margin: '16px 0',
+                textDecoration: 'none'
               }}>
                 {children}
               </pre>

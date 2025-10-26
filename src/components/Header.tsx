@@ -6,7 +6,7 @@ import { AboutModal } from "./AboutModal";
 import { useUser } from "@/hooks/useUser";
 
 export function Header() {
-	const { user, dailyUsage, isLoading } = useUser();
+	const { user, dailyUsage, isLoading, updateUser } = useUser();
 	const [showProcessingStatus, setShowProcessingStatus] = useState(false);
 	const [showAboutModal, setShowAboutModal] = useState(false);
 	const [processingCount, setProcessingCount] = useState(0);
@@ -69,7 +69,7 @@ export function Header() {
 
 	const handleLogout = async () => {
 		await fetch("/api/auth/logout", { method: "POST" });
-		setUser(null);
+		updateUser(null);
 		removeAdminFooterLink();
 		window.location.reload();
 	};

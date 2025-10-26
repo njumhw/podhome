@@ -686,7 +686,7 @@ function PodcastsPanel() {
 		const statusMap = {
 			'PENDING': { text: '等待中', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300' },
 			'PROCESSING': { text: '处理中', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' },
-			'COMPLETED': { text: '已完成', color: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' },
+			'READY': { text: '已完成', color: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' },
 			'FAILED': { text: '失败', color: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300' }
 		};
 
@@ -726,7 +726,7 @@ function PodcastsPanel() {
 					<div className="text-sm text-gray-600">总播客数</div>
 				</div>
 				<div className="bg-white border border-gray-200 rounded-lg p-4">
-					<div className="text-2xl font-bold text-green-600">{stats.COMPLETED || 0}</div>
+					<div className="text-2xl font-bold text-green-600">{stats.READY || 0}</div>
 					<div className="text-sm text-gray-600">已完成</div>
 				</div>
 				<div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -760,7 +760,7 @@ function PodcastsPanel() {
 							<option value="all">全部状态</option>
 							<option value="PENDING">等待中</option>
 							<option value="PROCESSING">处理中</option>
-							<option value="COMPLETED">已完成</option>
+							<option value="READY">已完成</option>
 							<option value="FAILED">失败</option>
 						</select>
 					</div>

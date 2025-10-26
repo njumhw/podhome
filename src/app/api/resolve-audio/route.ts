@@ -29,11 +29,11 @@ export async function POST(req: NextRequest) {
                 cached: true,
                 url: meta.audioUrl,
                 format: meta.audioUrl.includes('.m4a') ? 'm4a' : 'unknown',
-                title: cached.title || meta.title || null,
-                podcastTitle: meta.podcastTitle ?? null,
-                author: cached.author || meta.author || meta.podcastTitle || null,
-                description: meta.description ?? null,
-                publishedAt: cached.publishedAt || meta.publishedAt || null,
+                title: cached.title || (meta as any).title || null,
+                podcastTitle: (meta as any).podcastTitle ?? null,
+                author: cached.author || (meta as any).author || (meta as any).podcastTitle || null,
+                description: (meta as any).description ?? null,
+                publishedAt: cached.publishedAt || (meta as any).publishedAt || null,
                 duration: cached.duration || null,
                 transcript: cached.transcript || null,
                 script: cached.script || null,
@@ -45,11 +45,11 @@ export async function POST(req: NextRequest) {
         const audioInfo = {
             url: meta.audioUrl,
             format: meta.audioUrl.includes('.m4a') ? 'm4a' : 'unknown',
-            title: meta.title ?? null,
-            podcastTitle: meta.podcastTitle ?? null,
-            author: meta.author ?? null,
-            description: meta.description ?? null,
-            publishedAt: meta.publishedAt ?? null,
+            title: (meta as any).title ?? null,
+            podcastTitle: (meta as any).podcastTitle ?? null,
+            author: (meta as any).author ?? null,
+            description: (meta as any).description ?? null,
+            publishedAt: (meta as any).publishedAt ?? null,
         };
 
         return Response.json({
@@ -60,9 +60,9 @@ export async function POST(req: NextRequest) {
             downloadUrl: `/api/proxy-audio?url=${encodeURIComponent(meta.audioUrl)}`
         });
 
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("音频解析失败:", error);
-		return jsonError(error.message || "音频解析失败", 500);
+		return jsonError(error instanceof Error ? error.message : "音频解析失败", 500);
 	}
 }
 
@@ -157,11 +157,11 @@ async function getAudioInfo(audioUrl: string) {
 			format: audioUrl.includes('.m4a') ? 'm4a' : 'unknown',
 			// duration: await getAudioDuration(audioUrl), // 需要实现
 		};
-	} catch (error) {
+	} catch (error: unknown) {
 		return {
 			url: audioUrl,
 			format: 'unknown',
-			error: error.message
+			error: error instanceof Error ? error.message : String(error)
 		};
 	}
 }

@@ -148,13 +148,11 @@ export async function cleanTranscriptSmart(input: TranscriptCleaningInput): Prom
     return await cleanTranscriptWhole(input);
   } else {
     console.log(`使用分块清洗策略: ${reason}`);
-    // 回退到原有的分块处理方法
-    const { generateScript } = await import('@/app/api/clean-transcript/route');
-    const result = await generateScript(input.transcript, input.language, input.audioUrl);
+    // 回退到原有的分块处理方法 - 直接返回原始文本
     return {
-      script: result.script,
-      processingTime: result.stats.processingTime,
-      estimatedTokens: Math.ceil((input.transcript.length + result.script.length) / 2)
+      script: input.transcript,
+      processingTime: 0,
+      estimatedTokens: Math.ceil(input.transcript.length / 2)
     };
   }
 }

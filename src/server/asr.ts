@@ -1,4 +1,4 @@
-import { env } from "@/utils/env";
+import { getEnv } from "@/utils/env";
 
 // 阿里云ASR服务配置
 const ASR_CONFIG = {
@@ -65,6 +65,7 @@ export function validateAudioForASR(segment: AudioSegment): { valid: boolean; is
 export async function transcribeWithAliyunASR(audioUrl: string): Promise<ASRResult> {
 	try {
 		// 检查环境变量
+		const env = getEnv();
 		if (!env.ALIYUN_ACCESS_KEY_ID || !env.ALIYUN_ACCESS_KEY_SECRET) {
 			throw new Error('阿里云ASR配置缺失');
 		}

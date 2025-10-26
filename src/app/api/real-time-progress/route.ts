@@ -47,8 +47,8 @@ export async function GET(req: NextRequest) {
     
     return NextResponse.json(response);
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Real-time progress query failed:', error);
-    return NextResponse.json({ error: `查询失败: ${error.message}` }, { status: 500 });
+    return NextResponse.json({ error: `查询失败: ${error instanceof Error ? error.message : String(error)}` }, { status: 500 });
   }
 }

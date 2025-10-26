@@ -16,12 +16,17 @@ export async function GET(request: NextRequest) {
     const isUrl = searchTerm.startsWith('http');
     
     if (isUrl) {
-      // 按URL搜索 - 先查Podcast表，再查AudioCache表
-      let cached = await prisma.podcast.findFirst({
+      // 按URL搜索 - 只查Podcast表（已发布的播客）
+      const cached = await prisma.podcast.findFirst({
         where: {
-          OR: [
-            { sourceUrl: searchTerm },
-            { audioUrl: searchTerm }
+          AND: [
+            {
+              OR: [
+                { sourceUrl: searchTerm },
+                { audioUrl: searchTerm }
+              ]
+            },
+            { status: 'READY' } // 只返回已发布的播客
           ]
         },
         select: {
@@ -36,42 +41,6 @@ export async function GET(request: NextRequest) {
           updatedAt: true
         }
       });
-
-      // 如果在Podcast表没找到，再查AudioCache表
-      if (!cached) {
-        const audioCache = await prisma.audioCache.findFirst({
-          where: {
-            OR: [
-              { audioUrl: searchTerm },
-              { originalUrl: searchTerm }
-            ]
-          },
-          select: {
-            id: true,
-            title: true,
-            author: true,
-            audioUrl: true,
-            originalUrl: true,
-            summary: true,
-            publishedAt: true,
-            updatedAt: true
-          }
-        });
-
-        if (audioCache) {
-          cached = {
-            id: audioCache.id,
-            title: audioCache.title || '未知标题',
-            showAuthor: audioCache.author || '未知作者',
-            publishedAt: audioCache.publishedAt,
-            audioUrl: audioCache.audioUrl,
-            sourceUrl: audioCache.originalUrl || audioCache.audioUrl, // 优先使用原始URL
-            summary: audioCache.summary,
-            topic: null,
-            updatedAt: audioCache.updatedAt
-          };
-        }
-      }
       
       if (cached) {
         return NextResponse.json({
@@ -95,14 +64,19 @@ export async function GET(request: NextRequest) {
         });
       }
     } else {
-      // 按标题/内容搜索 - 先查Podcast表
-      let results = await prisma.podcast.findMany({
+      // 按标题/内容搜索 - 只查Podcast表（已发布的播客）
+      const results = await prisma.podcast.findMany({
         where: {
-          OR: [
-            { title: { contains: searchTerm, mode: 'insensitive' } },
-            { showAuthor: { contains: searchTerm, mode: 'insensitive' } },
-            { summary: { contains: searchTerm, mode: 'insensitive' } },
-            { topic: { name: { contains: searchTerm, mode: 'insensitive' } } }
+          AND: [
+            {
+              OR: [
+                { title: { contains: searchTerm, mode: 'insensitive' } },
+                { showAuthor: { contains: searchTerm, mode: 'insensitive' } },
+                { summary: { contains: searchTerm, mode: 'insensitive' } },
+                { topic: { name: { contains: searchTerm, mode: 'insensitive' } } }
+              ]
+            },
+            { status: 'READY' } // 只返回已发布的播客
           ]
         },
         select: {
@@ -119,42 +93,6 @@ export async function GET(request: NextRequest) {
         orderBy: { updatedAt: 'desc' },
         take: 20
       });
-
-      // 如果Podcast表没有结果，查AudioCache表
-      if (results.length === 0) {
-        const audioCacheResults = await prisma.audioCache.findMany({
-          where: {
-            OR: [
-              { title: { contains: searchTerm, mode: 'insensitive' } },
-              { author: { contains: searchTerm, mode: 'insensitive' } },
-              { summary: { contains: searchTerm, mode: 'insensitive' } }
-            ]
-          },
-          select: {
-            id: true,
-            title: true,
-            author: true,
-            audioUrl: true,
-            summary: true,
-            publishedAt: true,
-            updatedAt: true
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 20
-        });
-
-        results = audioCacheResults.map(item => ({
-          id: item.id,
-          title: item.title || '未知标题',
-          showAuthor: item.author || '未知作者',
-          publishedAt: item.publishedAt,
-          audioUrl: item.audioUrl,
-          sourceUrl: item.audioUrl, // 暂时使用audioUrl
-          summary: item.summary,
-          topic: null,
-          updatedAt: item.updatedAt
-        }));
-      }
       
       return NextResponse.json({
         hits: results.map(item => ({

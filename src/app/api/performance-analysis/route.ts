@@ -63,11 +63,11 @@ export async function GET(req: NextRequest) {
       }, { status: 400 });
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('性能分析失败:', error);
     return NextResponse.json({ 
       success: false, 
-      error: `分析失败: ${error.message}` 
+      error: `分析失败: ${error instanceof Error ? error.message : String(error)}` 
     }, { status: 500 });
   }
 }

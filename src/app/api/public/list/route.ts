@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/server/db';
 import { cache, cacheKeys } from '@/utils/cache';
+import { handleApiError, withRetry } from '@/utils/error-handler';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,14 +12,16 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    // 检查缓存
-    const cacheKey = cacheKeys.podcastList(type, topic, page, limit);
-    const cached = await cache.get(cacheKey);
-    if (cached) {
-      return NextResponse.json(cached);
+    // 检查缓存（latest 实时返回，不使用缓存）
+    const cacheKey = cacheKeys.podcastList(type, topic || undefined, page, limit);
+    if (type !== 'latest') {
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached);
+      }
     }
 
-    let whereClause: any = {};
+    let whereClause: any = { status: 'READY' }; // 只展示发布完成的数据
     let topicId: string | null = null;
     
     if (topic) {
@@ -48,22 +51,15 @@ export async function GET(request: NextRequest) {
       orderBy = { updatedAt: 'desc' };
     }
 
-    // 构建AudioCache的查询条件
-    let audioCacheWhere: any = {
-      // 只返回有访谈全文和标题的播客（报告可以为空）
-      script: { not: null },
-      title: { not: null }
+    // 统一使用Podcast表查询
+    const podcastWhere = {
+      ...whereClause
     };
-    
-    // 如果有主题筛选，添加到AudioCache查询条件中
-    if (topicId) {
-      audioCacheWhere.topicId = topicId;
-    }
 
-      // 同时查询Podcast表和AudioCache表
-      const [podcastItems, podcastTotal, audioCacheItems, audioCacheTotal] = await Promise.all([
+    const [podcastItemsRaw, podcastTotal] = await withRetry(async () => {
+      return await Promise.all([
         prisma.podcast.findMany({
-          where: whereClause,
+          where: podcastWhere,
           select: {
             id: true,
             title: true,
@@ -79,65 +75,48 @@ export async function GET(request: NextRequest) {
           skip: offset,
           take: limit
         }),
-      prisma.podcast.count({ where: whereClause }),
-      prisma.audioCache.findMany({
-        where: audioCacheWhere,
-        select: {
-          id: true,
-          title: true,
-          author: true,
-          publishedAt: true,
-          audioUrl: true,
-          summary: true,
-          topic: { select: { name: true } },
-          updatedAt: true
-        },
-        orderBy: { updatedAt: 'desc' },
-        skip: offset,
-        take: limit
-      }),
-      prisma.audioCache.count({
-        where: audioCacheWhere
-      })
-    ]);
+        prisma.podcast.count({ 
+          where: podcastWhere
+        })
+      ]);
+    });
 
-    // 合并两个表的结果
-    let items: any[] = [];
-    let total = 0;
-
-    // 优先使用Podcast表的数据
-    if (podcastTotal > 0) {
-      items = podcastItems;
-      total = podcastTotal;
-    } else {
-      // 如果Podcast表没有数据，使用AudioCache表的数据
-      items = audioCacheItems.map(item => ({
-        id: item.id,
-        title: item.title || '未知标题',
-        showAuthor: item.author || '未知作者',
-        publishedAt: item.publishedAt,
-        audioUrl: item.audioUrl,
-        sourceUrl: item.audioUrl, // 暂时使用audioUrl，后续会改进
-        summary: item.summary,
-        topic: item.topic,
-        updatedAt: item.updatedAt
-      }));
-      total = audioCacheTotal;
+    // 去重：同一 sourceUrl 仅保留最新的一条
+    const seen = new Map<string, any>();
+    for (const item of podcastItemsRaw) {
+      const key = item.sourceUrl || item.id;
+      const prev = seen.get(key);
+      if (!prev || new Date(item.updatedAt).getTime() > new Date(prev.updatedAt).getTime()) {
+        seen.set(key, item);
+      }
     }
+    const podcastItems = Array.from(seen.values());
+
+    // 格式化数据
+    let items = podcastItems.map(item => ({
+      id: item.id,
+      title: item.title || '未知标题',
+      showAuthor: item.showAuthor || '未知作者',
+      publishedAt: item.publishedAt,
+      audioUrl: item.audioUrl,
+      sourceUrl: item.sourceUrl,
+      summary: item.summary,
+      topic: item.topic,
+      updatedAt: item.updatedAt
+    }));
+
+    const total = podcastTotal;
 
     // 如果是热度排序，需要根据访问次数重新排序
     if (type === 'hot') {
       // 一次性获取所有项目的访问次数，避免N+1查询
       const itemIds = items.map(item => item.id);
       
-      // 批量查询访问次数
+      // 批量查询访问次数（只查询Podcast表的访问记录）
       const accessCounts = await prisma.accessLog.groupBy({
-        by: ['podcastId', 'audioCacheId'],
+        by: ['podcastId'],
         where: {
-          OR: [
-            { podcastId: { in: itemIds } },
-            { audioCacheId: { in: itemIds } }
-          ]
+          podcastId: { in: itemIds }
         },
         _count: {
           id: true
@@ -147,9 +126,8 @@ export async function GET(request: NextRequest) {
       // 创建访问次数映射
       const accessCountMap = new Map<string, number>();
       accessCounts.forEach(access => {
-        const id = access.podcastId || access.audioCacheId;
-        if (id) {
-          accessCountMap.set(id, access._count.id);
+        if (access.podcastId) {
+          accessCountMap.set(access.podcastId, access._count.id);
         }
       });
 
@@ -181,7 +159,7 @@ export async function GET(request: NextRequest) {
         summary: item.summary,
         topic: item.topic?.name || null,
         updatedAt: item.updatedAt,
-        accessCount: item.accessCount || 0
+        accessCount: 0
       })),
       pagination: {
         page,
@@ -193,17 +171,22 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    // 缓存结果（不同类型使用不同的TTL）
-    const ttl = type === 'hot' ? 2 * 60 * 1000 : 5 * 60 * 1000; // 热度排序2分钟，其他5分钟
+    // latest: 实时返回并显式禁用缓存
+    if (type === 'latest') {
+      const res = NextResponse.json(response);
+      res.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.headers.set('Pragma', 'no-cache');
+      res.headers.set('Expires', '0');
+      return res;
+    }
+
+    // 非 latest: 缓存结果（不同类型使用不同的TTL）
+    // hot 使用 T+1 较长缓存（默认3小时），其余适中（5分钟）
+    const ttl = type === 'hot' ? 3 * 60 * 60 * 1000 : 5 * 60 * 1000;
     await cache.set(cacheKey, response, ttl);
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('List error:', error);
-    console.error('Error details:', error.message);
-    return NextResponse.json(
-      { error: '获取列表失败', details: error.message },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

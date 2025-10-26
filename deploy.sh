@@ -1,47 +1,40 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-# PodHome deployment script
-# Usage: ./deploy.sh
+# 阿里云服务器部署脚本
+# 使用方法: ./deploy.sh
 
-echo "[PodHome] Starting deployment..."
+set -e
 
-if ! command -v pnpm >/dev/null 2>&1; then
-  echo "[PodHome] pnpm not found. Installing corepack and enabling pnpm..."
-  corepack enable || true
-  corepack prepare pnpm@10.17.1 --activate
-fi
+echo "🚀 开始部署播客应用..."
 
-# Ensure env exists
-if [ ! -f .env ]; then
-  echo "[PodHome] .env not found. Please copy .env.example to .env and fill values." >&2
-  exit 1
-fi
+# 1. 检查环境
+echo "📋 检查环境..."
+node --version
+pnpm --version
+pm2 --version
 
-export NODE_ENV=production
-export NEXT_TELEMETRY_DISABLED=1
+# 2. 安装依赖
+echo "📦 安装依赖..."
+pnpm install
 
-echo "[PodHome] Installing dependencies..."
-pnpm install --frozen-lockfile
+# 3. 生成Prisma客户端
+echo "🗄️ 生成Prisma客户端..."
+pnpm prisma generate
 
-# Database
-if command -v npx >/dev/null 2>&1; then
-  echo "[PodHome] Applying database schema (prisma db push)..."
-  pnpm db:push || true
-  echo "[PodHome] Generating Prisma client..."
-  pnpm prisma:generate
-fi
-
-echo "[PodHome] Building Next.js app..."
+# 4. 构建应用
+echo "🔨 构建应用..."
 pnpm build
 
-echo "[PodHome] Starting server..."
-# Prefer process manager if available
-if command -v pm2 >/dev/null 2>&1; then
-  pm2 start "pnpm start" --name podroom --time --update-env || pm2 restart podroom --update-env
-  pm2 save || true
-  echo "[PodHome] App managed by pm2 as 'podroom'"
-else
-  # Fallback foreground start
-  pnpm start
-fi
+# 5. 启动应用
+echo "▶️ 启动应用..."
+pm2 delete podroom 2>/dev/null || true
+pm2 start ecosystem.config.js
+
+# 6. 保存PM2配置
+pm2 save
+pm2 startup
+
+echo "✅ 部署完成！"
+echo "📊 查看状态: pm2 status"
+echo "📝 查看日志: pm2 logs podroom"
+echo "🔄 重启应用: pm2 restart podroom"

@@ -6,6 +6,7 @@ import { setCachedAudio } from '@/server/audio-cache';
 
 const bodySchema = z.object({
   transcript: z.string().min(1),
+  originalTranscript: z.string().optional(),
   title: z.string().optional(),
   audioUrl: z.string().url().optional(), // 用于缓存
 });
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    const { transcript, title, audioUrl } = parsed.data;
+    const { transcript, originalTranscript, title, audioUrl } = parsed.data;
     
     console.log(`开始整体生成访谈报告，文本长度: ${transcript.length} 字符`);
     
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     }
     
     // 执行整体处理
-    const result = await generateReportWhole({ transcript, title });
+    const result = await generateReportWhole({ transcript, originalTranscript, title });
     
     console.log(`整体报告生成完成，总耗时: ${result.processingTime}ms`);
     

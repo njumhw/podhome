@@ -1,5 +1,4 @@
 import { db } from "@/server/db";
-import { onSummaryGenerated } from "./summary-sync";
 
 export interface AudioCacheData {
 	title?: string;
@@ -44,7 +43,7 @@ export async function getCachedAudio(audioUrl: string): Promise<AudioCacheData |
 			report: cached.summary || undefined,
 			segments: cached.segments || undefined,
 			originalUrl: cached.originalUrl || undefined,
-			publishedAt: cached.publishedAt || undefined,
+			publishedAt: cached.publishedAt?.toISOString() || undefined,
 			metadata: cached.metadata as any
 		};
 	} catch (error) {

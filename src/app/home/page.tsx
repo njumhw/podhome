@@ -271,14 +271,14 @@ export default function HomePage() {
       // 更新处理状态为失败
       const updatedItems = items.map((item: any) => 
         item.id === processingId 
-          ? { ...item, status: 'failed', progress: 0, error: error.message }
+          ? { ...item, status: 'failed', progress: 0, error: error instanceof Error ? error.message : String(error) }
           : item
       );
       localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
       window.dispatchEvent(new Event('storage'));
       
       // 显示友好的错误信息
-      const errorMessage = error.message || '处理失败，请重试';
+      const errorMessage = error instanceof Error ? error.message : '处理失败，请重试';
       if (errorMessage.includes('请先登录')) {
         toast.error('请先登录', '请先登录后再处理播客', {
           action: {
@@ -484,7 +484,7 @@ export default function HomePage() {
                       onClick={() => handleProcessPodcast(searchQuery)}
                       className="px-6 py-3 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors duration-200"
                     >
-                      未找到相关播客，交给阿茂吧（每小时播客需约12分钟）
+                      未找到相关播客，交给阿茂吧（每小时播客需约3-5分钟）
                     </button>
                   ) : (
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">

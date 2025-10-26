@@ -47,68 +47,134 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    // 简化查询，只查询AudioCache表
-    const audioCacheWhere = {
-      ...(search && {
-        OR: [
-          { title: { contains: search, mode: 'insensitive' } },
-          { author: { contains: search, mode: 'insensitive' } },
-          { audioUrl: { contains: search, mode: 'insensitive' } }
-        ]
-      })
-    };
-
-    const audioCacheData = await db.audioCache.findMany({
-      where: audioCacheWhere,
-      select: {
-        id: true,
-        title: true,
-        author: true,
-        audioUrl: true,
-        duration: true,
-        createdAt: true,
-        updatedAt: true,
-        publishedAt: true,
-        topic: {
-          select: {
-            id: true,
-            name: true,
-            color: true
+    // 查询两个表并合并数据
+    const [audioCacheData, podcastData] = await Promise.all([
+      db.audioCache.findMany({
+        select: {
+          id: true,
+          title: true,
+          author: true,
+          audioUrl: true,
+          duration: true,
+          createdAt: true,
+          updatedAt: true,
+          publishedAt: true,
+          topic: {
+            select: {
+              id: true,
+              name: true,
+              color: true
+            }
           }
+        },
+        orderBy: {
+          createdAt: 'desc'
         }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      skip,
-      take: limit
+      }),
+      db.podcast.findMany({
+        select: {
+          id: true,
+          title: true,
+          showAuthor: true,
+          sourceUrl: true,
+          duration: true,
+          createdAt: true,
+          processingCompletedAt: true,
+          publishedAt: true,
+          status: true
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      })
+    ]);
+
+    // 合并数据，优先使用Podcast表的数据
+    const mergedData = new Map();
+    
+    // 先添加AudioCache数据
+    audioCacheData.forEach(cache => {
+      mergedData.set(cache.id, {
+        id: cache.id,
+        title: cache.title,
+        showAuthor: cache.author,
+        sourceUrl: cache.audioUrl,
+        status: 'READY' as const,
+        publishedAt: cache.publishedAt,
+        duration: cache.duration,
+        createdAt: cache.createdAt,
+        processingStartedAt: cache.createdAt,
+        processingCompletedAt: cache.updatedAt,
+        topic: cache.topic,
+        source: 'audioCache'
+      });
+    });
+    
+    // 用Podcast数据覆盖或补充
+    podcastData.forEach(podcast => {
+      if (mergedData.has(podcast.id)) {
+        // 覆盖现有数据，优先使用Podcast的标题和作者
+        const existing = mergedData.get(podcast.id);
+        mergedData.set(podcast.id, {
+          ...existing,
+          title: podcast.title || existing.title,
+          showAuthor: podcast.showAuthor || existing.showAuthor,
+          sourceUrl: podcast.sourceUrl || existing.sourceUrl,
+          status: podcast.status || existing.status,
+          processingCompletedAt: podcast.processingCompletedAt || existing.processingCompletedAt,
+          source: 'both'
+        });
+      } else {
+        // 添加新的Podcast数据
+        mergedData.set(podcast.id, {
+          id: podcast.id,
+          title: podcast.title,
+          showAuthor: podcast.showAuthor,
+          sourceUrl: podcast.sourceUrl,
+          status: podcast.status,
+          publishedAt: podcast.publishedAt,
+          duration: podcast.duration,
+          createdAt: podcast.createdAt,
+          processingStartedAt: podcast.createdAt,
+          processingCompletedAt: podcast.processingCompletedAt,
+          topic: null,
+          source: 'podcast'
+        });
+      }
     });
 
-    // 转换数据格式
-    const podcasts = audioCacheData.map(cache => ({
-      id: cache.id,
-      title: cache.title || '未知标题',
-      showAuthor: cache.author || '未知作者',
-      sourceUrl: cache.audioUrl,
-      status: 'READY' as const, // AudioCache中的数据都是已完成的
-      publishedAt: cache.publishedAt,
-      duration: cache.duration,
-      createdAt: cache.createdAt,
-      processingStartedAt: cache.createdAt,
-      processingCompletedAt: cache.updatedAt,
-      topic: cache.topic
+    // 转换为数组并应用搜索过滤
+    let podcasts = Array.from(mergedData.values());
+    
+    if (search) {
+      podcasts = podcasts.filter(p => 
+        (p.title && p.title.toLowerCase().includes(search.toLowerCase())) ||
+        (p.showAuthor && p.showAuthor.toLowerCase().includes(search.toLowerCase())) ||
+        (p.sourceUrl && p.sourceUrl.toLowerCase().includes(search.toLowerCase()))
+      );
+    }
+    
+    if (status && status !== 'all') {
+      podcasts = podcasts.filter(p => p.status === status);
+    }
+
+    // 应用分页
+    const total = podcasts.length;
+    podcasts = podcasts.slice(skip, skip + limit);
+
+    // 确保标题和作者不为空
+    podcasts = podcasts.map(p => ({
+      ...p,
+      title: p.title || '未知标题',
+      showAuthor: p.showAuthor || '未知作者'
     }));
 
-    // 获取总数
-    const total = await db.audioCache.count({
-      where: audioCacheWhere
-    });
-
-    // 简化统计信息获取
-    const audioCacheCount = await db.audioCache.count();
+    // 统计信息
     const statusCounts = {
-      COMPLETED: audioCacheCount,
-      total: audioCacheCount
+      READY: podcasts.filter(p => p.status === 'READY').length,
+      PROCESSING: podcasts.filter(p => p.status === 'PROCESSING').length,
+      FAILED: podcasts.filter(p => p.status === 'FAILED').length,
+      total: total
     };
 
     return NextResponse.json({
@@ -121,7 +187,6 @@ export async function GET(req: NextRequest) {
         totalPages: Math.ceil(total / limit)
       },
       stats: {
-        total: total,
         ...statusCounts
       }
     });
@@ -152,7 +217,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少播客ID' }, { status: 400 });
     }
 
-    // 检查播客是否存在（先查Podcast表，再查AudioCache表）
+    // 检查播客是否存在（同时查询两个表）
     let podcast = null;
     let audioCache = null;
     
@@ -162,25 +227,26 @@ export async function DELETE(req: NextRequest) {
         select: {
           id: true,
           title: true,
-          status: true
+          status: true,
+          sourceUrl: true
         }
       });
     } catch (error) {
       console.error('查询Podcast表失败:', error);
     }
 
-    if (!podcast) {
-      try {
-        audioCache = await db.audioCache.findUnique({
-          where: { id },
-          select: {
-            id: true,
-            title: true
-          }
-        });
-      } catch (error) {
-        console.error('查询AudioCache表失败:', error);
-      }
+    try {
+      audioCache = await db.audioCache.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          title: true,
+          audioUrl: true,
+          originalUrl: true
+        }
+      });
+    } catch (error) {
+      console.error('查询AudioCache表失败:', error);
     }
 
     if (!podcast && !audioCache) {
@@ -196,8 +262,8 @@ export async function DELETE(req: NextRequest) {
     while (retryCount < maxRetries) {
       try {
         await db.$transaction(async (tx) => {
+          // 删除Podcast表的数据（如果存在）
           if (podcast) {
-            // 删除Podcast表的关联数据
             await tx.accessLog.deleteMany({
               where: { podcastId: id }
             });
@@ -213,14 +279,41 @@ export async function DELETE(req: NextRequest) {
             await tx.podcast.delete({
               where: { id }
             });
-          } else if (audioCache) {
-            // 删除AudioCache表的关联数据
+          }
+
+          // 删除AudioCache表的数据（如果存在）
+          if (audioCache) {
             await tx.accessLog.deleteMany({
               where: { audioCacheId: id }
             });
 
             await tx.audioCache.delete({
               where: { id }
+            });
+          }
+
+          // 通过URL匹配删除相关记录（确保彻底清理）
+          const urlsToMatch = [];
+          if (podcast?.sourceUrl) urlsToMatch.push(podcast.sourceUrl);
+          if (audioCache?.audioUrl) urlsToMatch.push(audioCache.audioUrl);
+          if (audioCache?.originalUrl) urlsToMatch.push(audioCache.originalUrl);
+
+          if (urlsToMatch.length > 0) {
+            // 删除通过URL匹配的Podcast记录
+            await tx.podcast.deleteMany({
+              where: { 
+                OR: urlsToMatch.map(url => ({ sourceUrl: url }))
+              }
+            });
+
+            // 删除通过URL匹配的AudioCache记录
+            await tx.audioCache.deleteMany({
+              where: { 
+                OR: [
+                  ...urlsToMatch.map(url => ({ audioUrl: url })),
+                  ...urlsToMatch.map(url => ({ originalUrl: url }))
+                ]
+              }
             });
           }
         }, {

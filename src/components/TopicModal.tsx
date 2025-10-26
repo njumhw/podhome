@@ -98,13 +98,13 @@ export default function TopicModal({
         onClose();
       } else {
         // 失败时回滚UI状态
-        onTopicChange(currentTopic);
+        onTopicChange(currentTopic || null);
         toast.error('保存失败', data.error || '保存失败');
       }
     } catch (error) {
       console.error('保存失败:', error);
       // 失败时回滚UI状态
-      onTopicChange(currentTopic);
+      onTopicChange(currentTopic || null);
       toast.error('保存失败', '网络错误，请重试');
     } finally {
       setLoading(false);

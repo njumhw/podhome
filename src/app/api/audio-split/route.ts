@@ -63,9 +63,9 @@ export async function POST(req: NextRequest) {
 			segments: segmentInfos
 		});
 
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("音频切割失败:", error);
-		return jsonError(error.message || "音频切割失败", 500);
+		return jsonError(error instanceof Error ? error.message : "音频切割失败", 500);
 	}
 }
 

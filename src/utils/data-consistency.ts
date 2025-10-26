@@ -24,6 +24,7 @@ export async function checkPodcastDataConsistency(audioCacheId: string): Promise
         id: true,
         title: true,
         transcript: true,
+        script: true,
         summary: true,
         audioUrl: true
       }
@@ -46,15 +47,15 @@ export async function checkPodcastDataConsistency(audioCacheId: string): Promise
     const hasSummary = !!audioCache.summary && audioCache.summary.length > 0;
     
     // 检查总结是否为AI生成
-    const summaryIsAI = hasSummary && (
+    const summaryIsAI = !!(hasSummary && audioCache.summary && (
       audioCache.summary.includes('播客访谈报告') ||
       audioCache.summary.includes('访谈概述') ||
       audioCache.summary.includes('核心观点') ||
       audioCache.summary.includes('关键洞察')
-    );
+    ));
 
     // 检查是否为网页简介
-    const isWebDescription = hasSummary && (
+    const isWebDescription = hasSummary && audioCache.summary && (
       audioCache.summary.includes('本期嘉宾') ||
       audioCache.summary.includes('时间线') ||
       audioCache.summary.includes('主播') ||

@@ -71,7 +71,7 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
   console.log("ASR task submitted, task_id:", taskId);
 
   // Step 2: Poll for results
-  const maxAttempts = 30; // 30 attempts * 2s = 60s max wait
+  const maxAttempts = 60; // 60 attempts * 2s = 120s max wait (增加超时时间)
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s between polls
 

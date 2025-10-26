@@ -14,6 +14,18 @@ export interface Task {
   };
   result?: any;
   error?: string;
+  metrics?: {
+    audioDuration?: number; // 音频时长（秒）
+    asrSegmentsCount?: number; // 成功转写的ASR段落数
+    chunksCount?: number; // 分块数
+    transcriptCompressionRatio?: number; // 访谈原文压缩比
+    reportCompressionRatio?: number; // 播客报告压缩比
+    processingSteps?: {
+      asr?: { status: 'pending' | 'running' | 'completed' | 'failed'; duration?: number };
+      cleaning?: { status: 'pending' | 'running' | 'completed' | 'failed'; duration?: number };
+      report?: { status: 'pending' | 'running' | 'completed' | 'failed'; duration?: number };
+    };
+  };
   createdAt: Date;
   updatedAt: Date;
   startedAt?: Date;
@@ -30,7 +42,7 @@ class TaskQueue {
   private maxRetries = 3; // 最大重试次数
   private retryDelay = 5000; // 重试延迟（毫秒）
   private connectionRetryDelay = 10000; // 数据库连接重试延迟
-  private maxTaskDuration = 60 * 60 * 1000; // 最大任务运行时间：60分钟
+  private maxTaskDuration = 90 * 60 * 1000; // 最大任务运行时间：90分钟
   private taskStartTimes = new Map<string, number>(); // 任务开始时间记录
 
   // 初始化方法
@@ -110,6 +122,7 @@ class TaskQueue {
         data: taskRecord.data as any,
         result: taskRecord.result as any,
         error: taskRecord.error || undefined,
+        metrics: taskRecord.metrics as any,
         createdAt: taskRecord.createdAt,
         updatedAt: taskRecord.updatedAt,
         startedAt: taskRecord.startedAt || undefined,
@@ -117,6 +130,46 @@ class TaskQueue {
       };
     } catch (error) {
       console.error('获取任务状态失败:', error);
+      return null;
+    }
+  }
+
+  // 通过URL获取任务
+  async getTaskByUrl(url: string): Promise<Task | null> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    try {
+      const taskRecord = await db.taskQueue.findFirst({
+        where: {
+          data: {
+            path: ['url'],
+            equals: url
+          }
+        },
+        orderBy: {
+          createdAt: 'desc' // 获取最新的任务
+        }
+      });
+
+      if (!taskRecord) return null;
+
+      return {
+        id: taskRecord.id,
+        type: taskRecord.type as 'PODCAST_PROCESSING',
+        status: taskRecord.status as 'PENDING' | 'RUNNING' | 'READY' | 'FAILED',
+        data: taskRecord.data as any,
+        result: taskRecord.result as any,
+        error: taskRecord.error || undefined,
+        metrics: taskRecord.metrics as any,
+        createdAt: taskRecord.createdAt,
+        updatedAt: taskRecord.updatedAt,
+        startedAt: taskRecord.startedAt || undefined,
+        completedAt: taskRecord.completedAt || undefined
+      };
+    } catch (error) {
+      console.error('通过URL获取任务失败:', error);
       return null;
     }
   }
@@ -245,7 +298,8 @@ class TaskQueue {
       console.error('处理任务时出错:', error);
       
       // 如果是数据库连接错误，尝试重新初始化
-      if (error.message?.includes('database') || error.message?.includes('connection')) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('database') || errorMessage.includes('connection')) {
         console.log('检测到数据库连接问题，尝试重新初始化');
         this.isInitialized = false;
         setTimeout(() => this.initialize(), this.connectionRetryDelay);
@@ -263,7 +317,8 @@ class TaskQueue {
       console.error(`任务执行失败: ${taskRecord.id}`, error);
       
       // 检查是否是数据库连接错误
-      if (error.message?.includes('database') || error.message?.includes('connection')) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('database') || errorMessage.includes('connection')) {
         console.log(`任务 ${taskRecord.id} 遇到数据库连接问题，等待重试`);
         // 等待一段时间后重试
         await new Promise(resolve => setTimeout(resolve, this.retryDelay));
@@ -321,7 +376,7 @@ class TaskQueue {
     try {
       // 这里调用现有的处理逻辑
       // 可以复用现有的 process-audio 逻辑，但改为内部函数调用
-      const result = await this.processPodcastInternal(url, userId);
+      const result = await this.processPodcastInternal(url, userId, taskRecord.id);
       
       // 更新任务状态为完成
       await db.taskQueue.update({
@@ -345,13 +400,13 @@ class TaskQueue {
   }
 
   // 内部播客处理逻辑（复用现有代码）
-  private async processPodcastInternal(url: string, userId?: string) {
+  private async processPodcastInternal(url: string, userId?: string, taskId?: string) {
     try {
       // 直接调用现有的处理逻辑，而不是通过HTTP请求
       const { processAudioInternal } = await import('@/server/audio-processor');
       
       // 调用内部处理函数
-      const result = await processAudioInternal(url, userId);
+      const result = await processAudioInternal(url, userId, taskId);
       
       return result;
     } catch (error) {

@@ -8,9 +8,11 @@ export async function qwenChat(messages: ChatMessage[], options?: { model?: stri
 	const apiKey = (env.QWEN_API_KEY as string) || "";
 	if (!apiKey) throw new Error("Missing QWEN_API_KEY in env");
 
-	const model = options?.model || "qwen-plus";
+	// 优先使用调用方传入的 model，其次使用环境变量 QWEN_MODEL_NAME，最后回退到 qwen-flash
+	const model = options?.model || (env.QWEN_MODEL_NAME as string) || "qwen-flash";
 	const temperature = options?.temperature ?? 0.3;
-	const max_tokens = options?.maxTokens ?? 800;
+	// 默认将输出上限提高到 32k，可被调用方覆盖
+	const max_tokens = options?.maxTokens ?? 32000;
 
 	const baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 	const endpoint = `${baseUrl}/chat/completions`;
@@ -22,25 +24,42 @@ export async function qwenChat(messages: ChatMessage[], options?: { model?: stri
 		max_tokens,
 	};
 
-	const res = await fetch(endpoint, {
-		method: "POST",
-		headers: {
-			"content-type": "application/json",
-			authorization: `Bearer ${apiKey}`,
-		},
-		body: JSON.stringify(body),
-	});
+	// 带超时与重试的请求
+	const doRequest = async (attempt: number): Promise<string> => {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 1800_000); // 30分钟超时（确保超长播客处理成功）
+		try {
+			const res = await fetch(endpoint, {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					authorization: `Bearer ${apiKey}`,
+				},
+				body: JSON.stringify(body),
+				signal: controller.signal,
+			});
+			const text = await res.text();
+			let data: any = {};
+			try { data = JSON.parse(text); } catch {}
+			if (!res.ok) {
+				throw new Error(data?.error?.message || data?.message || `chat failed(${res.status})`);
+			}
+			const content: string = data?.choices?.[0]?.message?.content ?? "";
+			return typeof content === "string" ? content : "";
+		} catch (err) {
+			if (attempt < 3) {
+				const backoff = 1000 * Math.pow(2, attempt - 1);
+				await new Promise(r => setTimeout(r, backoff));
+				return doRequest(attempt + 1);
+			}
+			console.error("qwenChat error (after retries):", err);
+			throw err instanceof Error ? err : new Error(String(err));
+		} finally {
+			clearTimeout(timeoutId);
+		}
+	};
 
-	const text = await res.text();
-	let data: any = {};
-	try { data = JSON.parse(text); } catch {}
-	if (!res.ok) {
-		console.error("qwenChat error:", { status: res.status, body: text });
-		throw new Error(data?.error?.message || data?.message || `chat failed(${res.status})`);
-	}
-
-	const content: string = data?.choices?.[0]?.message?.content ?? "";
-	return typeof content === "string" ? content : "";
+	return await doRequest(1);
 }
 
 export type CleanTranscriptInput = { raw: string };

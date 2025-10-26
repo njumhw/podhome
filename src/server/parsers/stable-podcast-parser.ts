@@ -1,4 +1,4 @@
-import { HeadersInit } from "next/dist/server/web/spec-extension/adapters/headers";
+// import { HeadersInit } from "next/dist/server/web/spec-extension/adapters/headers";
 
 export type StablePodcastMeta = {
   audioUrl: string | null;
@@ -121,7 +121,7 @@ export class StablePodcastParser {
 
     // 1. 优先使用JSON-LD结构化数据（最可靠）
     const jsonLdResult = this.extractFromJsonLd(html);
-    if (jsonLdResult.confidence > 0) {
+    if (jsonLdResult.confidence && jsonLdResult.confidence > 0) {
       Object.assign(result, jsonLdResult);
     }
 
@@ -171,7 +171,7 @@ export class StablePodcastParser {
           const jsonData = JSON.parse(match[1]);
           const extracted = this.parseJsonLdObject(jsonData);
           
-          if (extracted.confidence > result.confidence) {
+          if (extracted.confidence && result.confidence && extracted.confidence > result.confidence) {
             Object.assign(result, extracted);
           }
         } catch (e) {
@@ -244,7 +244,7 @@ export class StablePodcastParser {
     for (const [key, value] of Object.entries(obj)) {
       if (typeof value === 'object' && value !== null) {
         const childResult = this.parseJsonLdObject(value);
-        if (childResult.confidence > result.confidence) {
+        if (childResult.confidence && result.confidence && childResult.confidence > result.confidence) {
           Object.assign(result, childResult);
         }
       }

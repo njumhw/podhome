@@ -92,7 +92,9 @@ class MultiLevelCache {
 		// 如果内存缓存已满，删除最旧的条目
 		if (this.memoryCache.size >= this.memoryCacheSize) {
 			const oldestKey = this.memoryCache.keys().next().value;
-			this.memoryCache.delete(oldestKey);
+			if (oldestKey) {
+				this.memoryCache.delete(oldestKey);
+			}
 		}
 
 		this.memoryCache.set(key, {

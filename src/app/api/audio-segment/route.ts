@@ -132,11 +132,11 @@ export async function GET(req: NextRequest) {
         }
 
         headers.set('Content-Length', String(stat.size));
-        return new Response(file, { status: 200, headers });
+        return new Response(file as BodyInit, { status: 200, headers });
 
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("音频切割失败:", error);
-		return jsonError(error.message || "音频切割失败", 500);
+		return jsonError(error instanceof Error ? error.message : "音频切割失败", 500);
 	}
 }
 

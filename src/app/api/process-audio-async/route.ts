@@ -90,8 +90,8 @@ export async function POST(req: NextRequest) {
       estimatedTime: "10-15分钟"
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Async processing failed:', error);
-    return jsonError(`处理失败: ${error.message}`, 500);
+    return jsonError(`处理失败: ${error instanceof Error ? error.message : String(error)}`, 500);
   }
 }

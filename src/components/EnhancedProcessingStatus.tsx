@@ -446,7 +446,7 @@ function EnhancedProcessingItemCard({
 
   const currentStep = item.steps.find(step => step.status === 'active');
   const estimatedRemainingTime = item.status === 'processing' 
-    ? Math.max(30, item.estimatedRemainingTime || 0) // 如果还在处理中，至少显示30秒
+    ? Math.max(30, (item as any).estimatedRemainingTime || 0) // 如果还在处理中，至少显示30秒
     : 0;
 
   return (
@@ -544,7 +544,7 @@ function EnhancedProcessingItemCard({
                   {step.name}
                 </span>
                 <span className="text-xs text-gray-500">
-                  {step.actualTime > 0 ? `${Math.round(step.actualTime)}秒` : '0秒'}
+                  {(step.actualTime || 0) > 0 ? `${Math.round(step.actualTime || 0)}秒` : '0秒'}
                 </span>
               </div>
               <p className="text-xs text-gray-500 mt-0.5">{step.description}</p>

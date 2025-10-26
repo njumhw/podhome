@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     return Response.json({
       success: true,
       script: result.script,
+      chunksCount: result.chunks,
       stats: {
         originalLength: transcript.length,
         scriptLength: result.script.length,

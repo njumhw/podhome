@@ -57,11 +57,11 @@ export async function cleanTranscriptWithABCDE(input: ABCDEProcessingInput): Pro
   console.log(`角色库内容: ${aBlockResult.speakerLibrary.substring(0, 200)}...`);
   
   const otherBlocks = chunks.slice(1);
-  const otherBlockResults = await Promise.all(
+  const otherBlockResults = otherBlocks.length > 0 ? await Promise.all(
     otherBlocks.map((block, index) => 
       processOtherBlock(block, aBlockResult.speakerLibrary, language, String.fromCharCode(66 + index))
     )
-  );
+  ) : [];
   
   // 步骤3: 拼接所有结果
   const allResults = [aBlockResult.script, ...otherBlockResults];
@@ -69,10 +69,19 @@ export async function cleanTranscriptWithABCDE(input: ABCDEProcessingInput): Pro
   
   const processingTime = Date.now() - startTime;
   const estimatedTokens = Math.ceil((transcript.length + finalScript.length) / 2);
+  const retentionRate = finalScript.length / transcript.length;
   
   console.log(`ABCDE分块处理完成，耗时: ${processingTime}ms`);
   console.log(`最终脚本长度: ${finalScript.length} 字符`);
-  console.log(`压缩比: ${(finalScript.length / transcript.length * 100).toFixed(1)}%`);
+  console.log(`保留率: ${(retentionRate * 100).toFixed(1)}%`);
+  
+  // 检查内容保留率，如果低于90%，记录警告
+  if (retentionRate < 0.9) {
+    console.warn(`⚠️ 内容保留率过低: ${(retentionRate * 100).toFixed(1)}% < 90%，可能存在过度压缩`);
+    console.warn(`原始长度: ${transcript.length} 字符，输出长度: ${finalScript.length} 字符`);
+  } else {
+    console.log(`✅ 内容保留率正常: ${(retentionRate * 100).toFixed(1)}%`);
+  }
   
   return {
     script: finalScript,
@@ -85,22 +94,62 @@ export async function cleanTranscriptWithABCDE(input: ABCDEProcessingInput): Pro
 
 /**
  * 基于ASR片段数组创建ABCDE分块
- * 每10个ASR片段为一块
+ * 混合策略：优先按片段数分块，但设置字符数上限保护
  */
 function createABCDEChunksFromSegments(segments: string[]): string[] {
-  const chunkSize = 10; // 每10个ASR片段为一块
   const chunks: string[] = [];
+  // 策略：<=20段直接整文清洗；>20段则每20段为一块
+  const segmentsPerChunk = 20;
+  const maxCharsPerChunk = 50000; // 提高字符数上限，减少分块数量
   
-  for (let i = 0; i < segments.length; i += chunkSize) {
-    const chunk = segments.slice(i, i + chunkSize).join('\n\n');
-    if (chunk.trim()) {
-      chunks.push(chunk.trim());
+  if (segments.length <= 20) {
+    const whole = segments.join('\n\n').trim();
+    if (whole) chunks.push(whole);
+    console.log(`分块策略: 段数<=20，整文清洗（1块，${whole.length}字符）`);
+    return chunks;
+  }
+
+  let currentChunk = '';
+  let currentChunkSize = 0;
+  let segmentsInCurrentChunk = 0;
+  
+  for (const segment of segments) {
+    const segmentLength = segment.length;
+    
+    // 检查是否需要开始新块：
+    // 1. 当前块已包含足够的片段数（20段）
+    // 2. 或者当前块加上新片段会超过字符限制
+    const shouldStartNewChunk = 
+      (segmentsInCurrentChunk >= segmentsPerChunk) ||
+      (currentChunkSize + segmentLength > maxCharsPerChunk && currentChunk.trim());
+    
+    if (shouldStartNewChunk && currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+      currentChunk = segment;
+      currentChunkSize = segmentLength;
+      segmentsInCurrentChunk = 1;
+    } else {
+      if (currentChunk) {
+        currentChunk += '\n\n' + segment;
+        currentChunkSize += segmentLength + 2; // +2 for \n\n
+        segmentsInCurrentChunk++;
+      } else {
+        currentChunk = segment;
+        currentChunkSize = segmentLength;
+        segmentsInCurrentChunk = 1;
+      }
     }
   }
   
-  console.log(`分块策略: 每${chunkSize}个ASR片段为一块`);
+  // 添加最后一个块
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  console.log(`分块策略: 混合策略，每${segmentsPerChunk}个片段一块，最大${maxCharsPerChunk}字符`);
   console.log(`总ASR片段数: ${segments.length}`);
   console.log(`分块数: ${chunks.length}`);
+  console.log(`各块长度: ${chunks.map((c, i) => `${String.fromCharCode(65 + i)}(${c.length}字符)`).join(', ')}`);
   
   return chunks;
 }
@@ -119,7 +168,7 @@ function createABCDEChunks(transcript: string): string[] {
   // 如果只有一个段落（ASR转写质量问题），按字符数分块
   if (audioSegments.length === 1) {
     console.log('⚠️ 检测到单段落转录，按字符数分块（这不是理想情况）');
-    const chunkSize = 15000; // 每块15K字符
+    const chunkSize = 8000; // 每块8K字符
     const chunks: string[] = [];
     
     for (let i = 0; i < transcript.length; i += chunkSize) {
@@ -179,37 +228,40 @@ async function processOtherBlock(block: string, speakerLibrary: string, language
   console.log(`${blockName}块处理: 基于角色库清洗内容`);
   console.log(`角色库长度: ${speakerLibrary.length}字符`);
   
-  const systemPrompt = `你是播客访谈记录清洗专家。请基于提供的角色库，对当前块进行清洗。
+  const systemPrompt = `清洗播客访谈文本（基于角色库）。
 
-**说话人角色库**:
+【说话人角色库】
 ${speakerLibrary}
 
-**清洗要求**:
-1. 删除语气词（如"嗯"、"啊"、"那个"等），保留所有有价值内容
-2. **必须保留至少95%的原始内容** - 这是硬性要求
-3. 基于访谈实际内容，准确识别出是以上哪个角色在说这段话
-4. **严格按照角色库中的标识来标注说话人，不得使用任何变体**
-5. 如果遇到角色库中没有的新角色，使用"说话人X"标识
-6. **重要：这是访谈记录，必须保留所有访谈对话内容**
-7. **禁止过度压缩或删减内容** - 只删除语气词，保留所有观点和案例
+【任务说明】
+这是文字清洗任务，不是摘要、不是润色、不是改写、不是总结。
+保留原文的所有有效信息与表达结构，仅删除语气词和无意义的口头填充。
 
-**角色识别规则**:
-- 必须使用角色库中定义的**完整标识**，不允许自行修改或简化
-- 如果角色库中定义的是"主持人（小宇宙）"，就必须使用这个完整标识
-- 如果角色库中定义的是"嘉宾（张博士）"，就必须使用这个完整标识
-- 不允许使用"主持人"、"嘉宾"等简化标识，除非角色库中明确这样定义
-- **角色库是权威的，必须严格按照角色库进行标识**
-- 根据角色的说话特征和身份背景来准确识别
+【核心原则】
+1. **内容完整性优先**
+   - 保留所有观点、案例、故事、数据、解释、分析、逻辑、细节。
+   - 不得删除任何完整句子或段落。
+   - 不得改变语序、语气或句式。
+   - 不得合并或改写相邻句子。
+   - 不得"优化表达"或"提高可读性"。
+   - 不得删除任何有价值的信息。
 
-**输出格式**:
+2. **严格限制删除范围**
+   仅删除以下语气词及口头赘语：
+   「嗯」「啊」「呃」「那个」「然后」「就是」「其实」「你知道吧」「我觉得吧」「对吧」「所以说」「我感觉」「这样子」「这个」「那个时候」「怎么说呢」
+   —— 除此之外的任何词语、短语、句子，都必须原样保留。
+
+3. **输出字数要求**
+   - 输出字数必须为原文字数的 **90%–100%**。
+   - 不允许主动缩写或删减任何有意义的内容。
+   - 如果输出字数低于90%，说明删除了过多内容，需要重新处理。
+
+4. **角色标注格式**
+   - 保持原始对话结构，识别并按角色库标注每位发言者；必须使用角色库中的完整标识，不得擅自修改。
+
+【输出格式】
 - **角色标识**：清洗后的内容
-- **角色标识**：清洗后的内容
-
-**示例**:
-如果角色库定义"主持人（小宇宙）"，则输出：
-- **主持人（小宇宙）**：清洗后的内容
-
-**警告**: 如果发现角色库为空或无效，请立即停止处理并报告错误。`;
+- **角色标识**：清洗后的内容`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -217,7 +269,7 @@ ${speakerLibrary}
   ];
 
   const result = await qwenChat(messages, { 
-    maxTokens: 8000,  // 增加输出限制，确保内容完整性
+    maxTokens: 32000,  // 提高输出上限，确保内容完整性
     temperature: 0.1
   });
 
@@ -228,17 +280,35 @@ ${speakerLibrary}
  * 清洗块内容
  */
 async function cleanBlockContent(block: string, language: string, blockType: string): Promise<string> {
-  const systemPrompt = `你是播客访谈记录清洗专家。请对${blockType}进行清洗。
+  const systemPrompt = `清洗播客访谈文本。
 
-**清洗要求**:
-1. 删除语气词，保留所有有价值内容
-2. **必须保留至少95%的原始内容** - 这是硬性要求
-3. 识别并标注说话人角色
-4. 使用格式：- **角色标识**：内容
-5. **重要：这是访谈记录，必须保留所有访谈对话内容**
-6. **禁止过度压缩或删减内容** - 只删除语气词，保留所有观点和案例
+【任务说明】
+这是文字清洗任务，不是摘要、不是润色、不是改写、不是总结。
+保留原文的所有有效信息与表达结构，仅删除语气词和无意义的口头填充。
 
-**输出格式**:
+【核心原则】
+1. **内容完整性优先**
+   - 保留所有观点、案例、故事、数据、解释、分析、逻辑、细节。
+   - 不得删除任何完整句子或段落。
+   - 不得改变语序、语气或句式。
+   - 不得合并或改写相邻句子。
+   - 不得"优化表达"或"提高可读性"。
+   - 不得删除任何有价值的信息。
+
+2. **严格限制删除范围**
+   仅删除以下语气词及口头赘语：
+   「嗯」「啊」「呃」「那个」「然后」「就是」「其实」「你知道吧」「我觉得吧」「对吧」「所以说」「我感觉」「这样子」「这个」「那个时候」「怎么说呢」
+   —— 除此之外的任何词语、短语、句子，都必须原样保留。
+
+3. **输出字数要求**
+   - 输出字数必须为原文字数的 **90%–100%**。
+   - 不允许主动缩写或删减任何有意义的内容。
+   - 如果输出字数低于90%，说明删除了过多内容，需要重新处理。
+
+4. **角色标注格式**
+   - 保持原始对话结构，识别并标注每位发言者；使用格式：- **角色标识**：内容。
+
+【输出格式】
 - **主持人**：清洗后的内容
 - **嘉宾（姓名）**：清洗后的内容`;
 
@@ -248,7 +318,7 @@ async function cleanBlockContent(block: string, language: string, blockType: str
   ];
 
   const result = await qwenChat(messages, { 
-    maxTokens: 8000,  // 增加输出限制，确保内容完整性
+    maxTokens: 32000,  // 提高输出上限，确保内容完整性
     temperature: 0.1
   });
 
@@ -261,43 +331,31 @@ async function cleanBlockContent(block: string, language: string, blockType: str
 async function generateSpeakerLibrary(block: string, language: string): Promise<string> {
   console.log('生成说话人角色库，A块长度:', block.length, '字符');
   
-  const systemPrompt = `你是角色识别专家。请分析A块中的所有说话人，生成详细的角色库。
+  const systemPrompt = `分析播客对话中的参与者。
 
-**分析要求**:
-1. 仔细识别所有说话人，包括主持人、嘉宾、其他参与者
-2. 提取每个角色的具体特征：说话风格、用词习惯、身份背景
-3. 确定角色的准确称呼和标识方式
-4. 建立严格的角色识别规则
-5. **必须基于A块的实际内容进行分析，不要猜测**
-6. **如果A块中只有一个说话人，请明确标识为"主持人"或"嘉宾"**
+任务：识别文本中的对话者身份。
 
-**输出格式**:
+规则：
+- 主持人：使用"主持人"
+- 嘉宾：使用"嘉宾"
+
+要求：
+- 标识简洁明确
+- 必须包含至少一个角色
+- 输出纯文本格式
+
+输出格式：
 【说话人角色库】
-- 角色1: 主持人（具体姓名或昵称）- 身份：节目主持人，特征：引导对话、提问、控制节奏
-- 角色2: 嘉宾（具体姓名或身份）- 身份：具体专业领域，特征：分享经验、回答问题、表达观点
-- 角色3: 其他参与者（如有）- 身份：具体描述，特征：参与讨论、补充信息
+- 主持人：节目主持人
+- 嘉宾：访谈嘉宾
 
 【角色识别规则】
-- 主持人标识：严格使用"主持人（姓名）"，如无姓名则使用"主持人"
-- 嘉宾标识：严格使用"嘉宾（姓名/身份）"，如无姓名则使用"嘉宾"
-- 其他角色：根据实际身份确定标识，如"观众"、"其他嘉宾"等
-- 保持标识简洁明确，全文统一使用，不得随意更改
-
-【说话特征识别】
-- 分析每个角色的说话特点：语速、用词习惯、表达方式
-- 记录角色的专业背景和身份特征
-- 为后续块的角色识别提供参考依据
-
-【重要提醒】
-- 必须严格按照此角色库进行标识，不得使用其他变体
-- 不允许使用角色库外的标识或自行创造新标识
-- 确保整个播客的说话人标识完全一致
-- **角色库必须包含至少一个角色，不能为空**
-- **如果A块中只有一个说话人，请明确标识为"主持人"或"嘉宾"**`;
+- 主持人标识：使用"主持人"
+- 嘉宾标识：使用"嘉宾"`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: `请分析A块中的所有说话人，生成详细角色库：\n\n${block}` }
+    { role: "user", content: `请分析以下播客文本中的说话人角色：\n\n${block.substring(0, 1000)}${block.length > 1000 ? '...' : ''}` }
   ];
 
   const result = await qwenChat(messages, { 

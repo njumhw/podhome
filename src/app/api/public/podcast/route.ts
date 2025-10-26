@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
           author: true,
           audioUrl: true,
           summary: true,
-        transcript: true,
+          transcript: true,
+          script: true,
           // report字段已删除
           publishedAt: true,
           metadata: true,
@@ -66,14 +67,12 @@ export async function GET(request: NextRequest) {
           id: audioCache.id,
           title: audioCache.title || '未知标题',
           showAuthor: audioCache.author || '未知作者',
-          publishedAt: audioCache.publishedAt || (audioCache.metadata as { publishedAt?: string })?.publishedAt,
+          publishedAt: audioCache.publishedAt || (audioCache.metadata as { publishedAt?: string })?.publishedAt ? new Date((audioCache.metadata as { publishedAt?: string }).publishedAt!) : null,
           audioUrl: audioCache.audioUrl,
           sourceUrl: audioCache.audioUrl,
           summary: audioCache.summary,
           topic: audioCache.topic,
           transcript: audioCache.transcript,  // 原始ASR转录文本
-          script: audioCache.script,  // 优化后的访谈记录
-          report: audioCache.summary,
           updatedAt: audioCache.updatedAt
         };
       }
@@ -95,7 +94,7 @@ export async function GET(request: NextRequest) {
       originalUrl: podcast.sourceUrl,
       summary: podcast.summary,
       topic: podcast.topic,
-      script: podcast.script,
+      script: podcast.transcript, // 使用 transcript 字段作为访谈全文
       report: podcast.summary,
       updatedAt: podcast.updatedAt
     });
@@ -110,8 +109,9 @@ export async function GET(request: NextRequest) {
     console.error('Podcast fetch error:', error);
     
     // 检查是否是数据库连接问题
-    if (error.message?.includes('Can\'t reach database server') || 
-        error.message?.includes('connection pool')) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Can\'t reach database server') || 
+        errorMessage.includes('connection pool')) {
       return NextResponse.json(
         { error: '数据库连接问题，请稍后重试' },
         { status: 503 } // Service Unavailable

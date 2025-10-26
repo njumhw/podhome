@@ -1,4 +1,4 @@
-import { HeadersInit } from "next/dist/server/web/spec-extension/adapters/headers";
+// import { HeadersInit } from "next/dist/server/web/spec-extension/adapters/headers";
 
 export type UniversalPodcastMeta = {
   audioUrl: string | null;
@@ -286,7 +286,6 @@ export class UniversalPodcastParser {
   private async fetchHtml(url: string): Promise<string> {
     const response = await fetch(url, {
       headers: DEFAULT_HEADERS,
-      timeout: 10000, // 10秒超时
     });
     
     if (!response.ok) {

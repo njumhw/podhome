@@ -31,8 +31,8 @@ export async function POST(req: NextRequest) {
 
   const { audioUrl, segmentDuration, language } = parsed.data;
 
-  // concurrency from config or default 10
-  const maxConcurrent = parseInt(await getConfig(CONFIG_KEYS.AUDIO_MAX_CONCURRENT, "10") || "10"); // 优化并发数，平衡效率与稳定性
+  // concurrency from config or default 3 (降低并发数以减少API失败率)
+  const maxConcurrent = parseInt(await getConfig(CONFIG_KEYS.AUDIO_MAX_CONCURRENT, "3") || "3"); // 降低并发数，提高稳定性
 
   // Helpers for local download & cutting
   function getFfmpegPath(): string {

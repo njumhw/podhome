@@ -57,21 +57,21 @@ const PROCESSING_STEPS: ProcessingStep[] = [
 
 // 根据音频时长调整ASR时间
 export function adjustASRTimeForDuration(durationSeconds: number): number {
-  // 基于实际观察：1小时音频15-20分钟处理完成
-  // 使用更保守的估算，确保不会过早显示100%
-  const totalProcessingTime = durationSeconds / 3.0; // 3倍速处理（保守估算）
+  // 基于实际观察：1小时音频3-5分钟处理完成
+  // 使用更快的估算，反映实际处理效率
+  const totalProcessingTime = durationSeconds / 12.0; // 12倍速处理（实际效率）
   const asrTime = totalProcessingTime * 0.6; // ASR占60%
-  return Math.max(60, asrTime); // 最少1分钟
+  return Math.max(30, asrTime); // 最少30秒
 }
 
 // 根据文本长度调整总结时间
 export function adjustSummaryTimeForText(textLength: number): number {
-  // 基于实际观察：使用保守估算确保不会过早显示100%
+  // 基于实际观察：使用更快的估算反映实际效率
   // 假设每分钟音频产生800字符
   const estimatedAudioDuration = textLength / 800; // 估算音频时长
-  const totalProcessingTime = estimatedAudioDuration * 60 / 3.0; // 3倍速处理（保守估算）
+  const totalProcessingTime = estimatedAudioDuration * 60 / 12.0; // 12倍速处理（实际效率）
   const summaryTime = totalProcessingTime * 0.15; // 总结占15%
-  return Math.max(30, summaryTime); // 最少30秒
+  return Math.max(15, summaryTime); // 最少15秒
 }
 
 // 获取处理进度估算
@@ -230,24 +230,24 @@ export function getConservativeProcessingEstimate(
 ): ProcessingEstimate {
   const steps = [...PROCESSING_STEPS];
   
-  // 根据音频时长调整ASR时间 - 使用保守估算
+  // 根据音频时长调整ASR时间 - 使用实际效率估算
   if (audioDuration) {
     const asrStep = steps.find(step => step.id === 'asr');
     if (asrStep) {
-      // 使用保守估算：3倍速处理，ASR占60%
-      const totalProcessingTime = audioDuration / 3.0;
-      asrStep.estimatedTime = Math.max(60, totalProcessingTime * 0.6);
+      // 使用实际效率估算：12倍速处理，ASR占60%
+      const totalProcessingTime = audioDuration / 12.0;
+      asrStep.estimatedTime = Math.max(30, totalProcessingTime * 0.6);
     }
   }
   
-  // 根据文本长度调整总结时间 - 使用保守估算
+  // 根据文本长度调整总结时间 - 使用实际效率估算
   if (textLength) {
     const summaryStep = steps.find(step => step.id === 'summarize');
     if (summaryStep) {
-      // 使用保守估算：总结占15%
+      // 使用实际效率估算：总结占15%
       const estimatedAudioDuration = textLength / 800; // 每分钟800字符
-      const totalProcessingTime = estimatedAudioDuration * 60 / 3.0;
-      summaryStep.estimatedTime = Math.max(30, totalProcessingTime * 0.15);
+      const totalProcessingTime = estimatedAudioDuration * 60 / 12.0;
+      summaryStep.estimatedTime = Math.max(15, totalProcessingTime * 0.15);
     }
   }
   

@@ -75,7 +75,7 @@ export async function PUT(req: NextRequest) {
   } catch (error) {
     console.error('编辑播客失败:', error);
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: error.errors[0].message }, { status: 400 });
+      return NextResponse.json({ success: false, error: error.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ success: false, error: '编辑播客失败' }, { status: 500 });
   }

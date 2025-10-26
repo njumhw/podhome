@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
 		return Response.json({ config });
 	} catch (error: unknown) {
-		return new Response(error.message, { status: 500 });
+		return new Response((error as Error).message, { status: 500 });
 	}
 }
 
@@ -43,6 +43,6 @@ export async function PATCH(req: NextRequest) {
 
 		return Response.json({ success: true });
 	} catch (error: unknown) {
-		return new Response(error.message, { status: 500 });
+		return new Response((error as Error).message, { status: 500 });
 	}
 }

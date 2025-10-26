@@ -13,6 +13,18 @@ interface ProcessingItem {
   completedAt?: number;
   taskId?: string;
   estimatedRemainingTime?: number;
+  metrics?: {
+    audioDuration?: number;
+    asrSegmentsCount?: number;
+    chunksCount?: number;
+    transcriptCompressionRatio?: number;
+    reportCompressionRatio?: number;
+    processingSteps?: {
+      asr?: { status: 'pending' | 'running' | 'completed' | 'failed'; duration?: number };
+      cleaning?: { status: 'pending' | 'running' | 'completed' | 'failed'; duration?: number };
+      report?: { status: 'pending' | 'running' | 'completed' | 'failed'; duration?: number };
+    };
+  };
 }
 
 interface SimpleProcessingStatusProps {
@@ -92,6 +104,20 @@ export default function SimpleProcessingStatus({
             if (res.ok) {
               const taskStatus = await res.json();
               
+              // 更新metrics数据（无论任务是否完成）
+              if (taskStatus.metrics) {
+                const updatedItem = {
+                  ...item,
+                  metrics: taskStatus.metrics
+                };
+                
+                const updatedItems = processingItems.map((storedItem: any) => 
+                  storedItem.id === item.id ? updatedItem : storedItem
+                );
+                localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+                window.dispatchEvent(new Event('storage'));
+              }
+              
               if (taskStatus.status === 'READY') {
                 // 任务已完成，更新状态
                 const updatedItem = {
@@ -99,7 +125,8 @@ export default function SimpleProcessingStatus({
                   status: 'completed',
                   progress: 100,
                   title: taskStatus.result?.title,
-                  completedAt: Date.now()
+                  completedAt: Date.now(),
+                  metrics: taskStatus.metrics
                 };
                 
                 // 更新localStorage
@@ -184,7 +211,8 @@ export default function SimpleProcessingStatus({
                 status: taskStatus.status === 'READY' ? 'completed' : 'failed',
                 progress: taskStatus.status === 'READY' ? 100 : 0,
                 title: taskStatus.result?.title,
-                completedAt: Date.now()
+                completedAt: Date.now(),
+                metrics: taskStatus.metrics
               };
               
               const updatedItems = processingItems.map((storedItem: any) => 
@@ -218,6 +246,57 @@ export default function SimpleProcessingStatus({
 
   const formatDuration = (startTime: number) => {
     return formatElapsedTime(Date.now() - startTime);
+  };
+
+  const formatMetrics = (metrics?: ProcessingItem['metrics']) => {
+    if (!metrics) return null;
+    
+    const items = [];
+    
+    if (metrics.audioDuration) {
+      const minutes = Math.round(metrics.audioDuration / 60);
+      items.push(`音频时长: ${minutes}分钟`);
+    }
+    
+    if (metrics.asrSegmentsCount) {
+      items.push(`ASR段落: ${metrics.asrSegmentsCount}个`);
+    }
+    
+    if (metrics.chunksCount) {
+      items.push(`分块数: ${metrics.chunksCount}个`);
+    }
+    
+    if (metrics.transcriptCompressionRatio) {
+      const ratio = (metrics.transcriptCompressionRatio * 100).toFixed(1);
+      items.push(`原文保留: ${ratio}%`);
+    }
+    
+    if (metrics.reportCompressionRatio) {
+      const ratio = (metrics.reportCompressionRatio * 100).toFixed(1);
+      items.push(`报告压缩: ${ratio}%`);
+    }
+    
+    return items.length > 0 ? items.join(' • ') : null;
+  };
+
+  const getStepStatus = (step?: { status: string; duration?: number }) => {
+    if (!step) return null;
+    
+    const statusMap = {
+      'pending': { text: '等待中', color: 'text-gray-500' },
+      'running': { text: '处理中', color: 'text-blue-500' },
+      'completed': { text: '已完成', color: 'text-green-500' },
+      'failed': { text: '失败', color: 'text-red-500' }
+    };
+    
+    const status = statusMap[step.status as keyof typeof statusMap] || statusMap.pending;
+    const duration = step.duration ? ` (${Math.round(step.duration / 1000)}s)` : '';
+    
+    return (
+      <span className={`text-xs ${status.color}`}>
+        {status.text}{duration}
+      </span>
+    );
   };
 
   if (!isVisible) return null;
@@ -289,6 +368,26 @@ export default function SimpleProcessingStatus({
                           <span>{item.progress}%</span>
                           <span>预计还需: {formatTime(item.estimatedRemainingTime || 0)}</span>
                         </div>
+                        
+                        {/* 处理步骤状态 */}
+                        {item.metrics?.processingSteps && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center gap-4 text-xs">
+                              <span className="text-gray-600">ASR转写: {getStepStatus(item.metrics.processingSteps.asr)}</span>
+                              <span className="text-gray-600">文本清洗: {getStepStatus(item.metrics.processingSteps.cleaning)}</span>
+                              <span className="text-gray-600">报告生成: {getStepStatus(item.metrics.processingSteps.report)}</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* 处理指标 */}
+                        {item.metrics && (
+                          <div className="mt-2">
+                            <div className="text-xs text-gray-600 bg-gray-100 rounded px-2 py-1 inline-block">
+                              {formatMetrics(item.metrics)}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <button
                         onClick={() => handleCancel(item.id)}
@@ -353,6 +452,15 @@ export default function SimpleProcessingStatus({
                           : '不好意思，阿茂好像去摸鱼了，请联系下阿茅吧'
                         }
                       </p>
+                      
+                      {/* 处理指标 */}
+                      {item.status === 'completed' && item.metrics && (
+                        <div className="mt-2">
+                          <div className="text-xs text-gray-600 bg-green-50 rounded px-2 py-1 inline-block">
+                            {formatMetrics(item.metrics)}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                       {item.status === 'completed' && item.title && (
