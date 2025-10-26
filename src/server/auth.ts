@@ -37,7 +37,7 @@ export async function setSession(userId: string) {
 	const c = await cookies();
 	c.set(SESSION_COOKIE, token, {
 		httpOnly: true,
-		secure: true,
+		secure: false, // 在 HTTP 环境下设置为 false
 		sameSite: "lax",
 		path: "/",
 		maxAge: Math.floor(SESSION_TTL_MS / 1000),
