@@ -11,7 +11,7 @@ APP_NAME="podroom"
 APP_DIR="/opt/podroom"
 BACKUP_DIR="/opt/backups/podroom"
 LOG_DIR="/var/log/podroom"
-GIT_REPO="https://github.com/your-username/podroom.git"  # 替换为您的Git仓库
+GIT_REPO="https://github.com/njumhw/podhome.git"
 BRANCH=${2:-"main"}
 ENV=${1:-"production"}
 
@@ -158,7 +158,7 @@ health_check() {
     sleep 10
     
     # 检查应用是否响应
-    if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+    if curl -f http://localhost:3010/api/health > /dev/null 2>&1; then
         success "健康检查通过"
     else
         warning "健康检查失败，但应用可能仍在启动中"
