@@ -33,6 +33,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white text-black dark:bg-black dark:text-white`}
+        suppressHydrationWarning={true}
       >
         <ToastProvider>
           <Header />
