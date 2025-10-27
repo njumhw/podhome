@@ -12,11 +12,11 @@ module.exports = {
     max_restarts: 10,
     env: {
       NODE_ENV: 'production',
-      PORT: 3000
+      PORT: 3010
     },
     env_production: {
       NODE_ENV: 'production',
-      PORT: 3000
+      PORT: 3010
     },
     error_file: '/var/log/podroom/err.log',
     out_file: '/var/log/podroom/out.log',
