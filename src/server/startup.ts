@@ -17,3 +17,4 @@ if (typeof window === 'undefined') {
     initializeApp();
   }, 2000);
 }
+

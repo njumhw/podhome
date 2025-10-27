@@ -376,7 +376,7 @@ export default function HomePage() {
     // 设置超时，避免无限轮询
     setTimeout(() => {
       clearInterval(pollInterval);
-    }, 30 * 60 * 1000); // 30分钟超时
+    }, 3 * 60 * 60 * 1000); // 3小时超时，支持长时间播客处理
   };
 
   const handleShowAllPodcasts = () => {

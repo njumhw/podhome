@@ -128,13 +128,23 @@ export async function POST(req: NextRequest) {
       return ret;
     }
     const results = await runPool(segments, async (s) => {
-      const buf = await cutOne(localFile, s.start, s.len);
-      const key = `temp/${s.start}-${s.end}.m4a`;
-      const url = await uploadToOssAndGetPublicUrl(key, buf, "audio/mp4");
-      if (!url) throw new Error("OSS 上传失败");
-      return { index: s.index, url };
+      try {
+        const buf = await cutOne(localFile, s.start, s.len);
+        const key = `temp/${s.start}-${s.end}.m4a`;
+        const url = await uploadToOssAndGetPublicUrl(key, buf, "audio/mp4");
+        if (!url) {
+          console.warn(`OSS 上传失败，跳过分段 ${s.start}-${s.end}秒`);
+          return null; // 返回null而不是抛出错误
+        }
+        return { index: s.index, url };
+      } catch (error: any) {
+        console.warn(`分段处理失败 ${s.start}-${s.end}秒:`, error.message);
+        return null; // 返回null而不是抛出错误
+      }
     }, Math.max(1, maxConcurrent));
-    uploaded.push(...results);
+    // 过滤掉失败的分段（null值）
+    const validResults = results.filter((r): r is { index: number; url: string } => r !== null);
+    uploaded.push(...validResults);
   } catch (e: any) {
     // cleanup local file then report
     fs.promises.unlink(localFile).catch(()=>{});
@@ -185,14 +195,15 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-      // 所有重试都失败了：如果明确提示无有效文本，则视为该分段为空，不中断整体流程
+      // 所有重试都失败了：改为容错处理，不中断整体流程
       const msg = (lastError?.message || '').toString();
       if (/ASR_RESPONSE_HAVE_NO_WORDS/i.test(msg) || /无语音|无有效文本/.test(msg)) {
         console.warn(`ASR 无有效文本，跳过分段 index=${it.index}`);
         return { index: it.index, text: "", language: undefined as any };
       }
-      // 其他错误仍然中断
-      throw new Error(`ASR 转写失败 (已重试3次): ${lastError?.message || '未知错误'}`);
+      // 其他错误也改为容错处理，记录警告但不中断流程
+      console.warn(`ASR 转写失败 (已重试3次)，跳过分段 index=${it.index}: ${lastError?.message || '未知错误'}`);
+      return { index: it.index, text: "", language: undefined as any };
     }, Math.max(1, maxConcurrent));
   } catch (e: any) {
     console.error("ASR error:", e?.message || e);

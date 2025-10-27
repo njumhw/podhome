@@ -138,7 +138,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		
 		// 创建自定义超时控制器
 		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 45 * 60 * 1000); // 45分钟超时
+		const timeoutId = setTimeout(() => controller.abort(), 180 * 60 * 1000); // 3小时超时
 		
 		const scriptResponse = await fetch(`${apiBase}/api/clean-transcript-abcde`, {
 			method: 'POST',
@@ -222,7 +222,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		
 		// 创建自定义超时控制器
 		const reportController = new AbortController();
-		const reportTimeoutId = setTimeout(() => reportController.abort(), 45 * 60 * 1000); // 45分钟超时
+		const reportTimeoutId = setTimeout(() => reportController.abort(), 180 * 60 * 1000); // 3小时超时
 		
 		// 根据清洗是否成功决定报告生成的输入
 		const reportBody = cleaningFailed ? {

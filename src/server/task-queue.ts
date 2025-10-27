@@ -42,7 +42,7 @@ class TaskQueue {
   private maxRetries = 3; // 最大重试次数
   private retryDelay = 5000; // 重试延迟（毫秒）
   private connectionRetryDelay = 10000; // 数据库连接重试延迟
-  private maxTaskDuration = 90 * 60 * 1000; // 最大任务运行时间：90分钟
+  private maxTaskDuration = 180 * 60 * 1000; // 最大任务运行时间：3小时
   private taskStartTimes = new Map<string, number>(); // 任务开始时间记录
 
   // 初始化方法

@@ -27,6 +27,28 @@ function collectTextsDeep(input: any, acc: string[] = []): string[] {
 // Calls DashScope compatible transcription API. Expects an audio URL.
 export async function qwenTranscribeFromUrl(audioUrl: string, language?: string): Promise<QwenAsrResp> {
   console.log("qwenTranscribeFromUrl called with URL:", audioUrl);
+  
+  // Check audio file size first
+  try {
+    const headRes = await fetch(audioUrl, { method: 'HEAD' });
+    const contentLength = headRes.headers.get('content-length');
+    if (contentLength) {
+      const sizeMB = parseInt(contentLength) / (1024 * 1024);
+      console.log(`Audio file size: ${sizeMB.toFixed(2)} MB`);
+      if (sizeMB > 200) {
+        console.warn(`Large audio file detected (${sizeMB.toFixed(2)} MB), ASR may take longer or fail`);
+      }
+      if (sizeMB > 500) {
+        console.error(`Very large audio file detected (${sizeMB.toFixed(2)} MB), ASR may fail or return incomplete results`);
+      }
+      if (sizeMB > 1000) {
+        console.error(`Extremely large audio file detected (${sizeMB.toFixed(2)} MB), ASR will likely fail or return corrupted results`);
+      }
+    }
+  } catch (e) {
+    console.warn("Could not check audio file size:", e);
+  }
+  
   const env = getEnv();
   const apiKey = (env.QWEN_API_KEY as string) || ""; // user provided
   if (!apiKey) throw new Error("Missing QWEN_API_KEY in env");
@@ -38,7 +60,9 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
     input: {
       file_urls: [audioUrl],
     },
-    parameters: {},
+    parameters: {
+      timeout: 3600, // 1小时超时
+    },
   };
   if (language && language !== "auto") {
     payload.parameters.language = language;
@@ -71,7 +95,7 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
   console.log("ASR task submitted, task_id:", taskId);
 
   // Step 2: Poll for results
-  const maxAttempts = 60; // 60 attempts * 2s = 120s max wait (增加超时时间)
+  const maxAttempts = 1800; // 1800 attempts * 2s = 3600s max wait (1小时超时，支持超大音频)
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s between polls
 
