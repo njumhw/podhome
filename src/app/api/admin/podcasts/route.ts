@@ -264,6 +264,7 @@ export async function DELETE(req: NextRequest) {
         await db.$transaction(async (tx) => {
           // 删除Podcast表的数据（如果存在）
           if (podcast) {
+            // 删除所有关联数据
             await tx.accessLog.deleteMany({
               where: { podcastId: id }
             });
@@ -273,6 +274,16 @@ export async function DELETE(req: NextRequest) {
             });
 
             await tx.transcriptChunk.deleteMany({
+              where: { podcastId: id }
+            });
+            
+            // 删除点赞记录
+            await tx.podcastLike.deleteMany({
+              where: { podcastId: id }
+            });
+            
+            // 删除评论
+            await tx.comment.deleteMany({
               where: { podcastId: id }
             });
 
@@ -287,9 +298,39 @@ export async function DELETE(req: NextRequest) {
               where: { audioCacheId: id }
             });
 
-            await tx.audioCache.delete({
+            // 使用deleteMany避免记录不存在时的错误
+            await tx.audioCache.deleteMany({
               where: { id }
             });
+          }
+          
+          // 如果通过podcast的audioUrl查找audioCache，也尝试删除
+          if (podcast?.sourceUrl) {
+            // 查找匹配的audioCache（通过originalUrl或audioUrl）
+            const matchingCaches = await tx.audioCache.findMany({
+              where: {
+                OR: [
+                  { originalUrl: podcast.sourceUrl },
+                  { audioUrl: podcast.sourceUrl }
+                ]
+              },
+              select: { id: true }
+            });
+            
+            // 删除找到的audioCache
+            if (matchingCaches.length > 0) {
+              await tx.accessLog.deleteMany({
+                where: { 
+                  audioCacheId: { in: matchingCaches.map(c => c.id) }
+                }
+              });
+              
+              await tx.audioCache.deleteMany({
+                where: {
+                  id: { in: matchingCaches.map(c => c.id) }
+                }
+              });
+            }
           }
 
           // 通过URL匹配删除相关记录（确保彻底清理）

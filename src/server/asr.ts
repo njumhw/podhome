@@ -1,22 +1,10 @@
 import { getEnv } from "@/utils/env";
+import { ASR_CONFIG } from "./asr-config";
+import { transcribeAudioWithSegmentation } from "./asr-segmented";
+import { analyzeError, logErrorAnalysis, createErrorContext } from "@/utils/error-analyzer";
 
-// 阿里云ASR服务配置
-const ASR_CONFIG = {
-	// 阿里云ASR API配置
-	region: 'cn-shanghai', // 根据你的服务区域调整
-	endpoint: 'https://nls-meta.cn-shanghai.aliyuncs.com',
-	version: '2019-02-28',
-	
-	// 音频限制
-	maxDuration: 170, // 2分50秒（留10秒安全边际）
-	maxFileSize: 10 * 1024 * 1024, // 10MB
-	supportedFormats: ['m4a', 'mp3', 'wav', 'aac'],
-	
-	// 转写参数
-	enablePunctuation: true,
-	enableWordTime: true,
-	enableSpeakerDiarization: true, // 说话人分离
-};
+// 重新导出，保持向后兼容
+export { ASR_CONFIG };
 
 export interface ASRResult {
 	success: boolean;
@@ -61,58 +49,76 @@ export function validateAudioForASR(segment: AudioSegment): { valid: boolean; is
 
 /**
  * 调用阿里云ASR进行语音转文字
+ * 按照正确的流程：先按120秒切割音频，再分别转写每个片段
  */
 export async function transcribeWithAliyunASR(audioUrl: string): Promise<ASRResult> {
-	try {
-		// 检查环境变量
-		const env = getEnv();
-		if (!env.ALIYUN_ACCESS_KEY_ID || !env.ALIYUN_ACCESS_KEY_SECRET) {
-			throw new Error('阿里云ASR配置缺失');
-		}
-		
-		// 这里应该实现真实的阿里云ASR API调用
-		// 暂时返回模拟结果
-		return await mockASRTranscription(audioUrl);
-		
-	} catch (error: any) {
-		return {
-			success: false,
-			transcript: '',
-			speakers: [],
-			duration: 0,
-			error: error.message
-		};
-	}
+    try {
+        // 使用分段转写：按120秒切割音频，分别转写每个片段
+        const result = await transcribeAudioWithSegmentation(audioUrl, "zh");
+        
+        const transcript = result.transcript;
+        const segments = result.segments; // 73个ASR片段（对于146分钟音频）
+        const duration = result.duration;
+        
+        // 将ASR片段转换为speaker格式（每个片段对应120秒音频）
+        const speakers = segments.map((segmentText, idx) => ({
+            speaker: `Speaker${Math.floor(idx / 10) + 1}`, // 简单的说话人分配
+            startTime: idx * ASR_CONFIG.maxDuration, // 120秒 * 索引
+            endTime: Math.min((idx + 1) * ASR_CONFIG.maxDuration, duration),
+            text: segmentText
+        }));
+        
+        console.log(`分段ASR转写完成: ${segments.length} 个片段，总字符数 ${transcript.length}，总时长 ${duration}秒`);
+        
+        return {
+            success: true,
+            transcript,
+            speakers,
+            duration: duration
+        };
+    } catch (error: any) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        
+        // 使用错误分析工具
+        const context = createErrorContext('ASR转写（分段处理）', 2, Date.now(), {
+            audioUrl,
+            segmentDuration: ASR_CONFIG.maxDuration
+        });
+        const analysis = analyzeError(error, context);
+        logErrorAnalysis(analysis);
+        
+        console.error('分段ASR转写失败:', errorMessage);
+        if (errorStack) {
+            console.error('错误堆栈:', errorStack.substring(0, 500));
+        }
+        
+        // 提供更详细的错误信息
+        let detailedError = errorMessage;
+        if (errorMessage.includes('下载') || errorMessage.includes('fetch')) {
+            detailedError = `音频下载失败: ${errorMessage}`;
+        } else if (errorMessage.includes('OSS') || errorMessage.includes('上传')) {
+            detailedError = `OSS上传失败: ${errorMessage}`;
+        } else if (errorMessage.includes('模块') || errorMessage.includes('Module')) {
+            detailedError = `模块加载失败: ${errorMessage}`;
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('超时')) {
+            detailedError = `处理超时: ${errorMessage}`;
+        }
+        
+        return {
+            success: false,
+            transcript: '',
+            speakers: [],
+            duration: 0,
+            error: detailedError
+        };
+    }
 }
 
 /**
  * 模拟ASR转写（用于测试）
  */
-async function mockASRTranscription(audioUrl: string): Promise<ASRResult> {
-	// 模拟处理时间
-	await new Promise(resolve => setTimeout(resolve, 2000));
-	
-	// 模拟转写结果
-	return {
-		success: true,
-		transcript: `这是从 ${audioUrl} 转写的模拟文本内容。在实际实现中，这里应该是阿里云ASR返回的真实转写结果。`,
-		speakers: [
-			{
-				speaker: 'Speaker1',
-				startTime: 0,
-				endTime: 30,
-				text: '这是Speaker1的发言内容。'
-			},
-			{
-				speaker: 'Speaker2', 
-				startTime: 30,
-				endTime: 60,
-				text: '这是Speaker2的回复内容。'
-			}
-		],
-		duration: 60
-	};
-}
+// 已移除mock实现，禁止回退到极短路径
 
 /**
  * 批量处理多个音频片段

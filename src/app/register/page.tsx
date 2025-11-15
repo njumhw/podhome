@@ -68,7 +68,7 @@ export default function RegisterPage() {
 						加入播客内容转写平台
 					</p>
 					<div className="inline-flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded-lg">
-						<span>✨ 每天可转录5个播客链接</span>
+						<span>✨ 每天可转录2个播客链接</span>
 						<span>💬 参与评论互动</span>
 					</div>
 				</div>

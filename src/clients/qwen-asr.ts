@@ -3,6 +3,7 @@ import { getEnv } from "@/utils/env";
 export type QwenAsrResp = {
   text: string;
   language?: string;
+  segments?: Array<{ text: string; startTime?: number; endTime?: number }>; // 新增：分段信息
 };
 
 function collectTextsDeep(input: any, acc: string[] = []): string[] {
@@ -30,23 +31,36 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
   
   // Check audio file size first
   try {
-    const headRes = await fetch(audioUrl, { method: 'HEAD' });
-    const contentLength = headRes.headers.get('content-length');
-    if (contentLength) {
-      const sizeMB = parseInt(contentLength) / (1024 * 1024);
-      console.log(`Audio file size: ${sizeMB.toFixed(2)} MB`);
-      if (sizeMB > 200) {
-        console.warn(`Large audio file detected (${sizeMB.toFixed(2)} MB), ASR may take longer or fail`);
-      }
-      if (sizeMB > 500) {
-        console.error(`Very large audio file detected (${sizeMB.toFixed(2)} MB), ASR may fail or return incomplete results`);
-      }
-      if (sizeMB > 1000) {
-        console.error(`Extremely large audio file detected (${sizeMB.toFixed(2)} MB), ASR will likely fail or return corrupted results`);
+    const headRes = await fetch(audioUrl, { 
+      method: 'HEAD',
+      signal: AbortSignal.timeout(10000) // 10秒超时
+    });
+    if (!headRes.ok) {
+      console.warn(`Audio file HEAD request failed: HTTP ${headRes.status}`);
+    } else {
+      const contentLength = headRes.headers.get('content-length');
+      if (contentLength) {
+        const sizeMB = parseInt(contentLength) / (1024 * 1024);
+        console.log(`Audio file size: ${sizeMB.toFixed(2)} MB`);
+        if (sizeMB > 200) {
+          console.warn(`Large audio file detected (${sizeMB.toFixed(2)} MB), ASR may take longer or fail`);
+        }
+        if (sizeMB > 500) {
+          console.error(`Very large audio file detected (${sizeMB.toFixed(2)} MB), ASR may fail or return incomplete results`);
+        }
+        if (sizeMB > 1000) {
+          console.error(`Extremely large audio file detected (${sizeMB.toFixed(2)} MB), ASR will likely fail or return corrupted results`);
+        }
       }
     }
   } catch (e) {
-    console.warn("Could not check audio file size:", e);
+    const errorMsg = e instanceof Error ? e.message : String(e);
+    // 如果是网络错误，不要阻止ASR处理，只记录警告
+    if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('timeout')) {
+      console.warn("无法检查音频文件大小（可能是网络问题），继续ASR处理:", errorMsg);
+    } else {
+      console.warn("检查音频文件大小失败:", errorMsg);
+    }
   }
   
   const env = getEnv();
@@ -69,15 +83,25 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
   }
 
   // Step 1: Submit async task
-  const submitRes = await fetch(submitEndpoint, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-      "X-DashScope-Async": "enable",
-    },
-    body: JSON.stringify(payload),
-  });
+  let submitRes: Response;
+  try {
+    submitRes = await fetch(submitEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+        "X-DashScope-Async": "enable",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30000) // 30秒超时
+    });
+  } catch (fetchError) {
+    const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+    if (errorMsg.includes('timeout') || errorMsg.includes('aborted')) {
+      throw new Error(`ASR任务提交超时: ${errorMsg}`);
+    }
+    throw new Error(`ASR任务提交失败 (网络错误): ${errorMsg}`);
+  }
 
   const submitText = await submitRes.text();
   let submitData: any = {};
@@ -100,12 +124,21 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s between polls
 
     // Prefer generic task polling endpoint
-    const statusRes = await fetch(`https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`, {
-      method: "GET",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-      },
-    });
+    let statusRes: Response;
+    try {
+      statusRes = await fetch(`https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`, {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(15000) // 15秒超时
+      });
+    } catch (fetchError) {
+      const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      // 轮询时的网络错误，记录警告但不立即失败，继续重试
+      console.warn(`ASR状态查询失败 (尝试 ${attempt}):`, errorMsg);
+      continue; // 继续下一次轮询
+    }
 
     const statusText = await statusRes.text();
     let statusData: any = {};
@@ -129,12 +162,29 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
       push(out?.text);
       push(out?.result?.text);
 
-      // Arrays of { text }
+      // Arrays of { text } - 保留分段信息
+      let segmentsArray: Array<{ text: string; startTime?: number; endTime?: number }> | undefined = undefined;
       const arrs = [out?.results, out?.result?.results, out?.transcriptions, out?.segments, out?.sentences, out?.data?.result?.transcripts];
       for (const a of arrs) {
-        if (Array.isArray(a)) {
+        if (Array.isArray(a) && a.length > 0) {
           const s = a.map((x: any) => (x?.text || x?.transcript || "")).join(" ").trim();
           if (s) candidates.push(s);
+          
+          // 如果这是segments数组，保留分段信息（优先使用out?.segments）
+          if (a === out?.segments || (!segmentsArray && Array.isArray(out?.segments))) {
+            segmentsArray = out.segments.map((x: any) => ({
+              text: x?.text || x?.transcript || "",
+              startTime: x?.startTime || x?.start || undefined,
+              endTime: x?.endTime || x?.end || undefined
+            })).filter((x: { text: string }) => x.text.trim());
+          } else if (!segmentsArray && (a === out?.results || a === out?.result?.results)) {
+            // 如果results数组包含分段信息，也使用
+            segmentsArray = a.map((x: any) => ({
+              text: x?.text || x?.transcript || "",
+              startTime: x?.startTime || x?.start || undefined,
+              endTime: x?.endTime || x?.end || undefined
+            })).filter(x => x.text.trim());
+          }
         }
       }
 
@@ -182,7 +232,13 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
       if (!text) {
         console.warn("Qwen ASR SUCCEEDED but empty text. Raw output:", JSON.stringify(out).slice(0, 2000));
       }
-      return { text, language: languageDetected };
+      
+      // 如果有分段信息，记录日志
+      if (segmentsArray && segmentsArray.length > 1) {
+        console.log(`DashScope ASR返回了 ${segmentsArray.length} 个分段`);
+      }
+      
+      return { text, language: languageDetected, segments: segmentsArray };
     } else if (taskStatus === "FAILED") {
       throw new Error(`ASR task failed: ${statusData?.output?.message || statusData?.message || "Unknown error"}`);
     } else if (taskStatus === "RUNNING" || taskStatus === "PENDING") {

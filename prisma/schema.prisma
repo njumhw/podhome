@@ -8,22 +8,23 @@ datasource db {
 }
 
 model User {
-  id           String       @id @default(cuid())
-  email        String       @unique
-  username     String       @unique
+  id           String        @id @default(cuid())
+  email        String        @unique
+  username     String        @unique
   passwordHash String
-  role         UserRole     @default(USER)
-  isBanned     Boolean      @default(false)
+  role         UserRole      @default(USER)
+  isBanned     Boolean       @default(false)
   lastLoginAt  DateTime?
-  uploadCount  Int          @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  uploadCount  Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   accessLogs   AccessLog[]
-  inviteCodes  InviteCode[] @relation("UserInviteCodes")
-  invitesUsed  InviteCode[] @relation("InviteUsedBy")
+  inviteCodes  InviteCode[]  @relation("UserInviteCodes")
+  invitesUsed  InviteCode[]  @relation("InviteUsedBy")
   podcasts     Podcast[]
   comments     Comment[]
   commentLikes CommentLike[]
+  podcastLikes PodcastLike[]
 }
 
 model InviteCode {
@@ -80,6 +81,7 @@ model Podcast {
   originalTranscript    String?
   transcript            String?
   summary               String?
+  reportOutline         String? // 报告大纲/框架（两轮生成的第一轮产出）
   processingStartedAt   DateTime?
   processingCompletedAt DateTime?
   createdAt             DateTime          @default(now())
@@ -94,6 +96,9 @@ model Podcast {
   taskLogs              TaskLog[]
   chunks                TranscriptChunk[]
   comments              Comment[]
+  likes                 PodcastLike[]
+
+  @@index([status, updatedAt])
 }
 
 model TranscriptChunk {
@@ -177,7 +182,7 @@ model AudioCache {
   transcript  String?
   script      String?
   summary     String?
-  segments    String[]    @default([])  // ASR分段数据
+  segments    String[]    @default([]) // ASR分段数据
   metadata    Json?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -216,7 +221,7 @@ model TaskQueue {
   data        Json
   result      Json?
   error       String?
-  metrics     Json?     // 处理指标数据
+  metrics     Json? // 处理指标数据
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   startedAt   DateTime?
@@ -228,18 +233,18 @@ model TaskQueue {
 }
 
 model Comment {
-  id        String   @id @default(cuid())
-  content   String
-  podcastId String?
+  id           String   @id @default(cuid())
+  content      String
+  podcastId    String?
   audioCacheId String?
-  userId    String
-  likes     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  user      User     @relation(fields: [userId], references: [id])
-  podcast   Podcast? @relation(fields: [podcastId], references: [id])
-  audioCache AudioCache? @relation(fields: [audioCacheId], references: [id])
+  userId       String
+  likes        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  podcast      Podcast?      @relation(fields: [podcastId], references: [id])
+  audioCache   AudioCache?   @relation(fields: [audioCacheId], references: [id])
   commentLikes CommentLike[]
 
   @@index([podcastId, createdAt])
@@ -252,13 +257,29 @@ model CommentLike {
   commentId String
   userId    String
   createdAt DateTime @default(now())
-  
-  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id])
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
 
   @@unique([commentId, userId])
   @@index([commentId])
   @@index([userId])
+}
+
+model PodcastLike {
+  id        String   @id @default(cuid())
+  podcastId String
+  userId    String? // 允许为null，支持游客点赞
+  userIp    String? // 游客IP地址
+  createdAt DateTime @default(now())
+
+  podcast Podcast @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@unique([podcastId, userId, userIp]) // 确保同一用户/IP不能重复点赞
+  @@index([podcastId])
+  @@index([userId])
+  @@index([userIp])
 }
 
 enum UserRole {

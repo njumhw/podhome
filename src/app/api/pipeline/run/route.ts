@@ -1,14 +1,6 @@
 import { NextRequest } from "next/server";
-import { runPipeline } from "@/server/pipeline";
-import { requireAdminSecret } from "@/server/auth";
 
+// 已停用旧Pipeline接口（包含清洗逻辑）。防止后台触发清洗。
 export async function POST(req: NextRequest) {
-	const { podcastId, adminSecret } = (await req.json().catch(() => ({}))) as { podcastId?: string; adminSecret?: string };
-	if (!podcastId || !adminSecret) return new Response("Bad Request", { status: 400 });
-	if (!requireAdminSecret(adminSecret)) return new Response("Forbidden", { status: 403 });
-
-	await runPipeline(podcastId).catch((e) => {
-		console.error("pipeline error", e);
-	});
-	return Response.json({ ok: true });
+    return new Response("Pipeline disabled: cleaning flow has been removed", { status: 410 });
 }

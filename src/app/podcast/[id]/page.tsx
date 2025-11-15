@@ -8,6 +8,8 @@ import remarkGfm from 'remark-gfm';
 import TopicModal from '@/components/TopicModal';
 import { useToast } from '@/components/Toast';
 import { SummaryDisplay } from '@/components/SummaryDisplay';
+import LikeButton from '@/components/LikeButton';
+import AudioPlayer from '@/components/AudioPlayer';
 
 type Topic = {
   id: string;
@@ -25,9 +27,12 @@ type PodcastDetail = {
   originalUrl: string;
   summary: string | null;
   topic: Topic | null;
-  script: string | null;
+  script: string | null; // 清洗稿（已移除，始终为null）
+  originalTranscript: string | null; // ASR原文
+  reportOutline: string | null; // 报告大纲
   // report字段已删除，只使用summary
   updatedAt: string;
+  likeCount?: number;
 };
 
 type Comment = {
@@ -57,10 +62,8 @@ export default function PodcastDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showFullscreenReport, setShowFullscreenReport] = useState(false);
   const [showFullscreenScript, setShowFullscreenScript] = useState(false);
-  const [showFullscreenASR, setShowFullscreenASR] = useState(false);
-  const [showCleaned, setShowCleaned] = useState(false); // 折叠清洗版
-  const [showASR, setShowASR] = useState(false);
-  const [asrText, setAsrText] = useState<string>('');
+  const [showASR, setShowASR] = useState(false); // 控制ASR原文的展开/收起（移除清洗版相关状态）
+  const [asrTab, setAsrTab] = useState<'asr' | 'outline'>('asr'); // ASR原文区域的tab：'asr' 或 'outline'
   const [copySuccess, setCopySuccess] = useState('');
   const [downloadStatus, setDownloadStatus] = useState('');
   const [shareSuccess, setShareSuccess] = useState('');
@@ -175,18 +178,7 @@ export default function PodcastDetailPage() {
   };
 
 
-  const loadASR = async () => {
-    try {
-      if (!podcast?.originalUrl) return;
-      const res = await fetch(`/api/public/podcast/asr?url=${encodeURIComponent(podcast.originalUrl)}&t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAsrText(data.asr || '');
-      }
-    } catch (e) {
-      console.warn('加载ASR失败', e);
-    }
-  };
+  // loadASR函数已移除：ASR原文直接从podcast.originalTranscript获取
 
   const handleSubmitComment = async () => {
     if (!newComment.trim() || !user || !podcast) return;
@@ -276,14 +268,46 @@ export default function PodcastDetailPage() {
   };
 
   const handleCopy = async (text: string, type: string) => {
+    // 优先使用现代 Clipboard API（需要 HTTPS 或 localhost）
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopySuccess(`${type}已复制到剪贴板`);
+        setTimeout(() => setCopySuccess(''), 2000);
+        return;
+      } catch (err) {
+        console.warn('Clipboard API 失败，尝试降级方案:', err);
+        // 继续尝试降级方案
+      }
+    }
+    
+    // 降级方案：使用传统的 execCommand 方法（适用于 HTTP 环境）
     try {
-      await navigator.clipboard.writeText(text);
-      setCopySuccess(`${type}已复制到剪贴板`);
-      setTimeout(() => setCopySuccess(''), 2000);
+      // 创建一个临时的 textarea 元素
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-999999px';
+      textarea.style.top = '-999999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      
+      // 尝试复制
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      
+      if (successful) {
+        setCopySuccess(`${type}已复制到剪贴板`);
+        setTimeout(() => setCopySuccess(''), 2000);
+      } else {
+        throw new Error('execCommand 复制失败');
+      }
     } catch (err) {
       console.error('复制失败:', err);
-      setCopySuccess('复制失败，请手动选择文本复制');
-      setTimeout(() => setCopySuccess(''), 3000);
+      // 最后的降级方案：提示用户手动复制
+      setCopySuccess('复制失败，请手动选择文本复制（Ctrl+C 或 Cmd+C）');
+      setTimeout(() => setCopySuccess(''), 5000);
     }
   };
 
@@ -311,14 +335,45 @@ export default function PodcastDetailPage() {
   };
 
   const handleShare = async () => {
+    const currentUrl = window.location.href;
+    
+    // 优先使用现代 Clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(currentUrl);
+        setShareSuccess('链接已复制');
+        setTimeout(() => setShareSuccess(''), 1500);
+        return;
+      } catch (err) {
+        console.warn('Clipboard API 失败，尝试降级方案:', err);
+        // 继续尝试降级方案
+      }
+    }
+    
+    // 降级方案：使用传统的 execCommand 方法
     try {
-      const currentUrl = window.location.href;
-      await navigator.clipboard.writeText(currentUrl);
-      setShareSuccess('链接已复制');
-      setTimeout(() => setShareSuccess(''), 1500);
+      const textarea = document.createElement('textarea');
+      textarea.value = currentUrl;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-999999px';
+      textarea.style.top = '-999999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      
+      if (successful) {
+        setShareSuccess('链接已复制');
+        setTimeout(() => setShareSuccess(''), 1500);
+      } else {
+        throw new Error('execCommand 复制失败');
+      }
     } catch (err) {
-      setShareSuccess('复制失败');
-      setTimeout(() => setShareSuccess(''), 1500);
+      console.error('复制失败:', err);
+      setShareSuccess('复制失败，请手动复制链接');
+      setTimeout(() => setShareSuccess(''), 3000);
     }
   };
 
@@ -330,7 +385,7 @@ export default function PodcastDetailPage() {
         author: podcast.author,
         publishedAt: podcast.publishedAt ? new Date(podcast.publishedAt).toISOString().split('T')[0] : '',
         summary: podcast.summary || '', // 使用 summary 字段
-        script: podcast.script || '',
+        script: podcast.originalTranscript || '', // 编辑ASR原文
       });
       setIsEditing(true);
     }
@@ -375,7 +430,8 @@ export default function PodcastDetailPage() {
         author: editData.author,
         publishedAt: editData.publishedAt,
         summary: editData.summary,
-        script: editData.script,
+        script: null, // 清洗稿已移除
+        originalTranscript: editData.script, // 更新ASR原文
       });
       
       setIsEditing(false);
@@ -461,9 +517,13 @@ export default function PodcastDetailPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-3 flex-1">
-                      <h1 className="text-3xl font-bold text-gray-900">{podcast.title}</h1>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <h1 className="text-3xl font-bold text-gray-900 mb-4">{podcast.title}</h1>
+                      {/* 音频播放器 */}
+                      {podcast.audioUrl && (
+                        <AudioPlayer audioUrl={podcast.audioUrl} title={podcast.title} />
+                      )}
                     </div>
                     <div className="flex items-center gap-2 ml-4">
                       <button
@@ -577,7 +637,14 @@ export default function PodcastDetailPage() {
           {/* 播客总结 - 提高可视高度 */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">播客总结</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-semibold text-gray-900">播客总结</h2>
+                <LikeButton 
+                  podcastId={podcast.id} 
+                  initialLikeCount={podcast.likeCount || 0}
+                  className="text-base"
+                />
+              </div>
               {podcast.summary && !isEditing && (
                 <div className="flex gap-2">
                   <button
@@ -621,185 +688,157 @@ export default function PodcastDetailPage() {
             )}
           </div>
 
-          {/* 访谈全文 */}
+          {/* ASR原文（原"访谈全文"部分，清洗稿已移除） */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-gray-900">访谈全文</h2>
-              {podcast.script && !isEditing && (
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-semibold text-gray-900">ASR原文</h2>
+                {/* Tab切换：ASR原文 / 报告大纲 */}
+                {podcast.reportOutline && (
+                  <div className="flex items-center gap-1 border border-gray-200 rounded-md p-1">
+                    <button
+                      onClick={() => setAsrTab('asr')}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        asrTab === 'asr'
+                          ? 'bg-gray-900 text-white'
+                          : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                      }`}
+                    >
+                      ASR原文
+                    </button>
+                    <button
+                      onClick={() => setAsrTab('outline')}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        asrTab === 'outline'
+                          ? 'bg-gray-900 text-white'
+                          : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                      }`}
+                    >
+                      报告大纲
+                    </button>
+                  </div>
+                )}
+              </div>
+              {!isEditing && (
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowCleaned(!showCleaned)}
-                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                  >
-                    {showCleaned ? '收起' : '展开清洗版'}
-                  </button>
-                  <button
-                    onClick={() => { setShowASR(!showASR); if (!asrText && !showASR) loadASR(); }}
-                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                  >
-                    {showASR ? '收起' : '展开ASR'}
-                  </button>
-                  <button
-                    onClick={() => handleCopy(podcast.script || '', '访谈全文')}
-                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                    title="复制全文"
-                  >
-                    复制
-                  </button>
-                  <button
-                    onClick={() => setShowFullscreenScript(true)}
-                    className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
-                  >
-                    全屏
-                  </button>
+                  {asrTab === 'asr' && podcast.originalTranscript && (
+                    <>
+                      <button
+                        onClick={() => setShowASR(!showASR)}
+                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                      >
+                        {showASR ? '收起' : '展开'}
+                      </button>
+                      <button
+                        onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
+                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                        title="复制ASR原文"
+                      >
+                        复制
+                      </button>
+                      <button
+                        onClick={() => setShowFullscreenScript(true)}
+                        className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
+                      >
+                        全屏
+                      </button>
+                    </>
+                  )}
+                  {asrTab === 'outline' && podcast.reportOutline && (
+                    <>
+                      <button
+                        onClick={() => handleCopy(podcast.reportOutline || '', '报告大纲')}
+                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                        title="复制报告大纲"
+                      >
+                        复制
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
             {isEditing ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">访谈全文内容</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">ASR原文内容</label>
                 <textarea
                   value={editData.script}
                   onChange={(e) => setEditData({ ...editData, script: e.target.value })}
                   className="w-full p-3 border border-gray-300 rounded-md text-gray-900"
                   rows={20}
-                  placeholder="请输入访谈全文内容..."
+                  placeholder="请输入ASR原文内容..."
                 />
               </div>
             ) : (
-              podcast.script && showCleaned ? (
-                <div 
-                  className="max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded p-3"
-                  style={{ 
-                    height: '400px', 
-                    wordWrap: 'break-word', 
-                    overflowWrap: 'break-word',
-                    backgroundColor: '#ffffff',
-                    color: '#1f2937',
-                    lineHeight: '1.4'
-                  }}
-                  onWheel={(e) => {
-                    e.stopPropagation();
-                  }}
-                >
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      p: ({ children }) => (
-                        <p style={{ 
-                          wordWrap: 'break-word', 
-                          overflowWrap: 'break-word', 
-                          whiteSpace: 'normal', 
-                          color: '#1f2937', 
-                          fontSize: '14px', 
-                          lineHeight: '1.3',
-                          margin: '0 0 8px 0',
-                          textDecoration: 'none'
-                        }}>
-                          {children}
-                        </p>
-                      ),
-                      li: ({ children }) => (
-                        <li style={{ 
-                          wordWrap: 'break-word', 
-                          overflowWrap: 'break-word', 
-                          color: '#1f2937', 
-                          fontSize: '14px', 
-                          lineHeight: '1.3',
-                          margin: '0 0 2px 0',
-                          textDecoration: 'none'
-                        }}>
-                          {children}
-                        </li>
-                      ),
-                      strong: ({ children }) => (
-                        <strong style={{ 
-                          wordWrap: 'break-word', 
-                          overflowWrap: 'break-word', 
-                          color: '#111827', 
-                          fontSize: '14px', 
-                          lineHeight: '1.3',
-                          fontWeight: 'bold',
-                          textDecoration: 'none'
-                        }}>
-                          {children}
-                        </strong>
-                      ),
-                      h1: ({ children }) => (
-                        <h1 style={{ 
-                          color: '#111827', 
-                          fontSize: '18px', 
-                          fontWeight: 'bold', 
-                          lineHeight: '1.2',
-                          marginBottom: '6px', 
-                          marginTop: '8px',
-                          textDecoration: 'none'
-                        }}>
-                          {children}
-                        </h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 style={{ 
-                          color: '#111827', 
-                          fontSize: '16px', 
-                          fontWeight: 'bold', 
-                          lineHeight: '1.2',
-                          marginBottom: '4px', 
-                          marginTop: '6px',
-                          textDecoration: 'none'
-                        }}>
-                          {children}
-                        </h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 style={{ 
-                          color: '#111827', 
-                          fontSize: '15px', 
-                          fontWeight: 'bold', 
-                          lineHeight: '1.2',
-                          marginBottom: '2px', 
-                          marginTop: '4px',
-                          textDecoration: 'none'
-                        }}>
-                          {children}
-                        </h3>
-                      )
-                    }}
-                  >
-                    {podcast.script}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <div className="text-gray-500 text-sm">{podcast.script ? '点击上方"展开清洗版"查看' : '暂无访谈全文'}</div>
-              )
+              <>
+                {asrTab === 'asr' ? (
+                  showASR && podcast.originalTranscript ? (
+                    <div 
+                      className="max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded p-3"
+                      style={{ 
+                        height: '400px', 
+                        wordWrap: 'break-word', 
+                        overflowWrap: 'break-word',
+                        backgroundColor: '#ffffff',
+                        color: '#1f2937',
+                        lineHeight: '1.4',
+                        whiteSpace: 'pre-wrap'
+                      }}
+                      onWheel={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      {podcast.originalTranscript}
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 text-sm">
+                      {podcast.originalTranscript ? '点击上方"展开"查看ASR原文' : '暂无ASR原文'}
+                    </div>
+                  )
+                ) : (
+                  // 报告大纲tab
+                  podcast.reportOutline ? (
+                    <div 
+                      className="max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded p-3"
+                      style={{ 
+                        height: '400px', 
+                        wordWrap: 'break-word', 
+                        overflowWrap: 'break-word',
+                        backgroundColor: '#ffffff',
+                        color: '#1f2937',
+                        lineHeight: '1.6',
+                        whiteSpace: 'pre-wrap'
+                      }}
+                      onWheel={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          h1: ({ children }) => <h1 className="text-xl font-bold mb-3 mt-4">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 mt-3">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-base font-semibold mb-2 mt-2">{children}</h3>,
+                          p: ({ children }) => <p className="mb-2 leading-6">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                          li: ({ children }) => <li className="text-sm">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                        }}
+                      >
+                        {podcast.reportOutline}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 text-sm">
+                      暂无报告大纲
+                    </div>
+                  )
+                )}
+              </>
             )}
           </div>
-          {showASR && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="text-base font-semibold text-gray-900">ASR原文</h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleCopy(asrText, 'ASR原文')}
-                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                    title="复制ASR原文"
-                  >
-                    复制
-                  </button>
-                  <button
-                    onClick={() => setShowFullscreenASR(true)}
-                    className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                    title="全屏查看ASR原文"
-                  >
-                    全屏
-                  </button>
-                </div>
-              </div>
-              <div className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed max-h-[300px] overflow-y-auto border border-gray-100 rounded p-3">
-                {asrText || '加载中...'}
-              </div>
-            </div>
-          )}
           {/* 评论区 */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">评论区</h2>
@@ -990,17 +1029,17 @@ export default function PodcastDetailPage() {
         </div>
       )}
 
-      {/* 全屏访谈全文模态框 */}
+      {/* 全屏ASR原文模态框（原"访谈全文"模态框，清洗稿已移除） */}
       {showFullscreenScript && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg w-full h-full max-w-6xl max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-900">访谈全文</h2>
+              <h2 className="text-2xl font-bold text-gray-900">ASR原文</h2>
               <div className="flex items-center gap-3">
                 <button
-                    onClick={() => handleCopy(podcast.script || '', '访谈全文')}
+                  onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
                   className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
-                  title="复制全文"
+                  title="复制ASR原文"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -1016,78 +1055,8 @@ export default function PodcastDetailPage() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
-              <div className="prose prose-lg max-w-none">
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    p: ({ children }) => (
-                      <p style={{ color: '#1f2937', fontSize: '16px', lineHeight: '1.7', marginBottom: '16px' }}>
-                        {children}
-                      </p>
-                    ),
-                    li: ({ children }) => (
-                      <li style={{ color: '#1f2937', fontSize: '16px', lineHeight: '1.7', marginBottom: '8px' }}>
-                        {children}
-                      </li>
-                    ),
-                    strong: ({ children }) => (
-                      <strong style={{ color: '#111827', fontSize: '16px', lineHeight: '1.7' }}>
-                        {children}
-                      </strong>
-                    ),
-                    h1: ({ children }) => (
-                      <h1 style={{ color: '#111827', fontSize: '24px', fontWeight: 'bold', marginBottom: '20px', marginTop: '24px' }}>
-                        {children}
-                      </h1>
-                    ),
-                    h2: ({ children }) => (
-                      <h2 style={{ color: '#111827', fontSize: '20px', fontWeight: 'bold', marginBottom: '16px', marginTop: '20px' }}>
-                        {children}
-                      </h2>
-                    ),
-                    h3: ({ children }) => (
-                      <h3 style={{ color: '#111827', fontSize: '18px', fontWeight: 'bold', marginBottom: '12px', marginTop: '16px' }}>
-                        {children}
-                      </h3>
-                    )
-                  }}
-                >
-                  {podcast.script}
-                </ReactMarkdown>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 全屏ASR原文模态框 */}
-      {showFullscreenASR && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg w-full h-full max-w-6xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-900">ASR原文</h2>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleCopy(asrText, 'ASR原文')}
-                  className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
-                  title="复制ASR原文"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  复制
-                </button>
-                <button
-                  onClick={() => setShowFullscreenASR(false)}
-                  className="text-gray-500 hover:text-gray-700 text-2xl"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
               <div className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
-                {asrText || '加载中...'}
+                {podcast.originalTranscript || '暂无ASR原文'}
               </div>
             </div>
           </div>

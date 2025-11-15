@@ -321,7 +321,7 @@ export function EnhancedProcessingStatus({ isVisible, onClose, onCancel }: Enhan
               </svg>
             </button>
           </div>
-          <p className="text-sm text-gray-500">阿茂每天可以处理5条播客链接哦</p>
+          <p className="text-sm text-gray-500">阿茂每天可以处理2条播客链接哦</p>
         </div>
         
         {/* 标签页导航 */}

@@ -75,15 +75,45 @@ const OSS_REGION = process.env.ALIYUN_OSS_REGION as string | undefined; // e.g. 
 const OSS_BUCKET = process.env.ALIYUN_OSS_BUCKET as string | undefined;
 
 function getOssClient(): OSS | null {
-  if (!OSS_ACCESS_KEY_ID || !OSS_ACCESS_KEY_SECRET || !OSS_REGION || !OSS_BUCKET) return null;
-  const client = new OSS({
-    accessKeyId: OSS_ACCESS_KEY_ID,
-    accessKeySecret: OSS_ACCESS_KEY_SECRET,
-    region: `oss-${OSS_REGION}`,
-    bucket: OSS_BUCKET,
-    timeout: 60000,
-  });
-  return client as unknown as OSS;
+  if (!OSS_ACCESS_KEY_ID || !OSS_ACCESS_KEY_SECRET || !OSS_REGION || !OSS_BUCKET) {
+    console.warn('OSS配置不完整:', {
+      hasAccessKeyId: !!OSS_ACCESS_KEY_ID,
+      hasAccessKeySecret: !!OSS_ACCESS_KEY_SECRET,
+      hasRegion: !!OSS_REGION,
+      hasBucket: !!OSS_BUCKET
+    });
+    return null;
+  }
+  try {
+    // 确保region格式正确（如果已经是oss-开头，不再添加）
+    const region = OSS_REGION.startsWith('oss-') ? OSS_REGION : `oss-${OSS_REGION}`;
+    
+    console.log('创建OSS客户端:', {
+      region,
+      bucket: OSS_BUCKET,
+      hasAccessKeyId: !!OSS_ACCESS_KEY_ID,
+      hasAccessKeySecret: !!OSS_ACCESS_KEY_SECRET
+    });
+    
+    const client = new OSS({
+      accessKeyId: OSS_ACCESS_KEY_ID,
+      accessKeySecret: OSS_ACCESS_KEY_SECRET,
+      region: region,
+      bucket: OSS_BUCKET,
+      timeout: 60000,
+    });
+    
+    console.log('✅ OSS客户端创建成功');
+    return client as unknown as OSS;
+  } catch (error: any) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('❌ 创建OSS客户端失败:', errorMessage);
+    if (errorStack) {
+      console.error('   错误堆栈:', errorStack.substring(0, 500));
+    }
+    return null;
+  }
 }
 
 export async function uploadToOssAndGetPublicUrl(
@@ -91,12 +121,42 @@ export async function uploadToOssAndGetPublicUrl(
   file: Buffer,
   contentType: string
 ): Promise<string | null> {
-  const client = getOssClient();
-  if (!client || !OSS_BUCKET || !OSS_REGION) return null;
-  await client.put(path, file, { headers: { 'Content-Type': contentType } });
-  // Public URL on OSS
-  const url = `https://${OSS_BUCKET}.oss-${OSS_REGION}.aliyuncs.com/${encodeURI(path)}`;
-  return url;
+  try {
+    const client = getOssClient();
+    if (!client || !OSS_BUCKET || !OSS_REGION) {
+      console.warn('OSS客户端未配置，无法上传文件', {
+        hasClient: !!client,
+        hasBucket: !!OSS_BUCKET,
+        hasRegion: !!OSS_REGION,
+        hasAccessKeyId: !!OSS_ACCESS_KEY_ID,
+        hasAccessKeySecret: !!OSS_ACCESS_KEY_SECRET
+      });
+      return null;
+    }
+    
+    console.log(`开始上传到OSS: ${path} (${file.length} 字节)`);
+    const result = await client.put(path, file, { headers: { 'Content-Type': contentType } });
+    console.log(`OSS上传成功: ${path}`, result.res?.status || 'OK');
+    
+    // Public URL on OSS
+    const url = `https://${OSS_BUCKET}.oss-${OSS_REGION}.aliyuncs.com/${encodeURI(path)}`;
+    return url;
+  } catch (error: any) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as any)?.code;
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    console.error(`❌ OSS上传失败 (${path}):`, errorMessage);
+    if (errorCode) {
+      console.error(`   错误代码: ${errorCode}`);
+    }
+    if (errorStack) {
+      console.error(`   错误堆栈: ${errorStack.substring(0, 500)}`);
+    }
+    
+    // 不抛出错误，返回null让调用者处理
+    return null;
+  }
 }
 
 

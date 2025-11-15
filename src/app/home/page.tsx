@@ -16,6 +16,7 @@ type PodcastItem = {
   summary: string | null;
   topic: string | null;
   updatedAt: string;
+  likeCount?: number;
 };
 
 type SearchResult = {
@@ -174,10 +175,27 @@ export default function HomePage() {
     
     setIsSearching(true);
     try {
-      const res = await fetch(`/api/public/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      const result: SearchResult = await res.json();
+      console.log('Starting search for:', searchQuery.trim());
+      const url = `/api/public/search?q=${encodeURIComponent(searchQuery.trim())}`;
+      console.log('Search URL:', url);
       
-      console.log('Search API response:', result); // 调试信息
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log('Search response status:', res.status);
+      console.log('Search response headers:', res.headers);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      
+      const result: SearchResult = await res.json();
+      console.log('Search API response:', result);
       
       // 确保返回的数据结构正确
       if (result && typeof result === 'object') {
@@ -185,14 +203,19 @@ export default function HomePage() {
           hits: result.hits || [],
           notFound: result.notFound || false
         };
-        console.log('Setting search result:', searchResult); // 调试信息
+        console.log('Setting search result:', searchResult);
         setSearchResult(searchResult);
       } else {
-        console.log('Invalid result, setting notFound=true'); // 调试信息
+        console.log('Invalid result, setting notFound=true');
         setSearchResult({ hits: [], notFound: true });
       }
     } catch (error) {
       console.error('Search failed:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       setSearchResult({ hits: [], notFound: true });
     } finally {
       setIsSearching(false);
@@ -231,20 +254,98 @@ export default function HomePage() {
     window.dispatchEvent(new Event('storage'));
 
     try {
-      // 使用异步处理API
-      const res = await fetch('/api/process-audio-async', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        const errorMessage = errorData.error || '处理失败';
-        throw new Error(errorMessage);
+      console.log('🚀 开始提交播客处理请求:', url);
+      
+      // 使用异步处理API，添加超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+      
+      let res: Response;
+      try {
+        console.log('📡 发送API请求到 /api/process-audio-async');
+        res = await fetch('/api/process-audio-async', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        console.log('✅ API请求完成，状态码:', res.status, res.statusText);
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+        console.error('❌ API请求失败:', {
+          name: fetchError.name,
+          message: errorMessage,
+          stack: fetchError.stack
+        });
+        
+        // 详细诊断网络错误
+        if (fetchError.name === 'AbortError' || errorMessage.includes('aborted')) {
+          throw new Error('请求超时：服务器响应时间超过30秒，请检查网络连接或稍后重试');
+        } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+          throw new Error('网络连接失败：无法连接到服务器，请检查网络连接或确认服务器是否正常运行');
+        } else if (errorMessage.includes('CORS')) {
+          throw new Error('跨域请求失败：请检查服务器CORS配置');
+        } else {
+          throw new Error(`网络请求失败: ${errorMessage}`);
+        }
       }
 
-      const result = await res.json();
+      if (!res.ok) {
+        let errorData: any = {};
+        try {
+          errorData = await res.json();
+        } catch (e) {
+          // 如果响应不是JSON，尝试读取文本
+          const text = await res.text().catch(() => '');
+          errorData = { error: text || `HTTP ${res.status} ${res.statusText}` };
+        }
+        
+        const errorMessage = errorData.error || `服务器错误 (${res.status})`;
+        
+        // 根据状态码提供更详细的错误信息
+        if (res.status === 401) {
+          throw new Error('请先登录后再处理播客');
+        } else if (res.status === 429) {
+          throw new Error('今日处理额度已用完，请明天再试');
+        } else if (res.status === 500) {
+          throw new Error(`服务器内部错误: ${errorMessage}`);
+        } else if (res.status === 503) {
+          throw new Error('服务暂时不可用，请稍后重试');
+        } else {
+          throw new Error(errorMessage);
+        }
+      }
+
+      let result: any;
+      try {
+        result = await res.json();
+        console.log('📦 API响应数据:', result);
+      } catch (jsonError) {
+        console.error('❌ JSON解析失败:', jsonError);
+        const text = await res.text().catch(() => '');
+        console.error('响应文本:', text.substring(0, 500));
+        throw new Error(`服务器响应格式错误: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+      }
+      
+      // 验证响应数据
+      if (!result) {
+        console.error('❌ API响应为空');
+        throw new Error('服务器返回了空响应');
+      }
+      
+      if (!result.success) {
+        console.error('❌ API返回失败:', result);
+        throw new Error(result?.error || result?.message || '服务器返回了失败响应');
+      }
+      
+      if (!result.taskId) {
+        console.error('❌ API响应缺少taskId:', result);
+        throw new Error('服务器响应格式错误：缺少taskId');
+      }
+      
+      console.log('✅ 任务提交成功，taskId:', result.taskId);
       
       // 更新处理项目，添加taskId
       const updatedItems = items.map((item: any) => 
@@ -259,26 +360,34 @@ export default function HomePage() {
       localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
       window.dispatchEvent(new Event('storage'));
       
-      // 开始轮询任务状态
-      pollTaskStatus(result.taskId, processingId);
-      
       // 显示成功消息
       toast.success('任务已提交', '播客处理任务已提交，正在后台处理中...');
+      
+      // 延迟2秒后开始轮询，给任务一些时间开始处理
+      // 这样可以避免任务刚提交时立即轮询可能遇到的网络错误
+      setTimeout(() => {
+        pollTaskStatus(result.taskId, processingId);
+      }, 2000);
 
     } catch (error) {
       console.error('Processing failed:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       
       // 更新处理状态为失败
+      const errorMessage = error instanceof Error ? error.message : String(error);
       const updatedItems = items.map((item: any) => 
         item.id === processingId 
-          ? { ...item, status: 'failed', progress: 0, error: error instanceof Error ? error.message : String(error) }
+          ? { ...item, status: 'failed', progress: 0, error: errorMessage }
           : item
       );
       localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
       window.dispatchEvent(new Event('storage'));
       
-      // 显示友好的错误信息
-      const errorMessage = error instanceof Error ? error.message : '处理失败，请重试';
+      // 显示友好的错误信息，根据错误类型提供不同的提示
       if (errorMessage.includes('请先登录')) {
         toast.error('请先登录', '请先登录后再处理播客', {
           action: {
@@ -288,18 +397,32 @@ export default function HomePage() {
         });
       } else if (errorMessage.includes('额度已用完')) {
         toast.warning('今日额度已用完', '今日处理额度已用完，请明天再试');
-      } else if (errorMessage.includes('timeout') || errorMessage.includes('超时')) {
-        toast.error('阿茂去摸鱼了', '不好意思，阿茂好像去摸鱼了，请联系下阿茅吧', {
+      } else if (errorMessage.includes('请求超时') || errorMessage.includes('超时')) {
+        toast.error('请求超时', errorMessage, {
           action: {
-            label: '联系阿茅',
-            onClick: () => alert('请联系阿茅：maoweihao@example.com 或微信：your_wechat_id')
+            label: '重试',
+            onClick: () => handleProcessPodcast(url)
+          }
+        });
+      } else if (errorMessage.includes('网络连接失败') || errorMessage.includes('无法连接到服务器')) {
+        toast.error('网络连接失败', errorMessage, {
+          action: {
+            label: '重试',
+            onClick: () => handleProcessPodcast(url)
+          }
+        });
+      } else if (errorMessage.includes('服务器内部错误')) {
+        toast.error('服务器错误', errorMessage, {
+          action: {
+            label: '联系支持',
+            onClick: () => alert('请联系支持：maoweihao@example.com')
           }
         });
       } else {
-        toast.error('阿茂去摸鱼了', '不好意思，阿茂好像去摸鱼了，请联系下阿茅吧', {
+        toast.error('处理失败', errorMessage || '未知错误，请稍后重试', {
           action: {
-            label: '联系阿茅',
-            onClick: () => alert('请联系阿茅：maoweihao@example.com 或微信：your_wechat_id')
+            label: '重试',
+            onClick: () => handleProcessPodcast(url)
           }
         });
       }
@@ -308,13 +431,127 @@ export default function HomePage() {
 
   // 轮询任务状态
   const pollTaskStatus = async (taskId: string, processingId: string) => {
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 5; // 增加到5次，给更多重试机会
+    let pollCount = 0;
+    let lastSuccessfulPoll = Date.now(); // 记录最后一次成功轮询的时间
+    
+    console.log(`🔄 开始轮询任务状态: ${taskId}`);
+    
     const pollInterval = setInterval(async () => {
+      pollCount++;
       try {
-        const res = await fetch(`/api/task-status?taskId=${taskId}`);
-        if (!res.ok) return;
+        console.log(`📡 轮询任务状态 (第${pollCount}次): ${taskId}`);
+        const res = await fetch(`/api/task-status?taskId=${taskId}`, {
+          signal: AbortSignal.timeout(10000) // 10秒超时
+        });
+        
+        if (!res.ok) {
+          consecutiveErrors++;
+          console.warn(`⚠️ 任务状态查询失败 (${consecutiveErrors}/${maxConsecutiveErrors}): HTTP ${res.status}`);
+          
+          // 只有在连续失败且距离最后一次成功轮询超过30秒时，才考虑标记为失败
+          // 这样可以避免任务刚提交时立即轮询可能遇到的网络错误
+          const timeSinceLastSuccess = Date.now() - lastSuccessfulPoll;
+          if (consecutiveErrors >= maxConsecutiveErrors && timeSinceLastSuccess > 30000) {
+            clearInterval(pollInterval);
+            
+            // 在标记为失败之前，先尝试通过URL搜索播客，看看是否已经成功保存
+            try {
+              const existing = localStorage.getItem('processingPodcasts');
+              const items = existing ? JSON.parse(existing) : [];
+              const currentItem = items.find((item: any) => item.id === processingId);
+              
+              if (currentItem?.url) {
+                console.log('🔍 HTTP错误后，尝试通过URL搜索播客:', currentItem.url);
+                const searchRes = await fetch(`/api/public/search?q=${encodeURIComponent(currentItem.url)}`);
+                if (searchRes.ok) {
+                  const searchData = await searchRes.json();
+                  if (searchData.results && searchData.results.length > 0) {
+                    const podcast = searchData.results[0];
+                    console.log('✅ 发现播客已成功保存:', podcast.id);
+                    
+                    // 更新处理状态为完成
+                    const updatedItems = items.map((item: any) => 
+                      item.id === processingId 
+                        ? { 
+                            ...item, 
+                            status: 'completed', 
+                            progress: 100, 
+                            title: podcast.title,
+                            error: null,
+                            completedAt: Date.now()
+                          }
+                        : item
+                    );
+                    localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+                    window.dispatchEvent(new Event('storage'));
+                    
+                    // 刷新首页数据
+                    loadLatest();
+                    loadHot();
+                    
+                    // 显示右上角通知，不自动跳转
+                    toast.success(
+                      '处理完成',
+                      `${podcast.title || '播客'} 已处理完成，点击查看`,
+                      {
+                        duration: 8000,
+                        action: {
+                          label: '查看',
+                          onClick: () => {
+                            window.location.href = `/podcast/${podcast.id}`;
+                          }
+                        }
+                      }
+                    );
+                    return;
+                  }
+                }
+              }
+            } catch (searchError) {
+              console.warn('搜索播客失败，继续标记为失败:', searchError);
+            }
+            
+            // 更新处理状态为失败
+            const existing = localStorage.getItem('processingPodcasts');
+            const items = existing ? JSON.parse(existing) : [];
+            const updatedItems = items.map((item: any) => 
+              item.id === processingId 
+                ? { 
+                    ...item, 
+                    status: 'failed', 
+                    progress: 0, 
+                    error: `无法获取任务状态 (HTTP ${res.status})，请稍后重试或检查任务是否正在处理中`
+                  }
+                : item
+            );
+            localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+            window.dispatchEvent(new Event('storage'));
+            
+            toast.error('处理失败', `无法获取任务状态，请稍后重试或检查任务是否正在处理中`);
+            return;
+          }
+          
+          // 等待下次重试
+          return;
+        }
+        
+        // 请求成功，更新最后成功时间并重置错误计数
+        lastSuccessfulPoll = Date.now();
+        if (consecutiveErrors > 0) {
+          console.log(`✅ 任务状态查询恢复成功，重置错误计数`);
+          consecutiveErrors = 0;
+        }
         
         const taskStatus = await res.json();
+        console.log(`📦 任务状态响应:`, {
+          status: taskStatus.status,
+          hasResult: !!taskStatus.result,
+          error: taskStatus.error
+        });
         
+        // 如果任务状态为READY，说明处理成功
         if (taskStatus.status === 'READY') {
           clearInterval(pollInterval);
           
@@ -328,6 +565,7 @@ export default function HomePage() {
                   status: 'completed', 
                   progress: 100, 
                   title: taskStatus.result?.title,
+                  error: null, // 清除之前的错误信息
                   completedAt: Date.now()
                 }
               : item
@@ -339,14 +577,271 @@ export default function HomePage() {
           loadLatest();
           loadHot();
           
-          // 跳转到详情页
+          // 显示右上角通知，不自动跳转
           if (taskStatus.result?.id) {
-            setTimeout(() => {
-              window.location.href = `/podcast/${taskStatus.result.id}`;
-            }, 1000);
+            const podcastTitle = taskStatus.result?.title || '播客';
+            toast.success(
+              '处理完成',
+              `${podcastTitle} 已处理完成，点击查看`,
+              {
+                duration: 8000, // 8秒后自动消失
+                action: {
+                  label: '查看',
+                  onClick: () => {
+                    window.location.href = `/podcast/${taskStatus.result.id}`;
+                  }
+                }
+              }
+            );
+          } else {
+            toast.success('处理完成', '播客已处理完成，请刷新页面查看');
           }
           
         } else if (taskStatus.status === 'FAILED') {
+          clearInterval(pollInterval);
+          
+          // 判断是否是"立刻失败"（快速失败）
+          const isQuickFailure = taskStatus.startedAt && taskStatus.completedAt && 
+                               (new Date(taskStatus.completedAt).getTime() - new Date(taskStatus.startedAt).getTime()) < 5000; // 5秒内失败
+          
+          // 判断是否是网络相关错误
+          const errorMessage = taskStatus.error || '播客处理失败';
+          const isNetworkError = errorMessage.includes('fetch failed') || 
+                                 errorMessage.includes('网络请求失败') ||
+                                 errorMessage.includes('ECONNREFUSED') ||
+                                 errorMessage.includes('ETIMEDOUT') ||
+                                 errorMessage.includes('ENOTFOUND') ||
+                                 errorMessage.includes('DNS') ||
+                                 errorMessage.includes('网络连接');
+          
+          // 更新处理状态为失败
+          const existing = localStorage.getItem('processingPodcasts');
+          const items = existing ? JSON.parse(existing) : [];
+          const updatedItems = items.map((item: any) => 
+            item.id === processingId 
+              ? { 
+                  ...item, 
+                  status: 'failed', 
+                  progress: 0, 
+                  error: errorMessage
+                }
+              : item
+          );
+          localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+          window.dispatchEvent(new Event('storage'));
+          
+          // 如果是快速失败且是网络错误，显示友好提示
+          if (isQuickFailure && isNetworkError) {
+            toast.error(
+              '处理失败', 
+              '当前服务器网络不稳定，可能是临时性网络问题。请稍后再试一次，通常第二次就能成功。',
+              {
+                duration: 8000, // 8秒后自动消失
+                action: {
+                  label: '重试',
+                  onClick: () => {
+                    // 从localStorage中获取失败的任务URL
+                    const currentItems = JSON.parse(localStorage.getItem('processingPodcasts') || '[]');
+                    const failedItem = currentItems.find((item: any) => item.id === processingId);
+                    
+                    // 从localStorage中移除失败的任务
+                    const filteredItems = currentItems.filter((item: any) => item.id !== processingId);
+                    localStorage.setItem('processingPodcasts', JSON.stringify(filteredItems));
+                    window.dispatchEvent(new Event('storage'));
+                    
+                    // 重新提交处理请求
+                    if (failedItem?.url) {
+                      handleProcessPodcast(failedItem.url);
+                    }
+                  }
+                }
+              }
+            );
+          } else {
+            // 其他情况显示普通错误提示
+            toast.error('处理失败', errorMessage);
+          }
+        }
+        
+      } catch (error) {
+        consecutiveErrors++;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorName = error instanceof Error ? error.name : 'Unknown';
+        
+        console.error(`❌ 轮询任务状态失败 (${consecutiveErrors}/${maxConsecutiveErrors}):`, {
+          name: errorName,
+          message: errorMessage,
+          taskId
+        });
+        
+        // 如果是超时错误，给更多重试机会
+        if (errorName === 'AbortError' || errorMessage.includes('timeout') || errorMessage.includes('超时')) {
+          console.warn('⏱️ 请求超时，继续重试...');
+          if (consecutiveErrors >= maxConsecutiveErrors * 2) {
+            clearInterval(pollInterval);
+            
+            // 在标记为失败之前，先尝试通过URL搜索播客，看看是否已经成功保存
+            try {
+              const existing = localStorage.getItem('processingPodcasts');
+              const items = existing ? JSON.parse(existing) : [];
+              const currentItem = items.find((item: any) => item.id === processingId);
+              
+              if (currentItem?.url) {
+                console.log('🔍 超时后，尝试通过URL搜索播客:', currentItem.url);
+                const searchRes = await fetch(`/api/public/search?q=${encodeURIComponent(currentItem.url)}`);
+                if (searchRes.ok) {
+                  const searchData = await searchRes.json();
+                  if (searchData.results && searchData.results.length > 0) {
+                    const podcast = searchData.results[0];
+                    console.log('✅ 发现播客已成功保存:', podcast.id);
+                    
+                    // 更新处理状态为完成
+                    const updatedItems = items.map((item: any) => 
+                      item.id === processingId 
+                        ? { 
+                            ...item, 
+                            status: 'completed', 
+                            progress: 100, 
+                            title: podcast.title,
+                            error: null,
+                            completedAt: Date.now()
+                          }
+                        : item
+                    );
+                    localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+                    window.dispatchEvent(new Event('storage'));
+                    
+                    // 刷新首页数据
+                    loadLatest();
+                    loadHot();
+                    
+                    // 显示右上角通知，不自动跳转
+                    toast.success(
+                      '处理完成',
+                      `${podcast.title || '播客'} 已处理完成，点击查看`,
+                      {
+                        duration: 8000,
+                        action: {
+                          label: '查看',
+                          onClick: () => {
+                            window.location.href = `/podcast/${podcast.id}`;
+                          }
+                        }
+                      }
+                    );
+                    return;
+                  }
+                }
+              }
+            } catch (searchError) {
+              console.warn('搜索播客失败，继续标记为失败:', searchError);
+            }
+            
+            const existing = localStorage.getItem('processingPodcasts');
+            const items = existing ? JSON.parse(existing) : [];
+            const updatedItems = items.map((item: any) => 
+              item.id === processingId 
+                ? { 
+                    ...item, 
+                    status: 'failed', 
+                    progress: 0, 
+                    error: `请求超时：无法获取任务状态，任务可能仍在处理中，请稍后刷新页面查看`
+                  }
+                : item
+            );
+            localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+            window.dispatchEvent(new Event('storage'));
+            toast.error('处理失败', `请求超时：无法获取任务状态，任务可能仍在处理中，请稍后刷新页面查看`);
+            return;
+          }
+          return;
+        }
+        
+        // 如果是网络错误，给更多重试机会
+        if (errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('Failed to fetch')) {
+          console.warn('🌐 网络错误，继续重试...');
+          if (consecutiveErrors >= maxConsecutiveErrors * 2) {
+            clearInterval(pollInterval);
+            
+            // 在标记为失败之前，先尝试通过URL搜索播客，看看是否已经成功保存
+            try {
+              const existing = localStorage.getItem('processingPodcasts');
+              const items = existing ? JSON.parse(existing) : [];
+              const currentItem = items.find((item: any) => item.id === processingId);
+              
+              if (currentItem?.url) {
+                console.log('🔍 网络错误后，尝试通过URL搜索播客:', currentItem.url);
+                const searchRes = await fetch(`/api/public/search?q=${encodeURIComponent(currentItem.url)}`);
+                if (searchRes.ok) {
+                  const searchData = await searchRes.json();
+                  if (searchData.results && searchData.results.length > 0) {
+                    const podcast = searchData.results[0];
+                    console.log('✅ 发现播客已成功保存:', podcast.id);
+                    
+                    // 更新处理状态为完成
+                    const updatedItems = items.map((item: any) => 
+                      item.id === processingId 
+                        ? { 
+                            ...item, 
+                            status: 'completed', 
+                            progress: 100, 
+                            title: podcast.title,
+                            error: null,
+                            completedAt: Date.now()
+                          }
+                        : item
+                    );
+                    localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+                    window.dispatchEvent(new Event('storage'));
+                    
+                    // 刷新首页数据
+                    loadLatest();
+                    loadHot();
+                    
+                    // 显示右上角通知，不自动跳转
+                    toast.success(
+                      '处理完成',
+                      `${podcast.title || '播客'} 已处理完成，点击查看`,
+                      {
+                        duration: 8000,
+                        action: {
+                          label: '查看',
+                          onClick: () => {
+                            window.location.href = `/podcast/${podcast.id}`;
+                          }
+                        }
+                      }
+                    );
+                    return;
+                  }
+                }
+              }
+            } catch (searchError) {
+              console.warn('搜索播客失败，继续标记为失败:', searchError);
+            }
+            
+            // 如果搜索失败或未找到，标记为失败
+            const existing = localStorage.getItem('processingPodcasts');
+            const items = existing ? JSON.parse(existing) : [];
+            const updatedItems = items.map((item: any) => 
+              item.id === processingId 
+                ? { 
+                    ...item, 
+                    status: 'failed', 
+                    progress: 0, 
+                    error: `网络错误：无法连接到服务器，请检查网络连接。如果任务已完成，请刷新页面查看。`
+                  }
+                : item
+            );
+            localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+            window.dispatchEvent(new Event('storage'));
+            toast.error('处理失败', `网络错误：无法连接到服务器，请检查网络连接。如果任务已完成，请刷新页面查看。`);
+            return;
+          }
+          return;
+        }
+        
+        if (consecutiveErrors >= maxConsecutiveErrors) {
           clearInterval(pollInterval);
           
           // 更新处理状态为失败
@@ -358,24 +853,44 @@ export default function HomePage() {
                   ...item, 
                   status: 'failed', 
                   progress: 0, 
-                  error: taskStatus.error || '处理失败'
+                  error: errorMessage || '获取任务状态失败'
                 }
               : item
           );
           localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
           window.dispatchEvent(new Event('storage'));
           
-          toast.error('处理失败', taskStatus.error || '播客处理失败');
+          toast.error('处理失败', errorMessage || '获取任务状态失败，请稍后重试');
         }
-        
-      } catch (error) {
-        console.error('轮询任务状态失败:', error);
       }
-    }, 3000); // 每3秒轮询一次
+    }, 20000); // 每20秒轮询一次
     
     // 设置超时，避免无限轮询
     setTimeout(() => {
       clearInterval(pollInterval);
+      
+      // 超时后检查任务状态
+      const existing = localStorage.getItem('processingPodcasts');
+      const items = existing ? JSON.parse(existing) : [];
+      const taskItem = items.find((item: any) => item.id === processingId);
+      
+      if (taskItem && taskItem.status === 'processing') {
+        // 任务仍然在处理中，标记为超时
+        const updatedItems = items.map((item: any) => 
+          item.id === processingId 
+            ? { 
+                ...item, 
+                status: 'failed', 
+                progress: 0, 
+                error: '处理超时，请重试'
+              }
+            : item
+        );
+        localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+        window.dispatchEvent(new Event('storage'));
+        
+        toast.error('处理超时', '播客处理超时，请稍后重试');
+      }
     }, 3 * 60 * 60 * 1000); // 3小时超时，支持长时间播客处理
   };
 
@@ -440,7 +955,7 @@ export default function HomePage() {
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="w-2 h-2 bg-gray-900 rounded-full"></span>
-                    用户：每天转录5个 + 评论互动
+                    用户：每天转录2个 + 评论互动
                   </span>
                 </div>
                 <a 
@@ -466,9 +981,13 @@ export default function HomePage() {
                       className="block p-3 bg-white rounded-md border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all"
                     >
                       <h4 className="font-medium text-gray-900 text-sm">{item.title}</h4>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {item.publishedAt ? new Date(item.publishedAt).toLocaleDateString() : '未知时间'}
-                      </p>
+                      <div className="text-xs text-gray-600 mt-1 space-x-2">
+                        {item.author && <span>{item.author}</span>}
+                        {item.publishedAt && (
+                          <span>{new Date(item.publishedAt).toLocaleDateString()}</span>
+                        )}
+                        {!item.author && !item.publishedAt && <span>未知时间</span>}
+                      </div>
                       {item.summary && (
                         <p className="text-xs text-gray-500 mt-2 line-clamp-2">
                           {item.summary}
@@ -526,9 +1045,13 @@ export default function HomePage() {
                     <h3 className="font-medium text-gray-900 text-sm line-clamp-2">
                       {item.title}
                     </h3>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {item.publishedAt ? new Date(item.publishedAt).toLocaleDateString() : '未知时间'}
-                    </p>
+                    <div className="text-xs text-gray-600 mt-1 space-x-2">
+                      {item.author && <span>{item.author}</span>}
+                      {item.publishedAt && (
+                        <span>{new Date(item.publishedAt).toLocaleDateString()}</span>
+                      )}
+                      {!item.author && !item.publishedAt && <span>未知时间</span>}
+                    </div>
                   </Link>
                 ))}
               </div>
@@ -562,9 +1085,13 @@ export default function HomePage() {
                     <h3 className="font-medium text-gray-900 text-sm line-clamp-2">
                       {item.title}
                     </h3>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {item.publishedAt ? new Date(item.publishedAt).toLocaleDateString() : '未知时间'}
-                    </p>
+                    <div className="text-xs text-gray-600 mt-1 space-x-2">
+                      {item.author && <span>{item.author}</span>}
+                      {item.publishedAt && (
+                        <span>{new Date(item.publishedAt).toLocaleDateString()}</span>
+                      )}
+                      {!item.author && !item.publishedAt && <span>未知时间</span>}
+                    </div>
                   </Link>
                 ))}
               </div>

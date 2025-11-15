@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { formatElapsedTime, formatTime } from '@/utils/processing-estimator';
+import Link from 'next/link';
+import { formatElapsedTime } from '@/utils/processing-estimator';
 
 interface ProcessingItem {
   id: string;
@@ -158,20 +159,14 @@ export default function SimpleProcessingStatus({
         }
       }
 
-      // 更新UI状态（基于时间估算的进度）
+      // 更新UI状态（不再显示具体进度，只保持处理中状态）
       setProcessingItems(prevItems => {
         return prevItems.map(item => {
           if (item.status === 'processing') {
-            const elapsed = Date.now() - item.startTime;
-            const elapsedMinutes = elapsed / (1000 * 60);
-            
-            // 基于时间的简单进度估算
-            let progress = Math.min(95, (elapsedMinutes / 15) * 100); // 假设15分钟完成
-            
+            // 保持进度为50%，表示处理中，但不显示具体进度
             return {
               ...item,
-              progress: Math.round(progress),
-              estimatedRemainingTime: Math.max(60, (15 - elapsedMinutes) * 60)
+              progress: 50
             };
           }
           return item;
@@ -311,7 +306,7 @@ export default function SimpleProcessingStatus({
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">播客处理状态</h2>
-            <p className="text-sm text-gray-600 mt-1">阿茂每天可以处理5条播客链接哦</p>
+            <p className="text-sm text-gray-600 mt-1">阿茂每天可以处理2条播客链接哦</p>
           </div>
           <button
             onClick={onClose}
@@ -363,10 +358,8 @@ export default function SimpleProcessingStatus({
                           <span className="text-sm font-medium text-blue-600">阿茂在听啦</span>
                         </div>
                         <p className="text-sm text-gray-600 truncate" title={item.url}>{item.url}</p>
-                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                          <span>已用时: {formatDuration(item.startTime)}</span>
-                          <span>{item.progress}%</span>
-                          <span>预计还需: {formatTime(item.estimatedRemainingTime || 0)}</span>
+                        <div className="mt-3 text-xs text-gray-500 bg-blue-50 rounded-md p-2 border border-blue-100">
+                          <p className="text-gray-600">处理需要一些时间，您可以先去浏览其他播客报告</p>
                         </div>
                         
                         {/* 处理步骤状态 */}
@@ -397,12 +390,12 @@ export default function SimpleProcessingStatus({
                       </button>
                     </div>
 
-                    {/* 简化进度条 */}
+                    {/* 简化进度条 - 仅显示处理中状态，不显示具体进度 */}
                     <div className="mt-3">
-                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                         <div
-                          className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${item.progress}%` }}
+                          className="bg-blue-500 h-1.5 rounded-full animate-pulse"
+                          style={{ width: '100%' }}
                         ></div>
                       </div>
                     </div>
@@ -417,7 +410,14 @@ export default function SimpleProcessingStatus({
                     </svg>
                   </div>
                   <h3 className="text-sm font-medium text-gray-900 mb-1">暂无进行中的任务</h3>
-                  <p className="text-xs text-gray-500">提交新的播客链接开始处理</p>
+                  <p className="text-xs text-gray-500 mb-3">提交新的播客链接开始处理</p>
+                  <Link 
+                    href="/home" 
+                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                    onClick={onClose}
+                  >
+                    去浏览其他播客报告 →
+                  </Link>
                 </div>
               )}
             </div>

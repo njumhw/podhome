@@ -26,21 +26,55 @@ export async function GET(request: NextRequest) {
     }
 
     // 先查Podcast表
-    let podcast = await prisma.podcast.findFirst({
-      where: whereClause,
-      select: {
-        id: true,
-        title: true,
-        showAuthor: true,
-        publishedAt: true,
-        audioUrl: true,
-        sourceUrl: true,
-        summary: true,
-        topic: { select: { name: true } },
-        transcript: true,
-        updatedAt: true
+    // 注意：reportOutline字段可能还不存在（如果迁移未执行），使用findMany+select来避免字段不存在错误
+    let podcast: any = null;
+    try {
+      podcast = await prisma.podcast.findFirst({
+        where: whereClause,
+        select: {
+          id: true,
+          title: true,
+          showAuthor: true,
+          publishedAt: true,
+          audioUrl: true,
+          sourceUrl: true,
+          summary: true,
+          topic: { select: { name: true } },
+          transcript: true,
+          originalTranscript: true, // 添加ASR原文字段
+          reportOutline: true, // 报告大纲（如果字段存在）
+          updatedAt: true
+        }
+      });
+    } catch (error: any) {
+      // 如果reportOutline字段不存在，尝试不查询该字段
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('reportOutline') || errorMessage.includes('Unknown column')) {
+        console.warn('reportOutline字段不存在，使用兼容查询');
+        podcast = await prisma.podcast.findFirst({
+          where: whereClause,
+          select: {
+            id: true,
+            title: true,
+            showAuthor: true,
+            publishedAt: true,
+            audioUrl: true,
+            sourceUrl: true,
+            summary: true,
+            topic: { select: { name: true } },
+            transcript: true,
+            originalTranscript: true,
+            updatedAt: true
+          }
+        });
+        // 手动设置reportOutline为null
+        if (podcast) {
+          podcast.reportOutline = null;
+        }
+      } else {
+        throw error; // 其他错误继续抛出
       }
-    });
+    }
 
     // 如果在Podcast表没找到，查AudioCache表
     if (!podcast) {
@@ -72,7 +106,9 @@ export async function GET(request: NextRequest) {
           sourceUrl: audioCache.audioUrl,
           summary: audioCache.summary,
           topic: audioCache.topic,
-          transcript: audioCache.transcript,  // 原始ASR转录文本
+          transcript: null, // 清洗稿已移除
+          originalTranscript: audioCache.transcript,  // ASR原文
+          reportOutline: null, // AudioCache没有reportOutline字段
           updatedAt: audioCache.updatedAt
         };
       }
@@ -85,6 +121,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // 获取点赞数
+    const likeCount = await prisma.podcastLike.count({
+      where: { podcastId: podcast.id }
+    });
+
     const response = NextResponse.json({
       id: podcast.id,
       title: podcast.title,
@@ -94,15 +135,16 @@ export async function GET(request: NextRequest) {
       originalUrl: podcast.sourceUrl,
       summary: podcast.summary,
       topic: podcast.topic,
-      script: podcast.transcript, // 使用 transcript 字段作为访谈全文
+      script: null, // 清洗稿已移除，始终为null
+      originalTranscript: podcast.originalTranscript || podcast.transcript, // ASR原文（优先使用originalTranscript，fallback到transcript以兼容旧数据）
+      reportOutline: (podcast as any).reportOutline || null, // 报告大纲
       report: podcast.summary,
-      updatedAt: podcast.updatedAt
+      updatedAt: podcast.updatedAt,
+      likeCount
     });
     
-    // 添加缓存控制头，确保不缓存
-    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    response.headers.set('Pragma', 'no-cache');
-    response.headers.set('Expires', '0');
+    // 细粒度缓存：短期缓存10秒，缓解瞬时高并发
+    response.headers.set('Cache-Control', 'public, max-age=10, s-maxage=10, stale-while-revalidate=30');
     
     return response;
   } catch (error) {

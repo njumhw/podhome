@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     if (user.role === 'ADMIN') {
       limit = Infinity; // 管理员无限制
     } else if (user.role === 'USER') {
-      limit = 5; // 普通用户每天5个
+      limit = 2; // 普通用户每天2个
     } else {
       limit = 0; // 其他角色无额度
     }

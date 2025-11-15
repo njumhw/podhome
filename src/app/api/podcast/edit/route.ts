@@ -8,7 +8,7 @@ const editPodcastSchema = z.object({
   author: z.string().min(1, '作者不能为空'),
   publishedAt: z.string().optional(),
   summary: z.string().optional(),
-  script: z.string().optional(),
+  script: z.string().optional(), // script现在代表ASR原文（originalTranscript）
 });
 
 export async function PUT(req: NextRequest) {
@@ -31,7 +31,8 @@ export async function PUT(req: NextRequest) {
           showAuthor: author,
           publishedAt: publishedAt ? new Date(publishedAt) : null,
           summary,
-          transcript: script,
+          originalTranscript: script, // script现在代表ASR原文，更新到originalTranscript
+          transcript: null, // 清洗稿已移除，始终为null
         },
       });
 

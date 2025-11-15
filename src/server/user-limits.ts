@@ -8,7 +8,7 @@ export interface UserLimitConfig {
 	};
 	user: {
 		canUpload: true;
-		dailyLimit: 5;
+		dailyLimit: 2;
 	};
 	admin: {
 		canUpload: true;
@@ -23,7 +23,7 @@ export const USER_LIMITS: UserLimitConfig = {
 	},
 	user: {
 		canUpload: true,
-		dailyLimit: 5
+		dailyLimit: 2
 	},
 	admin: {
 		canUpload: true,

@@ -1,5 +1,7 @@
 // 后台任务队列系统
 import { db } from "@/server/db";
+import { dbRetry } from "@/server/db-retry";
+import { processAudioInternal } from "@/server/audio-processor";
 
 export interface Task {
   id: string;
@@ -51,7 +53,7 @@ class TaskQueue {
     
     try {
       // 测试数据库连接
-      await db.taskQueue.count();
+      await dbRetry.taskQueue.count({});
       this.isInitialized = true;
       console.log('TaskQueue 初始化成功');
     } catch (error) {
@@ -79,7 +81,7 @@ class TaskQueue {
 
     try {
       // 保存到数据库
-      await db.taskQueue.create({
+      await dbRetry.taskQueue.create({
         data: {
           id: task.id,
           type: task.type,
@@ -109,24 +111,25 @@ class TaskQueue {
     }
 
     try {
-      const taskRecord = await db.taskQueue.findUnique({
+      const taskRecord = await dbRetry.taskQueue.findFirst({
         where: { id: taskId }
       });
 
       if (!taskRecord) return null;
+      const rec: any = taskRecord as any;
 
       return {
-        id: taskRecord.id,
-        type: taskRecord.type as 'PODCAST_PROCESSING',
-        status: taskRecord.status as 'PENDING' | 'RUNNING' | 'READY' | 'FAILED',
-        data: taskRecord.data as any,
-        result: taskRecord.result as any,
-        error: taskRecord.error || undefined,
-        metrics: taskRecord.metrics as any,
-        createdAt: taskRecord.createdAt,
-        updatedAt: taskRecord.updatedAt,
-        startedAt: taskRecord.startedAt || undefined,
-        completedAt: taskRecord.completedAt || undefined
+        id: rec.id,
+        type: rec.type as 'PODCAST_PROCESSING',
+        status: rec.status as 'PENDING' | 'RUNNING' | 'READY' | 'FAILED',
+        data: rec.data as any,
+        result: rec.result as any,
+        error: rec.error || undefined,
+        metrics: rec.metrics as any,
+        createdAt: rec.createdAt,
+        updatedAt: rec.updatedAt,
+        startedAt: rec.startedAt || undefined,
+        completedAt: rec.completedAt || undefined
       };
     } catch (error) {
       console.error('获取任务状态失败:', error);
@@ -141,7 +144,7 @@ class TaskQueue {
     }
 
     try {
-      const taskRecord = await db.taskQueue.findFirst({
+      const taskRecord = await dbRetry.taskQueue.findFirst({
         where: {
           data: {
             path: ['url'],
@@ -154,19 +157,20 @@ class TaskQueue {
       });
 
       if (!taskRecord) return null;
+      const rec: any = taskRecord as any;
 
       return {
-        id: taskRecord.id,
-        type: taskRecord.type as 'PODCAST_PROCESSING',
-        status: taskRecord.status as 'PENDING' | 'RUNNING' | 'READY' | 'FAILED',
-        data: taskRecord.data as any,
-        result: taskRecord.result as any,
-        error: taskRecord.error || undefined,
-        metrics: taskRecord.metrics as any,
-        createdAt: taskRecord.createdAt,
-        updatedAt: taskRecord.updatedAt,
-        startedAt: taskRecord.startedAt || undefined,
-        completedAt: taskRecord.completedAt || undefined
+        id: rec.id,
+        type: rec.type as 'PODCAST_PROCESSING',
+        status: rec.status as 'PENDING' | 'RUNNING' | 'READY' | 'FAILED',
+        data: rec.data as any,
+        result: rec.result as any,
+        error: rec.error || undefined,
+        metrics: rec.metrics as any,
+        createdAt: rec.createdAt,
+        updatedAt: rec.updatedAt,
+        startedAt: rec.startedAt || undefined,
+        completedAt: rec.completedAt || undefined
       };
     } catch (error) {
       console.error('通过URL获取任务失败:', error);
@@ -182,10 +186,10 @@ class TaskQueue {
 
     try {
       const [pending, running, completed, failed] = await Promise.all([
-        db.taskQueue.count({ where: { status: 'PENDING' } }),
-        db.taskQueue.count({ where: { status: 'RUNNING' } }),
-        db.taskQueue.count({ where: { status: 'READY' } }),
-        db.taskQueue.count({ where: { status: 'FAILED' } })
+        dbRetry.taskQueue.count({ where: { status: 'PENDING' } }),
+        dbRetry.taskQueue.count({ where: { status: 'RUNNING' } }),
+        dbRetry.taskQueue.count({ where: { status: 'READY' } }),
+        dbRetry.taskQueue.count({ where: { status: 'FAILED' } })
       ]);
 
       return {
@@ -249,7 +253,8 @@ class TaskQueue {
       }
 
       // 查找下一个待处理的任务
-      const nextTask = await db.taskQueue.findFirst({
+      console.log('[强制日志] 开始查询PENDING状态的任务...');
+      const nextTask = await dbRetry.taskQueue.findFirst({
         where: {
           status: 'PENDING'
         },
@@ -258,25 +263,43 @@ class TaskQueue {
         }
       });
 
-      if (!nextTask) return;
+      if (!nextTask) {
+        // 每10次检查输出一次日志，避免日志过多
+        if (Math.random() < 0.1) {
+          console.log('[强制日志] 🔍 检查待处理任务: 无');
+        }
+        return;
+      }
+      
+      const nt = nextTask as { id: string; data: any; type: string; status: string };
+      console.log('[强制日志] ✅ 找到PENDING任务:', nt.id);
+      const taskUrl = (nt.data as any)?.url || '未知';
+      // 强制输出日志，确保任务被处理时能看到
+      console.log(`[强制日志] 找到待处理任务: ${nt.id}`);
+      console.log(`🔍 找到待处理任务: ${nt.id}, URL: ${taskUrl}`);
+      console.log(`[强制日志] 任务数据:`, JSON.stringify(nt.data));
 
       // 检查重试次数
-      const retryCount = this.retryAttempts.get(nextTask.id) || 0;
+      const retryCount = this.retryAttempts.get(nt.id) || 0;
       if (retryCount >= this.maxRetries) {
-        console.log(`任务 ${nextTask.id} 重试次数超限，标记为失败`);
-        await this.markTaskFailed(nextTask.id, '重试次数超限');
+        console.log(`任务 ${nt.id} 重试次数超限，标记为失败`);
+        await this.markTaskFailed(nt.id, '重试次数超限');
         return;
       }
 
       // 添加到运行中任务集合
-      this.runningTasks.add(nextTask.id);
-      this.retryAttempts.set(nextTask.id, retryCount + 1);
+      this.runningTasks.add(nt.id);
+      this.retryAttempts.set(nt.id, retryCount + 1);
 
-      console.log(`开始处理任务: ${nextTask.id} (并发数: ${this.runningTasks.size}/${this.maxConcurrentTasks})`);
+      console.log(`═══════════════════════════════════════════════════════════`);
+      console.log(`🚀 开始处理任务: ${nt.id}`);
+      console.log(`   并发数: ${this.runningTasks.size}/${this.maxConcurrentTasks}`);
+      console.log(`   任务数据:`, JSON.stringify(nt.data, null, 2));
+      console.log(`═══════════════════════════════════════════════════════════`);
 
       // 更新任务状态为运行中
-      await db.taskQueue.update({
-        where: { id: nextTask.id },
+      await dbRetry.taskQueue.update({
+        where: { id: nt.id },
         data: {
           status: 'RUNNING',
           startedAt: new Date(),
@@ -285,13 +308,39 @@ class TaskQueue {
       });
 
       // 记录任务开始时间
-      this.taskStartTimes.set(nextTask.id, Date.now());
+      this.taskStartTimes.set(nt.id, Date.now());
 
       // 异步执行任务，不等待完成
-      this.executeTask(nextTask).finally(() => {
+      // 添加详细的错误处理，确保所有错误都被记录
+      console.log(`[强制日志] 准备执行任务: ${nt.id}`);
+      this.executeTask(nt).catch((error) => {
+        // 如果 executeTask 内部没有正确处理错误，这里作为最后的保障
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        console.error(`═══════════════════════════════════════════════════════════`);
+        console.error(`⚠️ executeTask 未捕获的错误 (任务 ${nt.id}):`);
+        console.error(`   错误信息: ${errorMessage}`);
+        console.error(`   错误类型: ${error instanceof Error ? error.name : 'UnknownError'}`);
+        if (errorStack) {
+          console.error(`   错误堆栈:`, errorStack.substring(0, 2000));
+        }
+        console.error(`═══════════════════════════════════════════════════════════`);
+        
+        // 如果 executeTask 没有处理错误，这里标记为失败
+        if (!errorMessage.includes('database') && !errorMessage.includes('connection')) {
+          let errorToSave = errorMessage;
+          if (errorToSave.length > 500) {
+            errorToSave = errorToSave.substring(0, 497) + '...';
+          }
+          this.markTaskFailed(nt.id, errorToSave).catch((markError) => {
+            console.error(`❌ 标记任务失败时出错:`, markError);
+          });
+        }
+      }).finally(() => {
         // 任务完成后从运行中任务集合移除
-        this.runningTasks.delete(nextTask.id);
-        this.taskStartTimes.delete(nextTask.id);
+        this.runningTasks.delete(nt.id);
+        this.taskStartTimes.delete(nt.id);
+        console.log(`[强制日志] 任务 ${nt.id} 已从运行中任务集合移除`);
       });
 
     } catch (error) {
@@ -309,15 +358,56 @@ class TaskQueue {
 
   // 执行具体任务
   private async executeTask(taskRecord: any) {
+    console.log(`[强制日志] executeTask 开始: ${taskRecord.id}, 类型: ${taskRecord.type}`);
     try {
       if (taskRecord.type === 'PODCAST_PROCESSING') {
+        console.log(`[强制日志] 准备处理播客任务: ${taskRecord.id}`);
         await this.processPodcastTask(taskRecord);
+        console.log(`[强制日志] 播客任务处理完成: ${taskRecord.id}`);
+      } else {
+        console.warn(`[强制日志] 未知任务类型: ${taskRecord.type}`);
       }
     } catch (error) {
-      console.error(`任务执行失败: ${taskRecord.id}`, error);
+      console.error(`[强制日志] executeTask 捕获错误: ${taskRecord.id}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      
+      // 如果错误信息是简化的 "fetch failed"，尝试从堆栈中提取更多信息
+      let detailedErrorMessage = errorMessage;
+      if (errorMessage === 'fetch failed' || errorMessage.toLowerCase().includes('fetch failed')) {
+        // 尝试从堆栈中提取更多信息
+        if (errorStack) {
+          const stackLines = errorStack.split('\n');
+          const relevantLine = stackLines.find(line => 
+            line.includes('parseXiaoyuzhouEpisode') || 
+            line.includes('fetchHtml') ||
+            line.includes('网络请求失败') ||
+            line.includes('fetch')
+          );
+          if (relevantLine) {
+            detailedErrorMessage = `网络请求失败: ${errorMessage} (${relevantLine.trim()})`;
+          } else {
+            detailedErrorMessage = `网络请求失败: ${errorMessage}。错误类型: ${errorName}。请检查网络连接或稍后重试。`;
+          }
+        } else {
+          detailedErrorMessage = `网络请求失败: ${errorMessage}。错误类型: ${errorName}。请检查网络连接或稍后重试。`;
+        }
+      }
+      
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error(`❌ 任务执行失败: ${taskRecord.id}`);
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error('错误类型:', errorName);
+      console.error('原始错误信息:', errorMessage);
+      console.error('详细错误信息:', detailedErrorMessage);
+      console.error('错误信息长度:', detailedErrorMessage.length);
+      if (errorStack) {
+        console.error('错误堆栈（前2000字符）:', errorStack.substring(0, 2000));
+      }
+      console.error('═══════════════════════════════════════════════════════════');
       
       // 检查是否是数据库连接错误
-      const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('database') || errorMessage.includes('connection')) {
         console.log(`任务 ${taskRecord.id} 遇到数据库连接问题，等待重试`);
         // 等待一段时间后重试
@@ -325,8 +415,54 @@ class TaskQueue {
         return; // 不标记为失败，等待重试
       }
       
-      // 更新任务状态为失败
-      await this.markTaskFailed(taskRecord.id, error instanceof Error ? error.message : String(error));
+      // 检查是否是临时性网络错误（fetch failed、网络请求失败等）
+      // 对于这类错误，如果重试次数未超限，不立即标记为失败，而是等待重试
+      const isTemporaryNetworkError = errorMessage.includes('fetch failed') || 
+                                       errorMessage.includes('网络请求失败') ||
+                                       errorMessage.includes('ECONNREFUSED') ||
+                                       errorMessage.includes('ETIMEDOUT') ||
+                                       errorMessage.includes('ENOTFOUND') ||
+                                       errorMessage.includes('DNS');
+      
+      if (isTemporaryNetworkError) {
+        const retryCount = this.retryAttempts.get(taskRecord.id) || 0;
+        console.log(`[强制日志] 检测到临时性网络错误: ${taskRecord.id}, 当前重试次数: ${retryCount}, 最大重试次数: ${this.maxRetries}`);
+        if (retryCount < this.maxRetries) {
+          console.log(`[强制日志] 任务 ${taskRecord.id} 遇到临时性网络错误，等待重试 (${retryCount + 1}/${this.maxRetries})`);
+          // 指数退避：第1次重试等待5秒，第2次等待10秒，第3次等待20秒
+          const delay = Math.min(5000 * Math.pow(2, retryCount), 20000);
+          console.log(`[强制日志] 等待 ${delay}ms 后重试...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          // 从运行中任务集合移除，允许任务队列重新处理
+          this.runningTasks.delete(taskRecord.id);
+          // 将任务状态重置为PENDING，以便重新处理
+          await dbRetry.taskQueue.update({
+            where: { id: taskRecord.id },
+            data: {
+              status: 'PENDING',
+              error: null,
+              startedAt: null,
+              completedAt: null,
+              updatedAt: new Date()
+            }
+          });
+          console.log(`[强制日志] 任务 ${taskRecord.id} 已重置为PENDING状态，等待重新处理`);
+          return; // 不标记为失败，等待重试
+        } else {
+          console.log(`[强制日志] 任务 ${taskRecord.id} 重试次数已达上限 (${retryCount}/${this.maxRetries})，标记为失败`);
+        }
+      }
+      
+      // 更新任务状态为失败，确保错误信息完整（限制长度避免数据库字段超限）
+      // 使用详细错误信息而不是原始错误信息
+      let errorToSave = detailedErrorMessage;
+      if (errorToSave.length > 500) {
+        // 如果错误信息过长，截断但保留关键信息
+        errorToSave = errorToSave.substring(0, 497) + '...';
+      }
+      
+      console.log(`保存错误信息到数据库（长度: ${errorToSave.length}）: ${errorToSave.substring(0, 100)}...`);
+      await this.markTaskFailed(taskRecord.id, errorToSave);
     }
   }
 
@@ -354,7 +490,14 @@ class TaskQueue {
   // 标记任务失败
   private async markTaskFailed(taskId: string, error: string) {
     try {
-      await db.taskQueue.update({
+      console.log(`═══════════════════════════════════════════════════════════`);
+      console.log(`🔴 标记任务失败: ${taskId}`);
+      console.log(`   错误信息: ${error}`);
+      console.log(`   错误信息长度: ${error.length}`);
+      console.log(`   调用堆栈:`, new Error().stack?.split('\n').slice(1, 5).join('\n'));
+      console.log(`═══════════════════════════════════════════════════════════`);
+      
+      await dbRetry.taskQueue.update({
         where: { id: taskId },
         data: {
           status: 'FAILED',
@@ -363,9 +506,9 @@ class TaskQueue {
           updatedAt: new Date()
         }
       });
-      console.log(`任务 ${taskId} 已标记为失败: ${error}`);
+      console.log(`✅ 任务 ${taskId} 已标记为失败: ${error}`);
     } catch (updateError) {
-      console.error('标记任务失败时出错:', updateError);
+      console.error('❌ 标记任务失败时出错:', updateError);
     }
   }
 
@@ -378,18 +521,37 @@ class TaskQueue {
       // 可以复用现有的 process-audio 逻辑，但改为内部函数调用
       const result = await this.processPodcastInternal(url, userId, taskRecord.id);
       
-      // 更新任务状态为完成
-      await db.taskQueue.update({
-        where: { id: taskRecord.id },
-        data: {
-          status: 'READY',
-          result: result,
-          completedAt: new Date(),
-          updatedAt: new Date()
-        }
-      });
-
-      console.log(`播客处理任务完成: ${taskRecord.id}`);
+      // 检查是否是部分成功（ASR成功但报告失败）
+      const isPartialSuccess = (result as any)?.partialSuccess === true;
+      const hasError = (result as any)?.error;
+      
+      // 如果报告生成失败，任务应该标记为 FAILED，但保留结果（ASR数据）
+      if (isPartialSuccess || (result as any)?.success === false) {
+        await dbRetry.taskQueue.update({
+          where: { id: taskRecord.id },
+          data: {
+            status: 'FAILED',
+            result: result,
+            error: hasError || '报告生成失败或超时，但ASR转写已成功完成',
+            completedAt: new Date(),
+            updatedAt: new Date()
+          }
+        });
+        console.log(`播客处理部分成功（ASR成功但报告失败）: ${taskRecord.id}`);
+      } else {
+        // 完全成功，标记为 READY
+        await dbRetry.taskQueue.update({
+          where: { id: taskRecord.id },
+          data: {
+            status: 'READY',
+            result: result,
+            error: null, // 清除之前的错误信息
+            completedAt: new Date(),
+            updatedAt: new Date()
+          }
+        });
+        console.log(`播客处理任务完成: ${taskRecord.id}`);
+      }
       
       // 清除重试记录
       this.retryAttempts.delete(taskRecord.id);
@@ -401,16 +563,27 @@ class TaskQueue {
 
   // 内部播客处理逻辑（复用现有代码）
   private async processPodcastInternal(url: string, userId?: string, taskId?: string) {
+    console.log(`[强制日志] processPodcastInternal 开始: ${url}, taskId: ${taskId || '无'}`);
     try {
+      console.log(`📝 开始内部处理播客: ${url}, taskId: ${taskId || '无'}`);
       // 直接调用现有的处理逻辑，而不是通过HTTP请求
-      const { processAudioInternal } = await import('@/server/audio-processor');
+      // 使用静态导入，避免 Turbopack 模块加载问题
       
       // 调用内部处理函数
+      console.log(`[强制日志] 准备调用 processAudioInternal: ${url}`);
       const result = await processAudioInternal(url, userId, taskId);
+      console.log(`[强制日志] processAudioInternal 返回结果:`, result ? '成功' : '失败');
       
+      console.log(`✅ 内部处理播客成功: ${url}`);
       return result;
     } catch (error) {
-      console.error('播客处理失败:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      console.error(`[强制日志] processPodcastInternal 捕获错误: ${errorMessage}`);
+      console.error('❌ 播客处理失败:', errorMessage);
+      if (errorStack) {
+        console.error('错误堆栈:', errorStack.substring(0, 1000));
+      }
       throw error;
     }
   }

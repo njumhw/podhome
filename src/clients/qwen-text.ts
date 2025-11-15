@@ -42,11 +42,44 @@ export async function qwenChat(messages: ChatMessage[], options?: { model?: stri
 			let data: any = {};
 			try { data = JSON.parse(text); } catch {}
 			if (!res.ok) {
-				throw new Error(data?.error?.message || data?.message || `chat failed(${res.status})`);
+				// 记录完整的错误信息以便调试
+				console.error('❌ Qwen API错误响应:');
+				console.error('  状态码:', res.status);
+				console.error('  错误数据:', JSON.stringify(data, null, 2).substring(0, 1000));
+				console.error('  原始响应:', text.substring(0, 500));
+				throw new Error(data?.error?.message || data?.message || data?.error || `chat failed(${res.status})`);
 			}
+			
+			// 检查响应数据结构
+			if (!data?.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+				console.error('❌ API响应格式异常：缺少choices数组或choices为空');
+				console.error('响应数据:', JSON.stringify(data, null, 2).substring(0, 500));
+				throw new Error('API响应格式异常：缺少choices数组或choices为空');
+			}
+			
 			const content: string = data?.choices?.[0]?.message?.content ?? "";
+			
+			// 如果content为空，记录详细信息以便调试
+			if (!content || content.trim().length === 0) {
+				console.error('❌ API返回空内容！');
+				console.error('完整响应:', JSON.stringify(data, null, 2).substring(0, 1000));
+				console.error('choices[0]:', JSON.stringify(data.choices[0], null, 2));
+				// 不抛出错误，让调用方处理（因为某些情况下空内容可能是合法的）
+			}
+			
 			return typeof content === "string" ? content : "";
 		} catch (err) {
+			// 对于内容审核错误，不进行重试（重试通常无效）
+			const errorMessage = err instanceof Error ? err.message : String(err);
+			const isContentModerationError = /inappropriate content|内容审核|内容安全/i.test(errorMessage);
+			
+			if (isContentModerationError) {
+				console.error("❌ Qwen API内容审核错误（不重试）:", errorMessage);
+				console.error("   提示：这通常是因为输入内容触发了API的内容安全机制");
+				console.error("   建议：检查ASR原文是否包含敏感词汇，或尝试分段处理");
+				throw new Error(`内容审核失败：输入内容可能包含敏感信息。错误详情：${errorMessage}`);
+			}
+			
 			if (attempt < 3) {
 				const backoff = 1000 * Math.pow(2, attempt - 1);
 				await new Promise(r => setTimeout(r, backoff));

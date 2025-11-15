@@ -98,10 +98,22 @@ function findPodcastSeriesNameFromJson(json: any): string | null {
 
 function findAudioUrlFromJson(json: any): string | null {
 	if (!json || typeof json !== "object") return null;
+	
 	// Common places: json.audio.url, json.mainEntityOfPage.audio, graph items, etc.
 	if (json.audio && typeof json.audio === "object" && typeof json.audio.url === "string") {
 		return json.audio.url;
 	}
+	
+	// Check for associatedMedia.contentUrl (common in podcast JSON-LD)
+	if (json.associatedMedia && typeof json.associatedMedia === "object" && typeof json.associatedMedia.contentUrl === "string") {
+		return json.associatedMedia.contentUrl;
+	}
+	
+	// Check for enclosure.url (RSS-style)
+	if (json.enclosure && typeof json.enclosure === "object" && typeof json.enclosure.url === "string") {
+		return json.enclosure.url;
+	}
+	
 	if (Array.isArray(json)) {
 		for (const item of json) {
 			const u = findAudioUrlFromJson(item);
@@ -163,12 +175,182 @@ function normalizeDateToYMD(input: string | null): string | null {
     return `${y}-${m}-${day}`;
 }
 
-export async function parseXiaoyuzhouEpisode(url: string): Promise<XiaoyuzhouEpisodeMeta> {
-	const res = await fetch(url, { headers: DEFAULT_HEADERS as any });
-	if (!res.ok) {
-		return { audioUrl: null };
+// 获取服务器内部地址（用于生产环境的内部调用）
+function getServerBaseUrl(): string {
+	// 优先级：
+	// 1. 显式配置的 NEXT_PUBLIC_BASE_URL
+	// 2. 生产环境：尝试使用 127.0.0.1（内部调用更快更可靠）
+	// 3. 开发环境：使用 localhost:3000
+	
+	const explicitBase = process.env.NEXT_PUBLIC_BASE_URL;
+	if (explicitBase) {
+		return explicitBase;
 	}
-	const html = await res.text();
+	
+	const isProduction = process.env.NODE_ENV === 'production';
+	const port = process.env.PORT || '3000';
+	
+	if (isProduction) {
+		// 生产环境：优先使用 127.0.0.1（内部网络，更快更可靠）
+		const host = process.env.HOST || '127.0.0.1';
+		return `http://${host}:${port}`;
+	}
+	
+	// 开发环境：使用 localhost
+	return `http://localhost:${port}`;
+}
+
+export async function parseXiaoyuzhouEpisode(url: string): Promise<XiaoyuzhouEpisodeMeta> {
+	// 增强重试机制：增加重试次数和更长的超时时间
+	const maxRetries = 5; // 增加到5次重试
+	let html: string | null = null;
+	let lastError: Error | null = null;
+	
+	const isProduction = process.env.NODE_ENV === 'production';
+	
+	// 定义多种获取策略（类似音频下载策略）
+	const fetchStrategies = [
+		{
+			name: isProduction ? '直接获取' : '直接获取',
+			priority: 1,
+			fetchFn: async () => {
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), 60000);
+				
+				try {
+					const res = await fetch(url, { 
+						headers: {
+							...DEFAULT_HEADERS,
+							'Accept-Encoding': 'gzip, deflate, br',
+							'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+							'Cache-Control': 'no-cache',
+							'Pragma': 'no-cache',
+							'Referer': 'https://www.xiaoyuzhoufm.com/',
+							'Origin': 'https://www.xiaoyuzhoufm.com',
+						} as any,
+						signal: controller.signal,
+						redirect: 'follow',
+					});
+					clearTimeout(timeoutId);
+					return res;
+				} catch (e) {
+					clearTimeout(timeoutId);
+					throw e;
+				}
+			}
+		},
+		{
+			name: '通过内部代理获取',
+			priority: 2,
+			fetchFn: async () => {
+				// 如果直接获取失败，尝试通过内部API代理获取
+				const base = getServerBaseUrl();
+				const proxyUrl = `${base}/api/proxy-audio?url=${encodeURIComponent(url)}`;
+				console.log(`尝试通过代理获取: ${proxyUrl}`);
+				
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), 60000);
+				
+				try {
+					const res = await fetch(proxyUrl, {
+						signal: controller.signal,
+						headers: {
+							'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+						}
+					});
+					clearTimeout(timeoutId);
+					return res;
+				} catch (e) {
+					clearTimeout(timeoutId);
+					throw e;
+				}
+			}
+		}
+	];
+	
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		// 每次尝试都尝试所有策略
+		for (const strategy of fetchStrategies) {
+			try {
+				console.log(`尝试获取播客页面 (${attempt}/${maxRetries}, 策略: ${strategy.name}): ${url}`);
+				
+				const res = await strategy.fetchFn();
+				
+				if (!res.ok) {
+					throw new Error(`Failed to fetch episode page: HTTP ${res.status} ${res.statusText}`);
+				}
+				
+				html = await res.text();
+				
+				if (!html || html.length < 100) {
+					throw new Error(`获取的页面内容过短 (${html?.length || 0}字符)，可能是错误页面`);
+				}
+				
+				console.log(`✅ 成功获取播客页面 (${html.length}字符, 策略: ${strategy.name})`);
+				
+				// 成功获取，跳出所有循环
+				lastError = null;
+				break; // 跳出策略循环
+			} catch (fetchError: any) {
+				const fetchErrorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+				const fetchErrorName = fetchError instanceof Error ? fetchError.name : 'UnknownError';
+				
+				console.warn(`策略 ${strategy.name} 失败:`, fetchErrorMessage);
+				
+				// 如果是最后一个策略，继续到下一个attempt
+				if (strategy === fetchStrategies[fetchStrategies.length - 1]) {
+					// 这是最后一个策略，记录错误并继续到下一个attempt
+					lastError = fetchError;
+					
+					// 提供更详细的错误信息
+					if (fetchErrorName === 'AbortError' || fetchErrorMessage.includes('aborted')) {
+						lastError = new Error(`请求超时（${attempt}/${maxRetries}）: 60秒内未获取到响应`);
+					} else if (fetchErrorMessage.includes('ECONNREFUSED') || fetchErrorMessage.includes('ENOTFOUND')) {
+						lastError = new Error(`网络连接失败（${attempt}/${maxRetries}）: 无法连接到服务器`);
+					} else if (fetchErrorMessage.includes('ETIMEDOUT') || fetchErrorMessage.includes('timeout')) {
+						lastError = new Error(`请求超时（${attempt}/${maxRetries}）: 连接超时`);
+					}
+				}
+				// 如果不是最后一个策略，继续尝试下一个策略
+				continue;
+			}
+		}
+		
+		// 如果成功获取了html，跳出重试循环
+		if (html) {
+			break;
+		}
+		
+		// 如果所有策略都失败，等待后重试（递增延迟：2s, 4s, 6s, 8s）
+		if (attempt < maxRetries) {
+			const delay = 2000 * attempt;
+			console.log(`所有策略都失败，等待 ${delay}ms 后重试...`);
+			await new Promise(resolve => setTimeout(resolve, delay));
+		}
+	}
+	
+	// 如果所有重试都失败，抛出最后一个错误
+	if (lastError || !html) {
+		const errorMessage = lastError instanceof Error ? lastError.message : '获取播客页面失败';
+		const errorName = lastError instanceof Error ? lastError.name : 'UnknownError';
+		
+		// 提供更详细的错误信息
+		let detailedError: string;
+		if (errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
+			detailedError = `网络请求失败（已重试${maxRetries}次）: ${errorMessage}`;
+		} else if (errorMessage.includes('HTTP')) {
+			detailedError = `HTTP错误（已重试${maxRetries}次）: ${errorMessage}`;
+		} else {
+			detailedError = `获取播客页面失败（已重试${maxRetries}次）: ${errorMessage}`;
+		}
+		
+		console.error(`❌ 所有重试都失败，最终错误: ${detailedError}`);
+		console.error(`错误类型: ${errorName}`);
+		throw new Error(detailedError);
+	}
+	
+	// 使用成功获取的html继续处理
+	try {
 
 	// 1) Try og tags
     const ogAudio = getMetaContent(html, "og:audio") || getMetaContent(html, "og:audio:url");
@@ -263,6 +445,15 @@ export async function parseXiaoyuzhouEpisode(url: string): Promise<XiaoyuzhouEpi
         description,
         publishedAt: normalizeDateToYMD(publishedAt),
     };
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		console.error(`解析小宇宙播客失败 (${url}):`, errorMessage);
+		// 如果是fetch失败，抛出更明确的错误
+		if (errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('timeout')) {
+			throw new Error(`获取播客页面失败: ${errorMessage}`);
+		}
+		throw new Error(`解析播客元数据失败: ${errorMessage}`);
+	}
 }
 
 
