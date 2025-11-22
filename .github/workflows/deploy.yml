@@ -50,3 +50,5 @@ jobs:
         sleep 10
         curl -f http://${{ secrets.SERVER_HOST }}/api/health || exit 1
 
+
+

@@ -20,3 +20,5 @@ export const ASR_CONFIG = {
 	enableWordTime: true,
 	enableSpeakerDiarization: true, // 说话人分离
 };
+
+

@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
+    
+    console.log(`[API /api/public/list] 请求参数: type=${type}, page=${page}, limit=${limit}, topic=${topic || 'none'}`);
 
     // 检查缓存（latest 实时返回，不使用缓存）
     const cacheKey = cacheKeys.podcastList(type, topic || undefined, page, limit);
@@ -45,7 +47,10 @@ export async function GET(request: NextRequest) {
 
     let orderBy: any = { updatedAt: 'desc' };
     
-    if (type === 'hot') {
+    if (type === 'latest') {
+      // 最新列表：按创建时间降序，如果没有创建时间则使用发布时间
+      orderBy = { createdAt: 'desc' };
+    } else if (type === 'hot') {
       // 热度排序：基于访问次数计算热度分数
       // 暂时使用更新时间作为热度指标，后续会实现真正的访问次数排序
       orderBy = { updatedAt: 'desc' };
@@ -69,7 +74,8 @@ export async function GET(request: NextRequest) {
             sourceUrl: true,
             summary: true,
             topic: { select: { name: true } },
-            updatedAt: true
+            updatedAt: true,
+            createdAt: true
           },
           orderBy,
           skip: offset,
@@ -80,6 +86,8 @@ export async function GET(request: NextRequest) {
         })
       ]);
     });
+    
+    console.log(`[API /api/public/list] 查询结果: type=${type}, 原始数量=${podcastItemsRaw.length}, 总数=${podcastTotal}`);
 
     // 去重：同一 sourceUrl 仅保留最新的一条
     // 但只对确实重复的播客进行去重，避免过度去重
@@ -87,7 +95,11 @@ export async function GET(request: NextRequest) {
     for (const item of podcastItemsRaw) {
       const key = item.sourceUrl || item.id;
       const prev = seen.get(key);
-      if (!prev || new Date(item.updatedAt).getTime() > new Date(prev.updatedAt).getTime()) {
+      // 对于 latest 类型，使用 createdAt 比较；其他类型使用 updatedAt
+      const compareField = type === 'latest' ? 'createdAt' : 'updatedAt';
+      const itemTime = new Date(item[compareField] || item.updatedAt).getTime();
+      const prevTime = prev ? new Date(prev[compareField] || prev.updatedAt).getTime() : 0;
+      if (!prev || itemTime > prevTime) {
         seen.set(key, item);
       }
     }
@@ -95,7 +107,7 @@ export async function GET(request: NextRequest) {
     
     // 如果去重后数量显著减少，记录警告
     if (podcastItemsRaw.length > 0 && podcastItems.length < podcastItemsRaw.length * 0.5) {
-      console.warn(`播客去重：原始 ${podcastItemsRaw.length} 个，去重后 ${podcastItems.length} 个`);
+      console.warn(`[API /api/public/list] 播客去重：原始 ${podcastItemsRaw.length} 个，去重后 ${podcastItems.length} 个`);
     }
 
     // 格式化数据
@@ -117,7 +129,8 @@ export async function GET(request: NextRequest) {
 
     // 如果是热度排序，需要先获取所有数据，然后按点赞数排序，最后去重
     if (type === 'hot') {
-      // 先获取更多数据，因为需要去重
+      // 获取所有符合条件的播客（因为需要按点赞数排序，不能只取前N条）
+      // 使用 findMany 获取所有数据，然后在内存中按点赞数排序
       const hotItemsRaw = await prisma.podcast.findMany({
         where: whereClause,
         select: {
@@ -131,9 +144,11 @@ export async function GET(request: NextRequest) {
           updatedAt: true,
           topic: { select: { name: true } },
           _count: { select: { likes: true } }
-        },
-        take: limit * 3 // 获取更多数据，因为需要去重
+        }
+        // 不限制数量，获取所有数据以确保排序准确
       });
+      
+      console.log(`[API /api/public/list] 热度排序：获取到 ${hotItemsRaw.length} 条播客数据`);
 
       // 去重：同一 sourceUrl 仅保留点赞数最多或最新的那条
       const seen = new Map<string, any>();
@@ -189,6 +204,8 @@ export async function GET(request: NextRequest) {
       });
       // 注意：这里total可能不准确，但至少不会显示重复
     }
+    
+    console.log(`[API /api/public/list] 最终返回数量: ${items.length}`);
 
     const response = {
       items: items.map(item => ({
@@ -213,26 +230,27 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    // 所有列表都使用缓存，但频率不同
+    // 缓存策略：latest 类型不缓存，其他类型使用缓存
     let ttl: number;
     let cacheControl: string;
     
     if (type === 'latest') {
-      // 最新列表：10分钟更新一次
-      ttl = 10 * 60 * 1000; // 10分钟
-      cacheControl = 'public, max-age=600, s-maxage=600, stale-while-revalidate=300';
+      // 最新列表：不缓存，实时返回
+      cacheControl = 'no-cache, no-store, must-revalidate';
+      // 不设置缓存
     } else if (type === 'hot') {
       // 最热列表：30分钟更新一次（点赞变化不频繁）
       ttl = 30 * 60 * 1000; // 30分钟
       cacheControl = 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=600';
+      // 缓存结果
+      await cache.set(cacheKey, response, ttl);
     } else {
       // 其他列表：15分钟更新一次
       ttl = 15 * 60 * 1000; // 15分钟
       cacheControl = 'public, max-age=900, s-maxage=900, stale-while-revalidate=300';
+      // 缓存结果
+      await cache.set(cacheKey, response, ttl);
     }
-    
-    // 缓存结果
-    await cache.set(cacheKey, response, ttl);
 
     const res = NextResponse.json(response);
     res.headers.set('Cache-Control', cacheControl);

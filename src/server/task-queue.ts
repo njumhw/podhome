@@ -466,24 +466,137 @@ class TaskQueue {
     }
   }
 
-  // 检查任务超时
+  // 检查任务超时和已完成但状态未更新的任务
   private async checkTaskTimeouts() {
-    const now = Date.now();
-    const timeoutTasks: string[] = [];
+    try {
+      const now = Date.now();
+      const timeoutTasks: string[] = [];
 
-    for (const [taskId, startTime] of this.taskStartTimes.entries()) {
-      const runningTime = now - startTime;
-      if (runningTime > this.maxTaskDuration) {
-        timeoutTasks.push(taskId);
+      // 1. 检查内存中的任务超时
+      for (const [taskId, startTime] of this.taskStartTimes.entries()) {
+        const runningTime = now - startTime;
+        if (runningTime > this.maxTaskDuration) {
+          timeoutTasks.push(taskId);
+        }
       }
-    }
 
-    // 处理超时任务
-    for (const taskId of timeoutTasks) {
-      console.log(`任务 ${taskId} 运行时间超过 ${this.maxTaskDuration / 1000 / 60} 分钟，强制终止`);
-      await this.markTaskFailed(taskId, `任务运行时间超过 ${this.maxTaskDuration / 1000 / 60} 分钟，自动终止`);
-      this.runningTasks.delete(taskId);
-      this.taskStartTimes.delete(taskId);
+      // 2. 从数据库查询长时间运行的任务（防止应用重启后丢失内存状态）
+      const longRunningTasks = await dbRetry.taskQueue.findMany({
+        where: {
+          status: 'RUNNING',
+          startedAt: {
+            not: null,
+            lt: new Date(now - this.maxTaskDuration)
+          }
+        },
+        select: {
+          id: true,
+          data: true,
+          startedAt: true
+        }
+      });
+
+      for (const task of longRunningTasks) {
+        if (!timeoutTasks.includes(task.id)) {
+          timeoutTasks.push(task.id);
+        }
+        // 从内存中移除（如果存在）
+        this.runningTasks.delete(task.id);
+        this.taskStartTimes.delete(task.id);
+      }
+
+      // 3. 处理超时任务
+      for (const taskId of timeoutTasks) {
+        console.log(`⏱️ 任务 ${taskId} 运行时间超过 ${this.maxTaskDuration / 1000 / 60} 分钟，强制终止`);
+        await this.markTaskFailed(taskId, `任务运行时间超过 ${this.maxTaskDuration / 1000 / 60} 分钟，自动终止`);
+      }
+
+      // 4. 检查已完成但状态未更新的任务（通过检查数据库中是否存在对应的播客）
+      await this.checkCompletedTasks();
+    } catch (error) {
+      console.error('检查任务超时时出错:', error);
+    }
+  }
+
+  // 检查已完成但状态未更新的任务
+  private async checkCompletedTasks() {
+    try {
+      // 查找所有 RUNNING 状态且已运行超过5分钟的任务
+      const runningTasks = await dbRetry.taskQueue.findMany({
+        where: {
+          status: 'RUNNING',
+          startedAt: {
+            not: null,
+            lt: new Date(Date.now() - 5 * 60 * 1000) // 运行超过5分钟
+          }
+        },
+        select: {
+          id: true,
+          data: true,
+          startedAt: true
+        },
+        take: 20 // 限制查询数量，避免性能问题
+      });
+
+      if (runningTasks.length === 0) {
+        return;
+      }
+
+      console.log(`🔍 检查 ${runningTasks.length} 个运行中的任务是否已完成...`);
+
+      for (const task of runningTasks) {
+        const taskData = task.data as any;
+        const url = taskData?.url;
+        
+        if (!url) {
+          continue;
+        }
+
+        try {
+          // 检查数据库中是否存在对应的播客（通过 sourceUrl 或 audioUrl 匹配）
+          const podcast = await dbRetry.podcast.findFirst({
+            where: {
+              OR: [
+                { sourceUrl: url },
+                { audioUrl: url }
+              ],
+              status: 'READY' // 只检查已完成处理的播客
+            },
+            select: {
+              id: true,
+              title: true,
+              status: true
+            }
+          });
+
+          if (podcast) {
+            // 播客已存在且状态为 READY，说明任务实际上已完成
+            console.log(`✅ 发现已完成但状态未更新的任务: ${task.id}, 播客ID: ${podcast.id}`);
+            
+            // 更新任务状态为 READY
+            await this.updateTaskStatusWithRetry(task.id, {
+              status: 'READY',
+              result: {
+                id: podcast.id,
+                title: podcast.title,
+                status: podcast.status
+              },
+              completedAt: new Date(),
+              updatedAt: new Date()
+            });
+
+            // 从内存中移除
+            this.runningTasks.delete(task.id);
+            this.taskStartTimes.delete(task.id);
+            
+            console.log(`✅ 任务 ${task.id} 状态已更新为 READY`);
+          }
+        } catch (error) {
+          console.error(`检查任务 ${task.id} 时出错:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('检查已完成任务时出错:', error);
     }
   }
 
@@ -527,30 +640,26 @@ class TaskQueue {
       
       // 如果报告生成失败，任务应该标记为 FAILED，但保留结果（ASR数据）
       if (isPartialSuccess || (result as any)?.success === false) {
-        await dbRetry.taskQueue.update({
-          where: { id: taskRecord.id },
-          data: {
-            status: 'FAILED',
-            result: result,
-            error: hasError || '报告生成失败或超时，但ASR转写已成功完成',
-            completedAt: new Date(),
-            updatedAt: new Date()
-          }
+        // 使用重试机制更新状态
+        await this.updateTaskStatusWithRetry(taskRecord.id, {
+          status: 'FAILED',
+          result: result,
+          error: hasError || '报告生成失败或超时，但ASR转写已成功完成',
+          completedAt: new Date(),
+          updatedAt: new Date()
         });
         console.log(`播客处理部分成功（ASR成功但报告失败）: ${taskRecord.id}`);
       } else {
         // 完全成功，标记为 READY
-        await dbRetry.taskQueue.update({
-          where: { id: taskRecord.id },
-          data: {
-            status: 'READY',
-            result: result,
-            error: null, // 清除之前的错误信息
-            completedAt: new Date(),
-            updatedAt: new Date()
-          }
+        // 使用重试机制更新状态
+        await this.updateTaskStatusWithRetry(taskRecord.id, {
+          status: 'READY',
+          result: result,
+          error: null, // 清除之前的错误信息
+          completedAt: new Date(),
+          updatedAt: new Date()
         });
-        console.log(`播客处理任务完成: ${taskRecord.id}`);
+        console.log(`✅ 播客处理任务完成: ${taskRecord.id}`);
       }
       
       // 清除重试记录
@@ -559,6 +668,35 @@ class TaskQueue {
     } catch (error) {
       throw error; // 让上层处理错误
     }
+  }
+
+  // 带重试机制的任务状态更新
+  private async updateTaskStatusWithRetry(taskId: string, data: any, maxRetries: number = 3): Promise<void> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await dbRetry.taskQueue.update({
+          where: { id: taskId },
+          data: data
+        });
+        console.log(`✅ 任务状态更新成功: ${taskId} (尝试 ${attempt}/${maxRetries})`);
+        return; // 成功，退出重试循环
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.warn(`⚠️ 任务状态更新失败 (尝试 ${attempt}/${maxRetries}): ${taskId}`, lastError.message);
+        
+        if (attempt < maxRetries) {
+          // 指数退避：第1次重试等待1秒，第2次等待2秒
+          const delay = 1000 * attempt;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    // 所有重试都失败，抛出最后一个错误
+    console.error(`❌ 任务状态更新失败，已重试 ${maxRetries} 次: ${taskId}`, lastError);
+    throw lastError;
   }
 
   // 内部播客处理逻辑（复用现有代码）

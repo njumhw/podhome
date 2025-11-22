@@ -73,17 +73,29 @@ export default function HomePage() {
     const loadInitialData = async () => {
       try {
         // 并行加载所有数据
+        // 添加时间戳参数，避免浏览器缓存
+        const timestamp = Date.now();
         const [latestRes, hotRes, topicsRes, userRes] = await Promise.allSettled([
           fetch('/api/public/list?type=latest&limit=10'),
-          fetch('/api/public/list?type=hot&limit=10'),
+          fetch(`/api/public/list?type=hot&limit=10&_t=${timestamp}`),
           fetch('/api/public/topics'),
           fetch("/api/auth/me")
         ]);
 
         // 处理最新播客
-        if (latestRes.status === 'fulfilled' && latestRes.value.ok) {
-          const data = await latestRes.value.json();
-          setLatest(data.items || []);
+        if (latestRes.status === 'fulfilled') {
+          if (latestRes.value.ok) {
+            const data = await latestRes.value.json();
+            console.log('[首页] 最新播客数据:', data.items?.length || 0, '条');
+            setLatest(data.items || []);
+          } else {
+            const errorText = await latestRes.value.text();
+            console.error('[首页] 获取最新播客失败:', latestRes.value.status, errorText);
+            setLatest([]);
+          }
+        } else {
+          console.error('[首页] 获取最新播客请求失败:', latestRes.reason);
+          setLatest([]);
         }
 
         // 处理热门播客
@@ -126,8 +138,10 @@ export default function HomePage() {
   const loadHot = async () => {
     setLoading(prev => ({ ...prev, hot: true }));
     try {
-      const res = await fetch('/api/public/list?type=hot&limit=10');
+      // 添加时间戳参数，避免浏览器缓存
+      const res = await fetch(`/api/public/list?type=hot&limit=10&_t=${Date.now()}`);
       const data: ListResult = await res.json();
+      console.log('[首页] 最热播客数据:', data.items?.length || 0, '条', data.items?.map(i => ({ title: i.title.substring(0, 30), likeCount: i.likeCount })));
       setHot(data.items || []);
     } catch (error) {
       console.error('Failed to load hot:', error);

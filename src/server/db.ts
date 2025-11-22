@@ -7,32 +7,46 @@ declare global {
 
 // 数据库连接配置优化
 const createPrismaClient = () => {
+	// 从 DATABASE_URL 中提取连接池参数，或使用默认值
+	const databaseUrl = process.env.DATABASE_URL || '';
+	
+	// 如果 DATABASE_URL 中没有连接池参数，添加它们
+	let finalDatabaseUrl = databaseUrl;
+	if (databaseUrl && !databaseUrl.includes('connection_limit')) {
+		// 添加连接池参数
+		const separator = databaseUrl.includes('?') ? '&' : '?';
+		finalDatabaseUrl = `${databaseUrl}${separator}connection_limit=10&pool_timeout=20`;
+	}
+	
 	return new PrismaClient({
-		log: ["warn", "error"],
+		log: process.env.NODE_ENV === 'development' ? ["query", "error", "warn"] : ["error"],
 		datasources: {
 			db: {
-				url: process.env.DATABASE_URL,
+				url: finalDatabaseUrl,
 			},
 		},
 	});
 };
 
-// 在开发环境中，每次重新生成 Prisma 客户端后需要清除缓存
-// 通过检查 Prisma 客户端版本或强制重新创建来确保使用最新版本
+// 使用单例模式，避免创建多个 Prisma 客户端实例（导致连接池耗尽）
+// 在生产环境和开发环境中都使用全局缓存
 export const db: PrismaClient = (() => {
-	// 如果全局缓存存在，先断开连接
+	// 如果全局缓存存在，直接使用（避免创建新连接）
 	if (global.prismaGlobal) {
-		try {
-			global.prismaGlobal.$disconnect().catch(() => {});
-		} catch (e) {
-			// 忽略断开连接错误
-		}
+		return global.prismaGlobal;
 	}
+	
 	// 创建新的 Prisma 客户端实例
 	const client = createPrismaClient();
-	if (process.env.NODE_ENV !== "production") {
-		global.prismaGlobal = client;
+	global.prismaGlobal = client;
+	
+	// 在应用关闭时清理连接
+	if (typeof process !== 'undefined') {
+		process.on('beforeExit', async () => {
+			await client.$disconnect().catch(() => {});
+		});
 	}
+	
 	return client;
 })();
 

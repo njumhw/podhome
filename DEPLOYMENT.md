@@ -155,3 +155,5 @@ pg_dump podroom > backup_$(date +%Y%m%d_%H%M%S).sql
    - 查看Nginx错误日志
    - 确认代理配置
 
+
+

@@ -152,3 +152,5 @@ export const dbRetry = {
 	// 原始查询
 	queryRaw: (query: TemplateStringsArray, ...values: any[]) => DatabaseWrapper.queryRaw(query, ...values),
 };
+
+

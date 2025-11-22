@@ -52,16 +52,23 @@ export async function POST(req: NextRequest) {
     let dailyUsage = 0;
     
     if (user) {
-      const usage = await db.podcast.count({
-        where: {
-          createdById: user.id,
-          createdAt: {
-            gte: new Date(today + 'T00:00:00.000Z'),
-            lt: new Date(today + 'T23:59:59.999Z')
+      try {
+        const usage = await db.podcast.count({
+          where: {
+            createdById: user.id,
+            createdAt: {
+              gte: new Date(today + 'T00:00:00.000Z'),
+              lt: new Date(today + 'T23:59:59.999Z')
+            }
           }
-        }
-      });
-      dailyUsage = usage;
+        });
+        dailyUsage = usage;
+      } catch (dbError) {
+        const dbErrorMsg = dbError instanceof Error ? dbError.message : String(dbError);
+        console.error('[process-audio-async] 数据库查询失败:', dbErrorMsg);
+        // 如果是数据库错误，直接抛出，会被 catch 块捕获并返回 503
+        throw new Error(`数据库查询失败: ${dbErrorMsg}`);
+      }
     }
     
     // 确定用户额度
@@ -93,13 +100,22 @@ export async function POST(req: NextRequest) {
     console.log(`开始异步处理播客链接: ${url}`);
     
     // 添加任务到队列
-    const taskId = await taskQueue.addTask({
-      type: 'PODCAST_PROCESSING',
-      data: {
-        url,
-        userId: user?.id
-      }
-    });
+    let taskId: string;
+    try {
+      taskId = await taskQueue.addTask({
+        type: 'PODCAST_PROCESSING',
+        data: {
+          url,
+          userId: user?.id
+        }
+      });
+      console.log(`[process-audio-async] ✅ 任务已添加到队列: ${taskId}`);
+    } catch (taskError) {
+      const taskErrorMsg = taskError instanceof Error ? taskError.message : String(taskError);
+      console.error('[process-audio-async] 添加任务到队列失败:', taskErrorMsg);
+      // 如果是数据库错误，会被 catch 块捕获并返回 503
+      throw new Error(`添加任务失败: ${taskErrorMsg}`);
+    }
     
     return Response.json({
       success: true,
@@ -112,14 +128,16 @@ export async function POST(req: NextRequest) {
     const duration = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
     
     console.error('═══════════════════════════════════════════════════════════');
-    console.error('[process-audio-async] 处理失败');
+    console.error('[process-audio-async] ❌ 处理失败');
     console.error('═══════════════════════════════════════════════════════════');
     console.error('耗时:', `${duration}ms`);
+    console.error('错误类型:', errorName);
     console.error('错误信息:', errorMessage);
     if (errorStack) {
-      console.error('错误堆栈:', errorStack.substring(0, 500));
+      console.error('错误堆栈:', errorStack.substring(0, 1000));
     }
     console.error('═══════════════════════════════════════════════════════════');
     
@@ -127,9 +145,23 @@ export async function POST(req: NextRequest) {
     let statusCode = 500;
     let errorMsg = errorMessage;
     
-    if (errorMessage.includes('数据库') || errorMessage.includes('database') || errorMessage.includes('prisma')) {
+    // 检查是否是数据库相关错误
+    const isDatabaseError = 
+      errorMessage.includes('数据库') || 
+      errorMessage.includes('database') || 
+      errorMessage.includes('prisma') ||
+      errorMessage.includes('P1001') || // Prisma 连接错误
+      errorMessage.includes('P1002') || // Prisma 连接超时
+      errorMessage.includes('P1003') || // Prisma 数据库不存在
+      errorMessage.includes('P1017') || // Prisma 服务器关闭连接
+      errorName === 'PrismaClientKnownRequestError' ||
+      errorName === 'PrismaClientInitializationError' ||
+      errorName === 'PrismaClientRustPanicError';
+    
+    if (isDatabaseError) {
       statusCode = 503;
       errorMsg = '数据库连接问题，请稍后重试';
+      console.error('[process-audio-async] 检测到数据库错误，返回 503');
     } else if (errorMessage.includes('超时') || errorMessage.includes('timeout')) {
       statusCode = 504;
       errorMsg = '请求处理超时，请稍后重试';
@@ -138,6 +170,6 @@ export async function POST(req: NextRequest) {
       errorMsg = '网络请求失败，请检查网络连接';
     }
     
-    return jsonError(`处理失败: ${errorMsg}`, statusCode);
+    return jsonError(errorMsg, statusCode);
   }
 }

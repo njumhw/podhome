@@ -188,3 +188,5 @@ sudo chown $USER:$USER /var/log/podroom
 4. 验证报告是否包含原话摘录
 5. 检查前端是否显示作者和发布时间
 
+
+
