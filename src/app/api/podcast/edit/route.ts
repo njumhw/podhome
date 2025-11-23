@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/server/db';
 import { z } from 'zod';
+import { requireUser } from '@/server/auth';
 
 const editPodcastSchema = z.object({
   id: z.string(),
@@ -13,6 +14,12 @@ const editPodcastSchema = z.object({
 
 export async function PUT(req: NextRequest) {
   try {
+    // 权限检查：只有管理员可以编辑播客
+    const user = await requireUser();
+    if (user.role !== 'ADMIN') {
+      return NextResponse.json({ success: false, error: '只有管理员可以编辑播客' }, { status: 403 });
+    }
+
     const body = await req.json();
     const { id, title, author, publishedAt, summary, script } = editPodcastSchema.parse(body);
 

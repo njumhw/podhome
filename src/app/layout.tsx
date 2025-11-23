@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-// 暂时移除 Geist 字体，避免 Turbopack 字体模块解析问题
-// import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { ToastProvider } from "@/components/Toast";
@@ -10,16 +9,18 @@ if (typeof window === 'undefined') {
   import("@/server/startup");
 }
 
-// 暂时移除字体配置，使用系统默认字体
-// const geistSans = Geist({
-//   variable: "--font-geist-sans",
-//   subsets: ["latin"],
-// });
+// 加载字体
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+});
 
-// const geistMono = Geist_Mono({
-//   variable: "--font-geist-mono",
-//   subsets: ["latin"],
-// });
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "PodHome",
@@ -32,19 +33,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" className="dark">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body
-        className="antialiased bg-white text-black dark:bg-black dark:text-white font-sans"
+        className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased bg-black text-white font-sans`}
         suppressHydrationWarning={true}
       >
         <ToastProvider>
           <Header />
           <main className="mx-auto max-w-7xl px-6 py-8">
             {children}
-            </main>
+          </main>
           <footer className="mx-auto max-w-7xl px-6 pb-10">
-            <div className="border-t border-black/10 dark:border-white/10 pt-6">
-              <p className="text-[12px] leading-5 text-gray-500 dark:text-gray-400">
+            <div className="border-t border-white/5 pt-6">
+              <p className="text-[12px] leading-5 text-gray-400 font-mono">
                 本站仅用于内部学习与研究，内容来自公开播客。逐字稿与总结不用于商业用途。如有侵权请联系移除。
                 <span id="admin-footer-link"></span>
               </p>

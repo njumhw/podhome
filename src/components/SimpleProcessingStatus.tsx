@@ -250,25 +250,25 @@ export default function SimpleProcessingStatus({
     
     if (metrics.audioDuration) {
       const minutes = Math.round(metrics.audioDuration / 60);
-      items.push(`音频时长: ${minutes}分钟`);
+      items.push(`Duration: ${minutes}m`);
     }
     
     if (metrics.asrSegmentsCount) {
-      items.push(`ASR段落: ${metrics.asrSegmentsCount}个`);
+      items.push(`ASR: ${metrics.asrSegmentsCount}`);
     }
     
     if (metrics.chunksCount) {
-      items.push(`分块数: ${metrics.chunksCount}个`);
+      items.push(`Chunks: ${metrics.chunksCount}`);
     }
     
     if (metrics.transcriptCompressionRatio) {
       const ratio = (metrics.transcriptCompressionRatio * 100).toFixed(1);
-      items.push(`原文保留: ${ratio}%`);
+      items.push(`Transcript: ${ratio}%`);
     }
     
     if (metrics.reportCompressionRatio) {
       const ratio = (metrics.reportCompressionRatio * 100).toFixed(1);
-      items.push(`报告压缩: ${ratio}%`);
+      items.push(`Report: ${ratio}%`);
     }
     
     return items.length > 0 ? items.join(' • ') : null;
@@ -278,17 +278,17 @@ export default function SimpleProcessingStatus({
     if (!step) return null;
     
     const statusMap = {
-      'pending': { text: '等待中', color: 'text-gray-500' },
-      'running': { text: '处理中', color: 'text-blue-500' },
-      'completed': { text: '已完成', color: 'text-green-500' },
-      'failed': { text: '失败', color: 'text-red-500' }
+      'pending': { text: 'Pending', color: 'text-zinc-500' },
+      'running': { text: 'Running', color: 'text-indigo-400' },
+      'completed': { text: 'Completed', color: 'text-emerald-400' },
+      'failed': { text: 'Failed', color: 'text-rose-400' }
     };
     
     const status = statusMap[step.status as keyof typeof statusMap] || statusMap.pending;
     const duration = step.duration ? ` (${Math.round(step.duration / 1000)}s)` : '';
     
     return (
-      <span className={`text-xs ${status.color}`}>
+      <span className={`text-xs ${status.color} font-mono`}>
         {status.text}{duration}
       </span>
     );
@@ -300,17 +300,17 @@ export default function SimpleProcessingStatus({
   const completedCount = processingItems.filter(item => item.status === 'completed' || item.status === 'failed').length;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
         {/* 头部 */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-6 border-b border-white/10">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">播客处理状态</h2>
-            <p className="text-sm text-gray-600 mt-1">阿茂每天可以处理2条播客链接哦</p>
+            <h2 className="text-xl font-bold text-white font-sans">Processing Status</h2>
+            <p className="text-sm text-zinc-400 mt-1 font-sans">Up to 2 podcasts can be processed per day</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-zinc-400 hover:text-white transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -319,56 +319,56 @@ export default function SimpleProcessingStatus({
         </div>
 
         {/* 标签页 */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-white/10">
           <button
             onClick={() => setActiveTab('processing')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors font-sans ${
               activeTab === 'processing'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-indigo-500 text-white'
+                : 'border-transparent text-zinc-400 hover:text-zinc-300'
             }`}
           >
-            进行中 ({processingCount})
+            In Progress ({processingCount})
           </button>
           <button
             onClick={() => setActiveTab('completed')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors font-sans ${
               activeTab === 'completed'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-indigo-500 text-white'
+                : 'border-transparent text-zinc-400 hover:text-zinc-300'
             }`}
           >
-            已完成 ({completedCount})
+            Completed ({completedCount})
           </button>
         </div>
 
         {/* 内容区域 */}
-        <div className="p-4 overflow-y-auto max-h-[calc(80vh-120px)]">
+        <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
           {activeTab === 'processing' ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {processingItems
                 .filter(item => item.status === 'processing')
                 .map((item) => (
-                  <div key={item.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div key={item.id} className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                     {/* 基本信息 */}
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                          <span className="text-sm font-medium text-blue-600">阿茂在听啦</span>
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                          <span className="text-sm font-medium text-indigo-400 font-sans">Processing...</span>
                         </div>
-                        <p className="text-sm text-gray-600 truncate" title={item.url}>{item.url}</p>
-                        <div className="mt-3 text-xs text-gray-500 bg-blue-50 rounded-md p-2 border border-blue-100">
-                          <p className="text-gray-600">处理需要一些时间，您可以先去浏览其他播客报告</p>
+                        <p className="text-sm text-zinc-300 truncate font-mono" title={item.url}>{item.url}</p>
+                        <div className="mt-3 text-xs text-zinc-400 bg-white/5 rounded-lg p-3 border border-white/10">
+                          <p className="text-zinc-300 font-sans">Processing takes time. You can browse other podcasts while waiting.</p>
                         </div>
                         
                         {/* 处理步骤状态 */}
                         {item.metrics?.processingSteps && (
                           <div className="mt-2 space-y-1">
-                            <div className="flex items-center gap-4 text-xs">
-                              <span className="text-gray-600">ASR转写: {getStepStatus(item.metrics.processingSteps.asr)}</span>
-                              <span className="text-gray-600">文本清洗: {getStepStatus(item.metrics.processingSteps.cleaning)}</span>
-                              <span className="text-gray-600">报告生成: {getStepStatus(item.metrics.processingSteps.report)}</span>
+                            <div className="flex items-center gap-4 text-xs font-mono">
+                              <span className="text-zinc-400">ASR: {getStepStatus(item.metrics.processingSteps.asr)}</span>
+                              <span className="text-zinc-400">Cleaning: {getStepStatus(item.metrics.processingSteps.cleaning)}</span>
+                              <span className="text-zinc-400">Report: {getStepStatus(item.metrics.processingSteps.report)}</span>
                             </div>
                           </div>
                         )}
@@ -376,7 +376,7 @@ export default function SimpleProcessingStatus({
                         {/* 处理指标 */}
                         {item.metrics && (
                           <div className="mt-2">
-                            <div className="text-xs text-gray-600 bg-gray-100 rounded px-2 py-1 inline-block">
+                            <div className="text-xs text-zinc-400 bg-white/5 rounded px-2 py-1 inline-block font-mono border border-white/10">
                               {formatMetrics(item.metrics)}
                             </div>
                           </div>
@@ -384,17 +384,17 @@ export default function SimpleProcessingStatus({
                       </div>
                       <button
                         onClick={() => handleCancel(item.id)}
-                        className="ml-3 px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 transition-colors flex-shrink-0"
+                        className="ml-3 px-3 py-1.5 text-xs text-rose-400 border border-rose-500/50 rounded-lg hover:bg-rose-500/10 transition-colors flex-shrink-0 font-sans"
                       >
-                        取消
+                        Cancel
                       </button>
                     </div>
 
                     {/* 简化进度条 - 仅显示处理中状态，不显示具体进度 */}
                     <div className="mt-3">
-                      <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div className="w-full bg-white/5 rounded-full h-1 overflow-hidden">
                         <div
-                          className="bg-blue-500 h-1.5 rounded-full animate-pulse"
+                          className="bg-indigo-400 h-1 rounded-full animate-pulse"
                           style={{ width: '100%' }}
                         ></div>
                       </div>
@@ -403,60 +403,60 @@ export default function SimpleProcessingStatus({
                 ))}
               
               {processingCount === 0 && (
-                <div className="text-center py-8">
-                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
+                    <svg className="w-6 h-6 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-1">暂无进行中的任务</h3>
-                  <p className="text-xs text-gray-500 mb-3">提交新的播客链接开始处理</p>
+                  <h3 className="text-sm font-medium text-white mb-1 font-sans">No tasks in progress</h3>
+                  <p className="text-xs text-zinc-400 mb-4 font-sans">Submit a new podcast link to start processing</p>
                   <Link 
                     href="/home" 
-                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                    className="text-xs text-indigo-400 hover:text-indigo-300 underline font-sans"
                     onClick={onClose}
                   >
-                    去浏览其他播客报告 →
+                    Browse other podcasts →
                   </Link>
                 </div>
               )}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {processingItems
                 .filter(item => item.status === 'completed' || item.status === 'failed')
                 .map((item) => (
-                  <div key={item.id} className={`flex items-center justify-between p-3 rounded-lg border ${
+                  <div key={item.id} className={`flex items-center justify-between p-4 rounded-xl border backdrop-blur-sm ${
                     item.status === 'completed' 
-                      ? 'bg-green-50 border-green-200' 
-                      : 'bg-red-50 border-red-200'
+                      ? 'bg-emerald-500/10 border-emerald-500/30' 
+                      : 'bg-rose-500/10 border-rose-500/30'
                   }`}>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-2">
                         <div className={`w-2 h-2 rounded-full ${
-                          item.status === 'completed' ? 'bg-green-500' : 'bg-red-500'
+                          item.status === 'completed' ? 'bg-emerald-400' : 'bg-rose-400'
                         }`}></div>
-                        <span className={`text-sm font-medium ${
-                          item.status === 'completed' ? 'text-green-600' : 'text-red-600'
+                        <span className={`text-sm font-medium font-sans ${
+                          item.status === 'completed' ? 'text-emerald-400' : 'text-rose-400'
                         }`}>
-                          {item.status === 'completed' ? '已完成' : '阿茂去摸鱼了'}
+                          {item.status === 'completed' ? 'Completed' : 'Failed'}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 truncate" title={item.url}>{item.url}</p>
+                      <p className="text-sm text-zinc-300 truncate font-mono" title={item.url}>{item.url}</p>
                       {item.title && (
-                        <p className="text-sm font-medium text-gray-900 mt-1 truncate" title={item.title}>{item.title}</p>
+                        <p className="text-sm font-medium text-white mt-1 truncate font-sans" title={item.title}>{item.title}</p>
                       )}
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-zinc-400 mt-1 font-sans">
                         {item.status === 'completed' 
-                          ? `完成时间: ${item.completedAt ? new Date(item.completedAt).toLocaleString() : '未知'}`
-                          : '不好意思，阿茂好像去摸鱼了，请联系下阿茅吧'
+                          ? `Completed: ${item.completedAt ? new Date(item.completedAt).toLocaleString() : 'Unknown'}`
+                          : 'Processing failed. Please try again or contact support.'
                         }
                       </p>
                       
                       {/* 处理指标 */}
                       {item.status === 'completed' && item.metrics && (
                         <div className="mt-2">
-                          <div className="text-xs text-gray-600 bg-green-50 rounded px-2 py-1 inline-block">
+                          <div className="text-xs text-zinc-400 bg-white/5 rounded px-2 py-1 inline-block font-mono border border-white/10">
                             {formatMetrics(item.metrics)}
                           </div>
                         </div>
@@ -466,41 +466,41 @@ export default function SimpleProcessingStatus({
                       {item.status === 'completed' && item.title && (
                         <button
                           onClick={() => window.open(`/podcast/${item.id}`, '_blank')}
-                          className="px-2 py-1 text-xs text-blue-600 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
+                          className="px-3 py-1.5 text-xs text-indigo-400 border border-indigo-500/50 rounded-lg hover:bg-indigo-500/10 transition-colors font-sans"
                         >
-                          查看
+                          View
                         </button>
                       )}
                       {item.status === 'failed' && (
                         <button
                           onClick={() => {
                             // 可以添加联系阿茅的逻辑，比如打开邮件或显示联系方式
-                            alert('请联系阿茅：maoweihao@example.com 或微信：your_wechat_id');
+                            alert('Please contact support: maoweihao@example.com or WeChat: your_wechat_id');
                           }}
-                          className="px-2 py-1 text-xs text-orange-600 border border-orange-200 rounded hover:bg-orange-50 transition-colors"
+                          className="px-3 py-1.5 text-xs text-rose-400 border border-rose-500/50 rounded-lg hover:bg-rose-500/10 transition-colors font-sans"
                         >
-                          联系阿茅
+                          Contact
                         </button>
                       )}
                       <button
                         onClick={() => removeItem(item.id)}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                        className="px-3 py-1.5 text-xs text-zinc-400 border border-white/10 rounded-lg hover:bg-white/5 transition-colors font-sans"
                       >
-                        移除
+                        Remove
                       </button>
                     </div>
                   </div>
                 ))}
               
               {completedCount === 0 && (
-                <div className="text-center py-8">
-                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
+                    <svg className="w-6 h-6 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-1">暂无已完成的任务</h3>
-                  <p className="text-xs text-gray-500">处理完成的播客会显示在这里</p>
+                  <h3 className="text-sm font-medium text-white mb-1 font-sans">No completed tasks</h3>
+                  <p className="text-xs text-zinc-400 font-sans">Completed podcasts will appear here</p>
                 </div>
               )}
             </div>

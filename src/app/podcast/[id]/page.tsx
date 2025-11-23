@@ -9,7 +9,10 @@ import TopicModal from '@/components/TopicModal';
 import { useToast } from '@/components/Toast';
 import { SummaryDisplay } from '@/components/SummaryDisplay';
 import LikeButton from '@/components/LikeButton';
+import MinimalLikeButton from '@/components/MinimalLikeButton';
 import AudioPlayer from '@/components/AudioPlayer';
+import CompactAudioPlayer from '@/components/CompactAudioPlayer';
+import { getStyleFromTitle } from '@/utils/podcast-styles';
 
 type Topic = {
   id: string;
@@ -67,6 +70,7 @@ export default function PodcastDetailPage() {
   const [copySuccess, setCopySuccess] = useState('');
   const [downloadStatus, setDownloadStatus] = useState('');
   const [shareSuccess, setShareSuccess] = useState('');
+  const [copiedText, setCopiedText] = useState(false);
   const [editData, setEditData] = useState({
     title: '',
     author: '',
@@ -170,10 +174,18 @@ export default function PodcastDetailPage() {
       if (res.ok) {
         const userData = await res.json();
         setUser(userData.user);
+        // 只有明确是 ADMIN 角色的用户才设置为管理员
         setIsAdmin(userData.user?.role === 'ADMIN');
+      } else {
+        // 如果请求失败，确保 isAdmin 为 false
+        setIsAdmin(false);
+        setUser(null);
       }
     } catch (error) {
       console.error('Failed to check user:', error);
+      // 出错时也确保 isAdmin 为 false
+      setIsAdmin(false);
+      setUser(null);
     }
   };
 
@@ -273,7 +285,11 @@ export default function PodcastDetailPage() {
       try {
         await navigator.clipboard.writeText(text);
         setCopySuccess(`${type}已复制到剪贴板`);
-        setTimeout(() => setCopySuccess(''), 2000);
+        setCopiedText(true);
+        setTimeout(() => {
+          setCopySuccess('');
+          setCopiedText(false);
+        }, 2000);
         return;
       } catch (err) {
         console.warn('Clipboard API 失败，尝试降级方案:', err);
@@ -299,7 +315,11 @@ export default function PodcastDetailPage() {
       
       if (successful) {
         setCopySuccess(`${type}已复制到剪贴板`);
-        setTimeout(() => setCopySuccess(''), 2000);
+        setCopiedText(true);
+        setTimeout(() => {
+          setCopySuccess('');
+          setCopiedText(false);
+        }, 2000);
       } else {
         throw new Error('execCommand 复制失败');
       }
@@ -446,14 +466,14 @@ export default function PodcastDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-8">
+      <div className="min-h-screen bg-black">
+        <div className="max-w-[1536px] mx-auto px-8 py-12">
           <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/2 mb-4"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/4 mb-8"></div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="h-96 bg-gray-200 rounded"></div>
-              <div className="h-96 bg-gray-200 rounded"></div>
+            <div className="h-12 bg-zinc-900 rounded w-3/4 mb-6"></div>
+            <div className="h-4 bg-zinc-900 rounded w-1/3 mb-8"></div>
+            <div className="space-y-10">
+              <div className="h-96 bg-zinc-900 rounded-lg border border-white/5"></div>
+              <div className="h-96 bg-zinc-900 rounded-lg border border-white/5"></div>
             </div>
           </div>
         </div>
@@ -463,11 +483,11 @@ export default function PodcastDetailPage() {
 
   if (error || !podcast) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-8">
+      <div className="min-h-screen bg-black">
+        <div className="max-w-[1536px] mx-auto px-8 py-12">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">播客不存在</h1>
-            <Link href="/home" className="text-blue-600 hover:text-blue-800">
+            <h1 className="text-3xl font-bold text-white mb-6 font-sans">播客不存在</h1>
+            <Link href="/home" className="text-indigo-400 hover:text-indigo-300 transition-colors font-mono text-sm">
               返回首页
             </Link>
           </div>
@@ -476,84 +496,122 @@ export default function PodcastDetailPage() {
     );
   }
 
+  const accentStyle = getStyleFromTitle(podcast.title);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* 基本信息 */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1">
-              {isEditing ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">标题</label>
-                    <input
-                      type="text"
-                      value={editData.title}
-                      onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                      className="w-full p-2 border border-gray-300 rounded-md text-lg font-bold text-gray-900"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">作者</label>
-                      <input
-                        type="text"
-                        value={editData.author}
-                        onChange={(e) => setEditData({ ...editData, author: e.target.value })}
-                        className="w-full p-2 border border-gray-300 rounded-md text-gray-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">发布时间</label>
-                      <input
-                        type="date"
-                        value={editData.publishedAt}
-                        onChange={(e) => setEditData({ ...editData, publishedAt: e.target.value })}
-                        className="w-full p-2 border border-gray-300 rounded-md text-gray-900"
-                      />
-                    </div>
+    <div className="min-h-screen bg-black">
+      <div className="max-w-6xl mx-auto px-8 py-12 relative">
+        {/* 返回首页按钮 - 右上角 */}
+        <div className="absolute top-0 right-6">
+          <Link
+            href="/home"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors font-mono"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-3.5 h-3.5"
+            >
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            返回首页
+          </Link>
+        </div>
+
+        {/* Header: 标题和元数据 */}
+        <div className="mb-12">
+          {isEditing ? (
+            <div className="space-y-4 p-6 rounded-lg border border-white/5 bg-zinc-900/40 backdrop-blur-sm">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-2 font-mono">标题</label>
+                <input
+                  type="text"
+                  value={editData.title}
+                  onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                  className="w-full p-3 border border-white/5 rounded-lg text-lg font-bold bg-black/40 text-white focus:outline-none focus:border-white/10 font-sans"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-2 font-mono">作者</label>
+                  <input
+                    type="text"
+                    value={editData.author}
+                    onChange={(e) => setEditData({ ...editData, author: e.target.value })}
+                    className="w-full p-3 border border-white/5 rounded-lg bg-black/40 text-white focus:outline-none focus:border-white/10 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-2 font-mono">发布时间</label>
+                  <input
+                    type="date"
+                    value={editData.publishedAt}
+                    onChange={(e) => setEditData({ ...editData, publishedAt: e.target.value })}
+                    className="w-full p-3 border border-white/5 rounded-lg bg-black/40 text-white focus:outline-none focus:border-white/10 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Media Deck - 统一的媒体卡片 */}
+              <div className="rounded-3xl bg-zinc-900/60 backdrop-blur-xl border border-white/10 p-8 mb-12">
+                {/* Top: 标题和元数据 */}
+                <div className="mb-8">
+                  <h1 className="text-3xl md:text-4xl font-bold mb-6 text-white font-sans leading-tight">
+                    {podcast.title.replace(/\s*[-|]\s*[^-|]+$/, '').trim()}
+                  </h1>
+                  
+                  {/* 元数据标签 */}
+                  <div className="flex flex-wrap items-center gap-3 font-mono text-sm">
+                    {podcast.author && (
+                      <span className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/90">
+                        {podcast.author}
+                      </span>
+                    )}
+                    {podcast.publishedAt && (
+                      <span className="text-zinc-400">
+                        {new Date(podcast.publishedAt).toLocaleDateString('zh-CN', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit'
+                        })}
+                      </span>
+                    )}
+                    {podcast.topic && (
+                      <span 
+                        className="px-3 py-1.5 rounded-lg border bg-white/5"
+                        style={{ 
+                          borderColor: podcast.topic.color + '40',
+                          backgroundColor: podcast.topic.color + '10',
+                          color: podcast.topic.color || '#818cf8'
+                        }}
+                      >
+                        #{podcast.topic.name}
+                      </span>
+                    )}
                   </div>
                 </div>
-              ) : (
-                <>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1">
-                      <h1 className="text-3xl font-bold text-gray-900 mb-4">{podcast.title}</h1>
-                      {/* 音频播放器 */}
-                      {podcast.audioUrl && (
-                        <AudioPlayer audioUrl={podcast.audioUrl} title={podcast.title} />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 ml-4">
-                      <button
-                        onClick={handleShare}
-                        className="p-1.5 bg-slate-500 text-white rounded-md hover:bg-slate-600 transition-colors"
-                        title="分享播客"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
-                        </svg>
-                      </button>
-                      <Link
-                        href="/home"
-                        className="p-1.5 bg-slate-500 text-white rounded-md hover:bg-slate-600 transition-colors"
-                        title="返回首页"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                        </svg>
-                      </Link>
-                    </div>
+
+                {/* Middle: 可视化进度条 */}
+                {podcast.audioUrl && (
+                  <div className="mb-6">
+                    <CompactAudioPlayer audioUrl={podcast.audioUrl} title={podcast.title} />
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-gray-700 mb-4">
-                    <span>作者：{podcast.author}</span>
-                    <span>发布时间：{podcast.publishedAt ? new Date(podcast.publishedAt).toLocaleDateString() : '未知时间'}</span>
-                  </div>
+                )}
+
+                {/* Bottom: 播放控制和操作按钮 */}
+                <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                  {/* 左侧：播放控制（已在CompactAudioPlayer中） */}
+                  <div className="flex-1"></div>
                   
-                  
-                  {/* 操作按钮区域 */}
-                  <div className="flex items-center gap-1.5 mb-4">
+                  {/* 右侧：操作按钮 */}
+                  <div className="flex items-center gap-2">
                     {isAdmin && (
                       <>
                         {isEditing ? (
@@ -561,32 +619,35 @@ export default function PodcastDetailPage() {
                             <button
                               onClick={handleSaveEdit}
                               disabled={isSaving}
-                              className="p-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-400 border border-emerald-500/50 rounded-lg hover:bg-emerald-500/10 disabled:opacity-50 transition-colors font-mono"
                               title={isSaving ? '保存中...' : '保存'}
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                               </svg>
+                              {isSaving ? '保存中...' : '保存'}
                             </button>
                             <button
                               onClick={handleCancelEdit}
-                              className="p-1.5 bg-slate-500 text-white rounded-md hover:bg-slate-600 transition-colors"
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
                               title="取消"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                               </svg>
+                              取消
                             </button>
                           </>
                         ) : (
                           <button
                             onClick={handleEdit}
-                            className="p-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
                             title="编辑"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
+                            编辑
                           </button>
                         )}
                       </>
@@ -594,91 +655,114 @@ export default function PodcastDetailPage() {
                     {podcast?.audioUrl && (
                       <button
                         onClick={handleDownload}
-                        className="p-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
                         title="下载音频"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
+                        下载
                       </button>
                     )}
+                    <button
+                      onClick={handleShare}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                      title="分享播客"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                      </svg>
+                      分享
+                    </button>
                   </div>
-                </>
-              )}
-              <div className="flex items-center gap-3">
-                {podcast.topic ? (
-                  <span 
-                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium"
-                    style={{ 
-                      backgroundColor: podcast.topic.color + '20',
-                      color: podcast.topic.color || '#3B82F6'
-                    }}
-                  >
-                    {podcast.topic.name}
-                  </span>
-                ) : (
-                  <span className="text-sm text-gray-600">未设置专题</span>
-                )}
-                <button
-                  onClick={() => setShowTopicModal(true)}
-                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
-                >
-                  管理专题
-                </button>
+                </div>
               </div>
-            </div>
-          </div>
-          
+            </>
+          )}
         </div>
 
-        {/* 报告和全文 */}
-        {/* 主要内容区域 - 上下布局 */}
-        <div className="space-y-8">
-          {/* 播客总结 - 提高可视高度 */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-semibold text-gray-900">播客总结</h2>
-                <LikeButton 
+        {/* 主要内容区域 - 单列布局 */}
+        <div className="space-y-10">
+          {/* AI Insights Section - 功能工具栏样式 */}
+          <div>
+            {/* Header: 工具栏样式 */}
+            <div className="flex justify-between items-center mb-6">
+              {/* Left: Title + Like Button */}
+              <div className="flex items-center gap-4">
+                {/* 科技感洞察图标 */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="w-6 h-6 text-pink-400"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="2" fill="currentColor" />
+                  <line x1="12" y1="4" x2="12" y2="10" />
+                  <line x1="12" y1="14" x2="12" y2="20" />
+                  <line x1="4" y1="12" x2="10" y2="12" />
+                  <line x1="14" y1="12" x2="20" y2="12" />
+                  <line x1="5.66" y1="5.66" x2="9.17" y2="9.17" />
+                  <line x1="14.83" y1="14.83" x2="18.34" y2="18.34" />
+                  <line x1="18.34" y1="5.66" x2="14.83" y2="9.17" />
+                  <line x1="9.17" y1="14.83" x2="5.66" y2="18.34" />
+                  <circle cx="12" cy="4" r="1.5" fill="currentColor" />
+                  <circle cx="12" cy="20" r="1.5" fill="currentColor" />
+                  <circle cx="4" cy="12" r="1.5" fill="currentColor" />
+                  <circle cx="20" cy="12" r="1.5" fill="currentColor" />
+                  <circle cx="5.66" cy="5.66" r="1.5" fill="currentColor" />
+                  <circle cx="18.34" cy="18.34" r="1.5" fill="currentColor" />
+                  <circle cx="18.34" cy="5.66" r="1.5" fill="currentColor" />
+                  <circle cx="5.66" cy="18.34" r="1.5" fill="currentColor" />
+                </svg>
+                <h2 className="text-2xl font-bold font-sans text-white">Insight</h2>
+                <MinimalLikeButton 
                   podcastId={podcast.id} 
                   initialLikeCount={podcast.likeCount || 0}
-                  className="text-base"
                 />
               </div>
+              
+              {/* Right: Copy Button */}
               {podcast.summary && !isEditing && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleCopy(podcast.summary || '', '播客总结')}
-                    className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
-                    title="复制全文"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    复制
-                  </button>
-                  <button
-                    onClick={() => setShowFullscreenReport(true)}
-                    className="text-sm text-blue-600 hover:text-blue-800 px-3 py-1 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors"
-                  >
-                    全屏阅读
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleCopy(podcast.summary || '', 'AI Insights')}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 hover:text-white transition-colors font-mono"
+                  title="复制全文"
+                >
+                  {copiedText ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
               )}
             </div>
             {isEditing ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">播客总结内容</label>
+                <label className="block text-xs font-medium text-zinc-500 mb-2 font-mono">播客总结内容</label>
                 <textarea
                   value={editData.summary}
                   onChange={(e) => setEditData({ ...editData, summary: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-md text-gray-900"
+                  className="w-full p-4 border border-white/5 rounded-lg bg-black/40 text-white focus:outline-none focus:border-white/10 font-sans text-base leading-relaxed"
                   rows={15}
                   placeholder="请输入播客总结内容..."
                 />
               </div>
             ) : (
-              <div className="max-h-[720px] overflow-y-auto">
+              <div className="prose prose-invert prose-lg max-w-none">
                 <SummaryDisplay 
                   summary={podcast.summary}
                   report={podcast.summary}
@@ -688,30 +772,36 @@ export default function PodcastDetailPage() {
             )}
           </div>
 
-          {/* ASR原文（原"访谈全文"部分，清洗稿已移除） */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-4">
-                <h2 className="text-lg font-semibold text-gray-900">ASR原文</h2>
+          {/* ASR Transcript - Terminal Log Style */}
+          <div className="rounded-lg border border-white/5 bg-black/40 backdrop-blur-sm overflow-hidden">
+            {/* Header: Terminal-style header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-black/60 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/60"></div>
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/60"></div>
+                  <div className="w-3 h-3 rounded-full bg-green-500/60"></div>
+                </div>
+                <h2 className="text-sm font-mono text-zinc-400">ASR Transcript</h2>
                 {/* Tab切换：ASR原文 / 报告大纲 */}
                 {podcast.reportOutline && (
-                  <div className="flex items-center gap-1 border border-gray-200 rounded-md p-1">
+                  <div className="flex items-center gap-1 border border-white/5 rounded-lg p-1 bg-black/40">
                     <button
                       onClick={() => setAsrTab('asr')}
-                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                      className={`px-3 py-1 text-xs rounded transition-colors font-mono ${
                         asrTab === 'asr'
-                          ? 'bg-gray-900 text-white'
-                          : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                          ? `${accentStyle.bg} ${accentStyle.text}`
+                          : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
                       }`}
                     >
                       ASR原文
                     </button>
                     <button
                       onClick={() => setAsrTab('outline')}
-                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                      className={`px-3 py-1 text-xs rounded transition-colors font-mono ${
                         asrTab === 'outline'
-                          ? 'bg-gray-900 text-white'
-                          : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                          ? `${accentStyle.bg} ${accentStyle.text}`
+                          : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
                       }`}
                     >
                       报告大纲
@@ -725,30 +815,34 @@ export default function PodcastDetailPage() {
                     <>
                       <button
                         onClick={() => setShowASR(!showASR)}
-                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                        className="px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
                       >
-                        {showASR ? '收起' : '展开'}
+                        {showASR ? 'Collapse' : 'Expand'}
                       </button>
-                      <button
-                        onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
-                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                        title="复制ASR原文"
-                      >
-                        复制
-                      </button>
-                      <button
-                        onClick={() => setShowFullscreenScript(true)}
-                        className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
-                      >
-                        全屏
-                      </button>
+                      {showASR && (
+                        <>
+                          <button
+                            onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
+                            className="px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                            title="复制ASR原文"
+                          >
+                            复制
+                          </button>
+                          <button
+                            onClick={() => setShowFullscreenScript(true)}
+                            className={`px-3 py-1.5 text-xs ${accentStyle.text} border ${accentStyle.border} rounded-lg hover:${accentStyle.bg} transition-colors font-mono`}
+                          >
+                            全屏
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                   {asrTab === 'outline' && podcast.reportOutline && (
                     <>
                       <button
                         onClick={() => handleCopy(podcast.reportOutline || '', '报告大纲')}
-                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+                        className="px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
                         title="复制报告大纲"
                       >
                         复制
@@ -758,13 +852,14 @@ export default function PodcastDetailPage() {
                 </div>
               )}
             </div>
+            {/* Body: Terminal-style content */}
             {isEditing ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">ASR原文内容</label>
+              <div className="p-4">
+                <label className="block text-xs font-medium text-zinc-500 mb-2 font-mono">ASR原文内容</label>
                 <textarea
                   value={editData.script}
                   onChange={(e) => setEditData({ ...editData, script: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-md text-gray-900"
+                  className="w-full p-4 border border-white/5 rounded-lg bg-black/60 text-white focus:outline-none focus:border-white/10 font-mono text-sm leading-relaxed"
                   rows={20}
                   placeholder="请输入ASR原文内容..."
                 />
@@ -774,40 +869,40 @@ export default function PodcastDetailPage() {
                 {asrTab === 'asr' ? (
                   showASR && podcast.originalTranscript ? (
                     <div 
-                      className="max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded p-3"
+                      className="p-6 font-mono text-sm overflow-y-auto"
                       style={{ 
                         height: '400px', 
                         wordWrap: 'break-word', 
                         overflowWrap: 'break-word',
-                        backgroundColor: '#ffffff',
-                        color: '#1f2937',
-                        lineHeight: '1.4',
+                        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                        color: '#ffffff',
+                        lineHeight: '1.8',
                         whiteSpace: 'pre-wrap'
                       }}
                       onWheel={(e) => {
                         e.stopPropagation();
                       }}
                     >
+                      <span className="text-zinc-500">$ </span>
                       {podcast.originalTranscript}
                     </div>
                   ) : (
-                    <div className="text-gray-500 text-sm">
-                      {podcast.originalTranscript ? '点击上方"展开"查看ASR原文' : '暂无ASR原文'}
+                    <div className="p-6 text-zinc-500 text-xs font-mono text-center bg-black/40">
+                      {podcast.originalTranscript ? '' : 'No ASR transcript available'}
                     </div>
                   )
                 ) : (
                   // 报告大纲tab
                   podcast.reportOutline ? (
                     <div 
-                      className="max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded p-3"
+                      className="p-6 overflow-y-auto font-mono text-sm"
                       style={{ 
                         height: '400px', 
                         wordWrap: 'break-word', 
                         overflowWrap: 'break-word',
-                        backgroundColor: '#ffffff',
-                        color: '#1f2937',
-                        lineHeight: '1.6',
-                        whiteSpace: 'pre-wrap'
+                        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                        color: '#10b981',
+                        lineHeight: '1.8',
                       }}
                       onWheel={(e) => {
                         e.stopPropagation();
@@ -816,22 +911,22 @@ export default function PodcastDetailPage() {
                       <ReactMarkdown 
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          h1: ({ children }) => <h1 className="text-xl font-bold mb-3 mt-4">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 mt-3">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-base font-semibold mb-2 mt-2">{children}</h3>,
-                          p: ({ children }) => <p className="mb-2 leading-6">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                          li: ({ children }) => <li className="text-sm">{children}</li>,
-                          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                          em: ({ children }) => <em className="italic">{children}</em>,
+                          h1: ({ children }) => <h1 className="text-lg font-bold mb-3 mt-4 text-emerald-400 font-mono">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 mt-3 text-emerald-400 font-mono">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 mt-2 text-emerald-300 font-mono">{children}</h3>,
+                          p: ({ children }) => <p className="mb-2 leading-7 text-emerald-200 font-mono">{children}</p>,
+                          ul: ({ children }) => <ul className="list-none mb-2 space-y-1 text-emerald-200 font-mono">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-none mb-2 space-y-1 text-emerald-200 font-mono">{children}</ol>,
+                          li: ({ children }) => <li className="text-sm before:content-['>_'] before:text-emerald-400 font-mono">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-emerald-300 font-mono">{children}</strong>,
+                          em: ({ children }) => <em className="italic text-emerald-200 font-mono">{children}</em>,
                         }}
                       >
                         {podcast.reportOutline}
                       </ReactMarkdown>
                     </div>
                   ) : (
-                    <div className="text-gray-500 text-sm">
+                    <div className="p-6 text-zinc-500 text-xs font-mono text-center bg-black/40">
                       暂无报告大纲
                     </div>
                   )
@@ -839,43 +934,44 @@ export default function PodcastDetailPage() {
               </>
             )}
           </div>
-          {/* 评论区 */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900">评论区</h2>
+          
+          {/* Discussion Section - Glassmorphism Panel */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-8 shadow-2xl">
+            <h2 className="text-2xl font-bold mb-8 font-sans text-white">Discussion</h2>
             
-            {/* 发表评论 */}
+            {/* Comment Input */}
             {user ? (
-              <div className="mb-6">
+              <div className="mb-8">
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   placeholder="写下你的评论..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-gray-900 placeholder-gray-500"
+                  className="w-full px-4 py-3 border border-white/10 rounded-xl bg-white/5 backdrop-blur-sm text-white placeholder-zinc-400 focus:outline-none focus:border-white/20 focus:bg-white/10 resize-none font-sans text-base transition-all"
                   rows={3}
                 />
-                <div className="flex justify-end mt-2">
+                <div className="flex justify-end mt-3">
                   <button
                     onClick={handleSubmitComment}
                     disabled={!newComment.trim() || isSubmittingComment}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono text-xs backdrop-blur-sm"
                   >
                     {isSubmittingComment ? '提交中...' : '发表评论'}
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg text-center">
-                <p className="text-gray-700 mb-2">请先登录后发表评论</p>
-                <Link href="/login" className="text-blue-600 hover:text-blue-800">
+              <div className="mb-8 p-6 bg-white/5 border border-white/10 rounded-xl text-center backdrop-blur-sm">
+                <p className="text-zinc-300 mb-2 font-sans text-sm">请先登录后发表评论</p>
+                <Link href="/login" className="text-white hover:text-zinc-200 underline transition-colors font-sans text-sm">
                   立即登录
                 </Link>
               </div>
             )}
 
-            {/* 评论列表 */}
+            {/* Comment List */}
             <div className="space-y-4">
               {comments.length === 0 ? (
-                <div className="text-center text-gray-600 py-8">
+                <div className="text-center text-zinc-400 py-12 font-sans text-sm">
                   暂无评论，来发表第一条评论吧！
                 </div>
               ) : (
@@ -884,29 +980,29 @@ export default function PodcastDetailPage() {
                   {comments
                     .slice(0, showAllComments ? comments.length : 5)
                     .map((comment) => (
-                    <div key={comment.id} className="border-b border-gray-100 pb-4 last:border-b-0">
+                    <div key={comment.id} className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-all">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-gray-900">{comment.author}</span>
-                            <span className="text-xs text-gray-600">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="font-medium text-white font-sans">{comment.author}</span>
+                            <span className="text-xs text-zinc-400 font-mono">
                               {new Date(comment.createdAt).toLocaleDateString()}
                             </span>
                           </div>
-                          <p className="text-gray-700">{comment.content}</p>
+                          <p className="text-zinc-200 leading-relaxed font-sans">{comment.content}</p>
                         </div>
                         <button
                           onClick={() => handleLikeComment(comment.id)}
-                          className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm transition-all duration-200 ${
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200 border ml-4 backdrop-blur-sm ${
                             comment.liked
-                              ? 'text-red-600 bg-red-50 border border-red-200'
-                              : 'text-gray-500 hover:text-red-600 hover:bg-red-50 hover:border-red-200 border border-gray-200'
+                              ? 'text-rose-400 bg-rose-500/20 border-rose-500/50'
+                              : 'text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/30 border-white/10'
                           }`}
                         >
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.834a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z" />
+                          <svg className="w-3.5 h-3.5" fill={comment.liked ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                           </svg>
-                          <span className="font-medium">{comment.likes}</span>
+                          <span className="font-medium font-mono">{comment.likes}</span>
                         </button>
                       </div>
                     </div>
@@ -917,7 +1013,7 @@ export default function PodcastDetailPage() {
                     <div className="text-center pt-4">
                       <button
                         onClick={() => setShowAllComments(!showAllComments)}
-                        className="text-sm text-gray-600 hover:text-gray-800 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        className="px-4 py-2 text-sm text-zinc-300 border border-white/10 rounded-xl hover:bg-white/10 transition-all font-sans backdrop-blur-sm"
                       >
                         {showAllComments ? '收起评论' : `展开全部 ${comments.length} 条评论`}
                       </button>
@@ -961,14 +1057,14 @@ export default function PodcastDetailPage() {
 
       {/* 全屏播客总结模态框 */}
       {showFullscreenReport && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg w-full h-full max-w-6xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-900">播客总结</h2>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-white/10 rounded-lg w-full h-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-white/5">
+              <h2 className={`text-2xl font-bold font-sans ${accentStyle.text}`}>Insight</h2>
               <div className="flex items-center gap-3">
                 <button
-                    onClick={() => handleCopy(podcast.summary || '', '播客总结')}
-                  className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
+                    onClick={() => handleCopy(podcast.summary || '', 'Insight')}
+                  className="text-sm text-zinc-400 hover:text-zinc-300 px-3 py-1.5 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-1 font-mono"
                   title="复制全文"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -978,44 +1074,44 @@ export default function PodcastDetailPage() {
                 </button>
                 <button
                   onClick={() => setShowFullscreenReport(false)}
-                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                  className="text-zinc-400 hover:text-white text-2xl transition-colors"
                 >
                   ×
                 </button>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
-              <div className="prose prose-lg max-w-none">
+              <div className="prose prose-invert prose-lg max-w-none">
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm]}
                   components={{
                     p: ({ children }) => (
-                      <p style={{ color: '#1f2937', fontSize: '16px', lineHeight: '1.7', marginBottom: '16px' }}>
+                      <p className="text-zinc-300 text-base leading-7 mb-4 font-sans">
                         {children}
                       </p>
                     ),
                     li: ({ children }) => (
-                      <li style={{ color: '#1f2937', fontSize: '16px', lineHeight: '1.7', marginBottom: '8px' }}>
+                      <li className="text-zinc-300 text-base leading-7 mb-2 font-sans">
                         {children}
                       </li>
                     ),
                     strong: ({ children }) => (
-                      <strong style={{ color: '#111827', fontSize: '16px', lineHeight: '1.7' }}>
+                      <strong className="text-white font-semibold">
                         {children}
                       </strong>
                     ),
                     h1: ({ children }) => (
-                      <h1 style={{ color: '#111827', fontSize: '24px', fontWeight: 'bold', marginBottom: '20px', marginTop: '24px' }}>
+                      <h1 className="text-white text-2xl font-bold mb-5 mt-6 font-sans">
                         {children}
                       </h1>
                     ),
                     h2: ({ children }) => (
-                      <h2 style={{ color: '#111827', fontSize: '20px', fontWeight: 'bold', marginBottom: '16px', marginTop: '20px' }}>
+                      <h2 className="text-white text-xl font-bold mb-4 mt-5 font-sans">
                         {children}
                       </h2>
                     ),
                     h3: ({ children }) => (
-                      <h3 style={{ color: '#111827', fontSize: '18px', fontWeight: 'bold', marginBottom: '12px', marginTop: '16px' }}>
+                      <h3 className="text-white text-lg font-bold mb-3 mt-4 font-sans">
                         {children}
                       </h3>
                     )
@@ -1031,14 +1127,14 @@ export default function PodcastDetailPage() {
 
       {/* 全屏ASR原文模态框（原"访谈全文"模态框，清洗稿已移除） */}
       {showFullscreenScript && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg w-full h-full max-w-6xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-900">ASR原文</h2>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-white/10 rounded-lg w-full h-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-white/5">
+              <h2 className={`text-2xl font-bold font-sans ${accentStyle.text}`}>ASR原文</h2>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
-                  className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
+                  className="text-sm text-zinc-400 hover:text-zinc-300 px-3 py-1.5 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-1 font-mono"
                   title="复制ASR原文"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1048,14 +1144,14 @@ export default function PodcastDetailPage() {
                 </button>
                 <button
                   onClick={() => setShowFullscreenScript(false)}
-                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                  className="text-zinc-400 hover:text-white text-2xl transition-colors"
                 >
                   ×
                 </button>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
-              <div className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
+              <div className="whitespace-pre-wrap text-sm text-zinc-300 leading-relaxed font-mono">
                 {podcast.originalTranscript || '暂无ASR原文'}
               </div>
             </div>

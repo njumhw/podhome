@@ -384,6 +384,34 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				console.log(`✅ 用户验证通过: ${userId}`);
 				
 				const podcast = await withRetry(async () => {
+					// 先自动标注主题（如果还没有主题）
+					let autoTaggedTopicId: string | null = null;
+					try {
+						const { autoTagPodcast } = await import('./topic-auto-tagger');
+						const suggestedTopic = await autoTagPodcast({
+							title: (meta.title || '未命名播客').substring(0, 500).trim(),
+							sourceUrl: url.substring(0, 2000).trim(),
+							description: meta.description ? meta.description.substring(0, 10000).trim() : null,
+							showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null,
+							summary: reportData?.summary || null,
+							originalTranscript: asrData.transcript || null,
+						});
+						
+						if (suggestedTopic) {
+							const topic = await db.topic.findUnique({
+								where: { name: suggestedTopic },
+								select: { id: true },
+							});
+							if (topic) {
+								autoTaggedTopicId = topic.id;
+								console.log(`✅ 自动标注主题: ${suggestedTopic}`);
+							}
+						}
+					} catch (tagError) {
+						// 自动标注失败不影响主流程
+						console.warn('⚠️ 自动标注主题失败:', tagError);
+					}
+					
 					// 构建数据对象，如果reportOutline字段不存在则忽略
 					// 确保所有字段都符合schema要求
 					const podcastData: any = {
@@ -401,6 +429,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 						processingStartedAt: new Date(startTime),
 						processingCompletedAt: new Date(),
 						createdById: userId, // 已验证用户存在，直接设置createdById
+						topicId: autoTaggedTopicId, // 自动标注的主题ID
 					};
 					
 					// 如果reportOutline字段存在，则添加
@@ -450,9 +479,8 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 						throw new Error(`无效的status值: ${podcastData.status}`);
 					}
 					
-					try {
-						// 使用显式类型，确保Prisma能正确识别字段
-						const createData: {
+					// 使用显式类型，确保Prisma能正确识别字段
+					const createData: {
 							title: string;
 							sourceUrl: string;
 							audioUrl: string | null;
@@ -467,28 +495,31 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 							processingStartedAt: Date;
 							processingCompletedAt: Date;
 							createdById: string;
+							topicId?: string | null;
 							reportOutline?: string;
-						} = {
-							title: podcastData.title,
-							sourceUrl: podcastData.sourceUrl,
-							audioUrl: podcastData.audioUrl,
-							description: podcastData.description,
-							publishedAt: podcastData.publishedAt,
-							duration: podcastData.duration,
-							status: podcastData.status,
-							originalTranscript: podcastData.originalTranscript,
-							transcript: null,
-							summary: podcastData.summary,
-							showAuthor: podcastData.showAuthor,
-							processingStartedAt: podcastData.processingStartedAt,
-							processingCompletedAt: podcastData.processingCompletedAt,
-							createdById: userId,
-						};
-						
-						if (podcastData.reportOutline) {
-							createData.reportOutline = podcastData.reportOutline;
-						}
-						
+					} = {
+						title: podcastData.title,
+						sourceUrl: podcastData.sourceUrl,
+						audioUrl: podcastData.audioUrl,
+						description: podcastData.description,
+						publishedAt: podcastData.publishedAt,
+						duration: podcastData.duration,
+						status: podcastData.status,
+						originalTranscript: podcastData.originalTranscript,
+						transcript: null,
+						summary: podcastData.summary,
+						showAuthor: podcastData.showAuthor,
+						processingStartedAt: podcastData.processingStartedAt,
+						processingCompletedAt: podcastData.processingCompletedAt,
+						createdById: userId,
+						topicId: autoTaggedTopicId,
+					};
+					
+					if (podcastData.reportOutline) {
+						createData.reportOutline = podcastData.reportOutline;
+					}
+					
+					try {
 						return await db.podcast.create({
 							data: createData
 						});

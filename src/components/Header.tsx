@@ -100,58 +100,58 @@ export function Header() {
 
 	return (
 		<>
-			<header className="w-full sticky top-0 z-10 bg-white/70 dark:bg-black/50 backdrop-blur border-b border-black/10 dark:border-white/10">
+			<header className="w-full sticky top-0 z-10 bg-black/80 backdrop-blur-sm border-b border-white/10">
 				<div className="mx-auto max-w-7xl px-6 py-3 flex items-center justify-between">
-					<h1 className="text-xl font-semibold tracking-tight">PodHome</h1>
+					<h1 className="text-xl font-bold tracking-tight text-white">PodHome</h1>
 					<nav className="flex items-center gap-4">
 						{/* 处理状态图标 */}
 						{processingCount > 0 && (
 							<button
 								onClick={() => setShowProcessingStatus(true)}
-								className="relative p-2 text-blue-600 hover:text-blue-700 transition-colors"
+								className="relative p-2 text-blue-400 hover:text-blue-300 transition-colors"
 								title="正在处理的播客"
 							>
 								<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
 								</svg>
-								<span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+								<span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-mono">
 									{processingCount}
 								</span>
 							</button>
 						)}
 						
 					{isLoading ? (
-						<div className="text-sm text-gray-600 dark:text-gray-300">加载中...</div>
+						<div className="text-sm text-gray-400 font-mono">加载中...</div>
 					) : user ? (
 						<div className="flex items-center gap-4">
 							{/* 用户信息区域 */}
 							<div className="flex items-center gap-2">
 								{/* 今日额度显示 */}
 								{dailyUsage.limit > 0 && (
-									<div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded">
+									<div className="text-xs text-gray-400 bg-zinc-900/40 border border-white/10 px-2 py-1 rounded font-mono">
 										今日额度：{dailyUsage.used}/{dailyUsage.limit}
 									</div>
 								)}
 								{dailyUsage.limit === -1 && (
-									<div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded">
+									<div className="text-xs text-gray-400 bg-zinc-900/40 border border-white/10 px-2 py-1 rounded font-mono">
 										今日额度：{dailyUsage.used}/∞
 									</div>
 								)}
 								{/* 用户名 */}
-								<span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+								<span className="text-sm text-white font-medium">
 									{user.username}
 								</span>
 							</div>
 							
 							{/* 分隔线 */}
-							<div className="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
+							<div className="w-px h-4 bg-white/10"></div>
 							
 							{/* 导航链接 */}
 							<div className="flex items-center gap-3">
 								{/* 关于我们按钮 */}
 								<button
 									onClick={() => setShowAboutModal(true)}
-									className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+									className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
 								>
 									关于我们
 								</button>
@@ -159,7 +159,7 @@ export function Header() {
 								{/* 退出按钮 */}
 								<button
 									onClick={handleLogout}
-									className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+									className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
 								>
 									退出
 								</button>
@@ -170,25 +170,25 @@ export function Header() {
 								{/* 关于我们按钮 - 游客也可访问 */}
 								<button
 									onClick={() => setShowAboutModal(true)}
-									className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+									className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
 								>
 									关于我们
 								</button>
 								
 								{/* 分隔线 */}
-								<div className="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
+								<div className="w-px h-4 bg-white/10"></div>
 								
 								{/* 登录注册 */}
 								<div className="flex items-center gap-3">
 									<a
 										href="/login"
-										className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+										className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
 									>
 										登录
 									</a>
 									<a
 										href="/register"
-										className="text-sm px-3 py-1 rounded-xl bg-black text-white dark:bg-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+										className="text-sm px-3 py-1 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/30 transition-colors font-mono"
 									>
 										注册
 									</a>

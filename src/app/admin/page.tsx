@@ -124,32 +124,60 @@ function InvitesPanel() {
 	return (
 		<div className="space-y-3">
 			<div className="flex gap-2 items-center text-sm">
-				<input type="number" min={1} max={100} value={count} onChange={(e)=>setCount(+e.target.value)} className="w-24 rounded-lg border border-black/10 px-2 py-1 bg-white/60 dark:bg-black/40" />
-				<input type="number" min={1} max={100} value={maxUses} onChange={(e)=>setMaxUses(+e.target.value)} className="w-24 rounded-lg border border-black/10 px-2 py-1 bg-white/60 dark:bg-black/40" />
-				<input type="datetime-local" value={expiresAt} onChange={(e)=>setExpiresAt(e.target.value)} className="rounded-lg border border-black/10 px-2 py-1 bg-white/60 dark:bg-black/40" />
-				<button onClick={create} disabled={loading} className="px-3 py-2 text-sm rounded-xl bg-black text-white dark:bg-white dark:text-black disabled:opacity-50">生成</button>
+				<input type="number" min={1} max={100} value={count} onChange={(e)=>setCount(+e.target.value)} className="w-20 rounded-lg border border-black/10 px-2 py-1 text-sm bg-white/60 dark:bg-black/40" />
+				<input type="number" min={1} max={100} value={maxUses} onChange={(e)=>setMaxUses(+e.target.value)} className="w-20 rounded-lg border border-black/10 px-2 py-1 text-sm bg-white/60 dark:bg-black/40" />
+				<input type="datetime-local" value={expiresAt} onChange={(e)=>setExpiresAt(e.target.value)} className="rounded-lg border border-black/10 px-2 py-1 text-sm bg-white/60 dark:bg-black/40" />
+				<button onClick={create} disabled={loading} className="px-3 py-1.5 text-sm rounded-lg bg-black text-white dark:bg-white dark:text-black disabled:opacity-50">生成</button>
 			</div>
-			{error && <div className="text-xs text-red-600">{error}</div>}
+			{error && <div className="text-xs text-red-600 p-2 bg-red-50 dark:bg-red-900/20 rounded">{error}</div>}
 			{items.length>0 && (
-				<div className="text-sm space-y-2">
-					<div className="font-medium text-gray-600 dark:text-gray-400">邀请码列表</div>
-					{items.map((it,i)=>(
-						<div key={it.id} className="border border-black/10 dark:border-white/10 rounded-lg p-3 space-y-2">
-							<div className="flex justify-between items-center">
-								<span className="font-mono font-medium">{it.code}</span>
-								<span className="text-xs text-gray-500">
-									{it.uses}/{it.maxUses} 次使用
-									{it.expiresAt ? ` · ${new Date(it.expiresAt).toLocaleString()}` : " · 永不过期"}
-								</span>
-							</div>
-							{it.usedBy && (
-								<div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 p-2 rounded">
-									<div>使用者: {it.usedBy.username} ({it.usedBy.email})</div>
-									<div>角色: {it.usedBy.role} · 注册时间: {new Date(it.usedBy.createdAt).toLocaleString()}</div>
-								</div>
-							)}
-						</div>
-					))}
+				<div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+					<div className="p-2 border-b border-gray-200 bg-gray-50">
+						<div className="font-medium text-sm text-gray-900">邀请码列表</div>
+					</div>
+					<div className="overflow-x-auto">
+						<table className="w-full text-sm">
+							<thead className="bg-gray-50 border-b border-gray-200">
+								<tr>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">邀请码</th>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">使用状态</th>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">使用者</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-gray-200">
+								{items.map((it,i)=>(
+									<tr key={it.id} className="hover:bg-gray-50">
+										<td className="px-3 py-2">
+											<div className="font-mono font-medium text-gray-900">{it.code}</div>
+										</td>
+										<td className="px-3 py-2 text-gray-600">
+											<div className="text-xs">
+												{it.uses}/{it.maxUses} 次使用
+												{it.expiresAt ? (
+													<div className="text-gray-500 mt-0.5">过期: {new Date(it.expiresAt).toLocaleDateString('zh-CN')}</div>
+												) : (
+													<div className="text-gray-500 mt-0.5">永不过期</div>
+												)}
+											</div>
+										</td>
+										<td className="px-3 py-2">
+											{it.usedBy ? (
+												<div className="text-xs">
+													<div className="text-gray-900 font-medium">{it.usedBy.username}</div>
+													<div className="text-gray-600">{it.usedBy.email}</div>
+													<div className="text-gray-500 mt-0.5">
+														{it.usedBy.role} · {new Date(it.usedBy.createdAt).toLocaleDateString('zh-CN')}
+													</div>
+												</div>
+											) : (
+												<span className="text-gray-400 text-xs">未使用</span>
+											)}
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
 				</div>
 			)}
 		</div>
@@ -372,11 +400,11 @@ function TopicsPanel() {
 										style={{ backgroundColor: topic.color }}
 									/>
 									<div>
-										<div className="font-medium">{topic.name}</div>
+										<div className="font-medium text-gray-900">{topic.name}</div>
 										{topic.description && (
-											<div className="text-sm text-gray-600">{topic.description}</div>
+											<div className="text-sm text-gray-700">{topic.description}</div>
 										)}
-										<div className="text-xs text-gray-500">
+										<div className="text-xs text-gray-600">
 											{topic._count?.podcasts || 0} 个播客
 										</div>
 									</div>
@@ -487,79 +515,101 @@ function UsersPanel() {
 	
 	return (
 		<div className="space-y-4">
-			{error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">{error}</div>}
+			{error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg">{error}</div>}
 			
-			<div className="text-sm text-gray-600 dark:text-gray-400">
-				共 {items.length} 个用户
-			</div>
-			
-			<div className="space-y-3">
-				{items.map(u => (
-					<div key={u.id} className="border border-black/10 dark:border-white/10 rounded-lg p-4 space-y-3">
-						{/* 用户基本信息 */}
-						<div className="flex items-start justify-between">
-							<div className="space-y-1">
-								<div className="flex items-center gap-2">
-									<span className="font-medium text-base">{u.username}</span>
-									{getRoleBadge(u.role)}
-									{getStatusBadge(u.isBanned)}
-								</div>
-								<div className="text-sm text-gray-600 dark:text-gray-400">{u.email}</div>
-								<div className="text-xs text-gray-500">
-									注册时间: {new Date(u.createdAt).toLocaleString()}
-									{u.lastLoginAt && ` · 最后登录: ${new Date(u.lastLoginAt).toLocaleString()}`}
-									{` · 上传次数: ${u.uploadCount}`}
-								</div>
-							</div>
-						</div>
-						
-						{/* 操作按钮 */}
-						<div className="flex gap-2 flex-wrap">
-							{/* 🛡️ 超级管理员保护：njumwh@163.com 不显示危险操作 */}
-							{u.email === "njumwh@163.com" ? (
-								<div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-									<span className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
-										🛡️ 超级管理员（受保护）
-									</span>
-								</div>
-							) : (
-								<>
-									{u.role === "USER" ? (
-										<button 
-											onClick={()=>act(u.id, "promote")} 
-											className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
-										>
-											设为管理员
-										</button>
-									) : (
-										<button 
-											onClick={()=>act(u.id, "demote")} 
-											className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-										>
-											设为普通用户
-										</button>
-									)}
-									
-									{u.isBanned ? (
-										<button 
-											onClick={()=>act(u.id, "unban")} 
-											className="px-3 py-1.5 text-xs rounded-lg bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30"
-										>
-											解封
-										</button>
-									) : (
-										<button 
-											onClick={()=>act(u.id, "ban")} 
-											className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30"
-										>
-											封禁
-										</button>
-									)}
-								</>
-							)}
-						</div>
-					</div>
-				))}
+			<div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+				<div className="p-2 border-b border-gray-200 bg-gray-50">
+					<h3 className="font-medium text-sm text-gray-900">共 {items.length} 个用户</h3>
+				</div>
+				<div className="overflow-x-auto">
+					<table className="w-full text-sm">
+						<thead className="bg-gray-50 border-b border-gray-200">
+							<tr>
+								<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">用户名</th>
+								<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">角色</th>
+								<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">状态</th>
+								<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">邮箱</th>
+								<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">注册时间</th>
+								<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">最后登录</th>
+								<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">上传次数</th>
+								<th className="px-3 py-2 text-left text-xs font-medium text-gray-600">操作</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-gray-200">
+							{items.map(u => (
+								<tr key={u.id} className="hover:bg-gray-50">
+									<td className="px-3 py-2">
+										<div className="font-medium text-gray-900">{u.username}</div>
+									</td>
+									<td className="px-3 py-2">
+										{getRoleBadge(u.role)}
+									</td>
+									<td className="px-3 py-2">
+										{getStatusBadge(u.isBanned)}
+									</td>
+									<td className="px-3 py-2 text-gray-600">
+										<div className="truncate max-w-xs" title={u.email}>
+											{u.email}
+										</div>
+									</td>
+									<td className="px-3 py-2 text-gray-600 text-xs">
+										{new Date(u.createdAt).toLocaleDateString('zh-CN')}
+									</td>
+									<td className="px-3 py-2 text-gray-600 text-xs">
+										{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('zh-CN') : '-'}
+									</td>
+									<td className="px-3 py-2 text-gray-600">
+										{u.uploadCount || 0}
+									</td>
+									<td className="px-3 py-2">
+										<div className="flex items-center gap-1">
+											{/* 🛡️ 超级管理员保护：njumwh@163.com 不显示危险操作 */}
+											{u.email === "njumwh@163.com" ? (
+												<span className="px-2 py-0.5 text-xs rounded bg-yellow-100 text-yellow-800">
+													🛡️ 受保护
+												</span>
+											) : (
+												<>
+													{u.role === "USER" ? (
+														<button 
+															onClick={()=>act(u.id, "promote")} 
+															className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+														>
+															设为管理员
+														</button>
+													) : (
+														<button 
+															onClick={()=>act(u.id, "demote")} 
+															className="px-2 py-1 text-xs rounded bg-gray-600 text-white hover:bg-gray-700"
+														>
+															设为普通用户
+														</button>
+													)}
+													
+													{u.isBanned ? (
+														<button 
+															onClick={()=>act(u.id, "unban")} 
+															className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700"
+														>
+															解封
+														</button>
+													) : (
+														<button 
+															onClick={()=>act(u.id, "ban")} 
+															className="px-2 py-1 text-xs rounded bg-red-600 text-white hover:bg-red-700"
+														>
+															封禁
+														</button>
+													)}
+												</>
+											)}
+										</div>
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
 			</div>
 		</div>
 	);
@@ -620,6 +670,7 @@ function CostPanel() {
 // 播客管理面板
 function PodcastsPanel() {
 	const [podcasts, setPodcasts] = useState<any[]>([]);
+	const [topics, setTopics] = useState<any[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [page, setPage] = useState(1);
@@ -656,8 +707,47 @@ function PodcastsPanel() {
 		}
 	};
 
+	const loadTopics = async () => {
+		try {
+			const res = await fetch('/api/admin/topics');
+			if (res.ok) {
+				const data = await res.json();
+				// 只显示已审核的主题
+				setTopics((data.topics || []).filter((t: any) => t.approved));
+			}
+		} catch (err) {
+			console.error('加载主题失败:', err);
+		}
+	};
+
+	const updatePodcastTopic = async (podcastId: string, topicId: string) => {
+		try {
+			const res = await fetch('/api/podcast/topic', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					podcastId,
+					topicId: topicId || undefined
+				})
+			});
+
+			if (!res.ok) {
+				const errorData = await res.json();
+				throw new Error(errorData.error || '更新失败');
+			}
+
+			// 重新加载播客列表
+			loadPodcasts();
+		} catch (err: any) {
+			setError(err.message || '更新主题失败');
+		}
+	};
+
 	useEffect(() => {
 		loadPodcasts();
+		loadTopics();
 	}, [page, status, search]);
 
 	const deletePodcast = async (id: string, title: string) => {
@@ -767,41 +857,54 @@ function PodcastsPanel() {
 				</div>
 			</div>
 
-			{/* 播客列表 */}
-			<div className="bg-white border border-gray-200 rounded-lg">
-				<div className="p-4 border-b border-gray-200">
-					<h3 className="font-medium">播客列表</h3>
+			{/* 播客列表 - 紧凑表格布局 */}
+			<div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+				<div className="p-3 border-b border-gray-200 bg-gray-50">
+					<h3 className="font-medium text-sm">播客列表</h3>
 				</div>
 				
 				{loading ? (
-					<div className="p-8 text-center text-gray-500">加载中...</div>
+					<div className="p-8 text-center text-gray-500 text-sm">加载中...</div>
 				) : podcasts.length === 0 ? (
-					<div className="p-8 text-center text-gray-500">暂无播客</div>
+					<div className="p-8 text-center text-gray-500 text-sm">暂无播客</div>
 				) : (
-					<div className="divide-y divide-gray-200">
-						{podcasts.map((podcast) => (
-							<div key={podcast.id} className="p-4 hover:bg-gray-50">
-								<div className="flex items-start justify-between">
-									<div className="flex-1 min-w-0">
-										<div className="flex items-center gap-2 mb-2">
-											<h4 className="font-medium text-gray-900 truncate" title={podcast.title}>
+					<div className="overflow-x-auto">
+						<table className="w-full text-sm">
+							<thead className="bg-gray-50 border-b border-gray-200">
+								<tr>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-1/3">标题</th>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-20">状态</th>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-24">作者</th>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-16">时长</th>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-28">主题</th>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-32">创建时间</th>
+									<th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-24">操作</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-gray-200">
+								{podcasts.map((podcast) => (
+									<tr key={podcast.id} className="hover:bg-gray-50">
+										<td className="px-3 py-2">
+											<div className="truncate max-w-md text-gray-900 font-medium" title={podcast.title}>
 												{podcast.title}
-											</h4>
+											</div>
+										</td>
+										<td className="px-3 py-2">
 											{getStatusBadge(podcast.status)}
-										</div>
-										
-										<div className="text-sm text-gray-600 space-y-1">
-											<div>作者: {podcast.showAuthor || '-'}</div>
-											<div>时长: {formatDuration(podcast.duration)}</div>
-											<div>创建时间: {formatDate(podcast.createdAt)}</div>
-											{podcast.processingCompletedAt && (
-												<div>完成时间: {formatDate(podcast.processingCompletedAt)}</div>
-											)}
-											{podcast.topic && (
-												<div className="flex items-center gap-2">
-													<span>主题:</span>
+										</td>
+										<td className="px-3 py-2 text-gray-600">
+											<div className="truncate max-w-24" title={podcast.showAuthor || '-'}>
+												{podcast.showAuthor || '-'}
+											</div>
+										</td>
+										<td className="px-3 py-2 text-gray-600">
+											{formatDuration(podcast.duration)}
+										</td>
+										<td className="px-3 py-2">
+											<div className="flex items-center gap-1">
+												{podcast.topic ? (
 													<span 
-														className="px-2 py-1 rounded-full text-xs"
+														className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap"
 														style={{ 
 															backgroundColor: podcast.topic.color + '20',
 															color: podcast.topic.color 
@@ -809,32 +912,48 @@ function PodcastsPanel() {
 													>
 														{podcast.topic.name}
 													</span>
-												</div>
-											)}
-											<div className="text-xs text-gray-500">
-												创建者: {podcast.createdBy?.username || '系统'}
+												) : (
+													<span className="text-xs text-gray-400">未分类</span>
+												)}
+												<select
+													value={podcast.topic?.id || ''}
+													onChange={(e) => updatePodcastTopic(podcast.id, e.target.value)}
+													className="ml-1 px-1.5 py-0.5 text-xs border border-gray-300 rounded bg-white min-w-20"
+													onClick={(e) => e.stopPropagation()}
+												>
+													<option value="">移除</option>
+													{topics.map(topic => (
+														<option key={topic.id} value={topic.id}>
+															{topic.name}
+														</option>
+													))}
+												</select>
 											</div>
-										</div>
-									</div>
-									
-									<div className="flex items-center gap-2 ml-4">
-										<Link
-											href={`/podcast/${podcast.id}`}
-											target="_blank"
-											className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-										>
-											查看
-										</Link>
-										<button
-											onClick={() => deletePodcast(podcast.id, podcast.title)}
-											className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-										>
-											删除
-										</button>
-									</div>
-								</div>
-							</div>
-						))}
+										</td>
+										<td className="px-3 py-2 text-gray-600 text-xs">
+											{formatDate(podcast.createdAt)}
+										</td>
+										<td className="px-3 py-2">
+											<div className="flex items-center gap-1">
+												<Link
+													href={`/podcast/${podcast.id}`}
+													target="_blank"
+													className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+												>
+													查看
+												</Link>
+												<button
+													onClick={() => deletePodcast(podcast.id, podcast.title)}
+													className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+												>
+													删除
+												</button>
+											</div>
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
 					</div>
 				)}
 			</div>

@@ -25,7 +25,7 @@ export function SummaryDisplay({
   
   if (!content) {
     return (
-      <div className={`text-gray-600 text-center py-8 ${className}`} style={style}>
+      <div className={`text-zinc-500 text-center py-8 font-mono text-sm ${className}`} style={style}>
         {fallbackText}
       </div>
     );
@@ -34,14 +34,11 @@ export function SummaryDisplay({
   if (showMarkdown) {
     return (
       <div 
-        className={`max-w-none overflow-y-auto overflow-x-hidden border border-gray-200 rounded-lg p-4 ${className}`}
+        className={`max-w-none overflow-y-auto overflow-x-hidden ${className}`}
         style={{ 
-          height: '900px', // 提高默认高度
           wordWrap: 'break-word', 
           overflowWrap: 'break-word',
-          backgroundColor: '#ffffff',
-          color: '#1f2937',
-          lineHeight: '1.4',
+          lineHeight: '1.7',
           ...style 
         }}
         onWheel={(e) => {
@@ -52,138 +49,52 @@ export function SummaryDisplay({
           remarkPlugins={[remarkGfm]}
           components={{
             p: ({ children }) => (
-              <p style={{ 
-                wordWrap: 'break-word', 
-                overflowWrap: 'break-word', 
-                whiteSpace: 'normal', 
-                color: '#111827', 
-                fontSize: '14px', 
-                lineHeight: '1.3',
-                margin: '0 0 8px 0',
-                textDecoration: 'none'
-              }}>
+              <p className="text-zinc-300 text-base leading-7 mb-4 font-sans">
                 {children}
               </p>
             ),
             li: ({ children }) => (
-              <li style={{ 
-                wordWrap: 'break-word', 
-                overflowWrap: 'break-word', 
-                color: '#111827', 
-                fontSize: '14px', 
-                lineHeight: '1.3',
-                margin: '0 0 2px 0',
-                textDecoration: 'none'
-              }}>
+              <li className="text-zinc-300 text-base leading-7 mb-2 font-sans">
                 {children}
               </li>
             ),
             h1: ({ children }) => (
-              <h1 style={{ 
-                color: '#111827', 
-                fontSize: '18px', 
-                fontWeight: 'bold', 
-                lineHeight: '1.2',
-                marginBottom: '6px', 
-                marginTop: '8px',
-                textDecoration: 'none'
-              }}>
+              <h1 className="text-white text-2xl font-bold mb-5 mt-6 font-sans">
                 {children}
               </h1>
             ),
             h2: ({ children }) => (
-              <h2 style={{ 
-                color: '#111827', 
-                fontSize: '16px', 
-                fontWeight: 'bold', 
-                lineHeight: '1.2',
-                marginBottom: '4px', 
-                marginTop: '6px',
-                textDecoration: 'none'
-              }}>
+              <h2 className="text-white text-xl font-bold mb-4 mt-5 font-sans">
                 {children}
               </h2>
             ),
             h3: ({ children }) => (
-              <h3 style={{ 
-                color: '#111827', 
-                fontSize: '15px', 
-                fontWeight: 'bold', 
-                lineHeight: '1.2',
-                marginBottom: '2px', 
-                marginTop: '4px',
-                textDecoration: 'none'
-              }}>
+              <h3 className="text-white text-lg font-bold mb-3 mt-4 font-sans">
                 {children}
               </h3>
             ),
             strong: ({ children }) => (
-              <strong style={{ 
-                wordWrap: 'break-word', 
-                overflowWrap: 'break-word', 
-                color: '#111827', 
-                fontSize: '14px', 
-                lineHeight: '1.3',
-                fontWeight: 'bold',
-                textDecoration: 'none'
-              }}>
+              <strong className="text-white font-semibold">
                 {children}
               </strong>
             ),
             em: ({ children }) => (
-              <em style={{ 
-                wordWrap: 'break-word', 
-                overflowWrap: 'break-word', 
-                color: '#111827', 
-                fontSize: '14px', 
-                lineHeight: '1.3',
-                fontStyle: 'italic',
-                textDecoration: 'none'
-              }}>
+              <em className="text-zinc-300 italic">
                 {children}
               </em>
             ),
             blockquote: ({ children }) => (
-              <blockquote style={{ 
-                wordWrap: 'break-word', 
-                overflowWrap: 'break-word', 
-                color: '#374151', 
-                fontSize: '14px', 
-                lineHeight: '1.3',
-                borderLeft: '4px solid #e5e7eb',
-                paddingLeft: '16px',
-                margin: '4px 0',
-                backgroundColor: '#f9fafb',
-                textDecoration: 'none'
-              }}>
+              <blockquote className="text-zinc-400 text-base leading-7 border-l-4 border-white/20 pl-4 my-4 italic">
                 {children}
               </blockquote>
             ),
             code: ({ children }) => (
-              <code style={{ 
-                color: '#111827', 
-                fontSize: '13px', 
-                backgroundColor: '#f3f4f6',
-                padding: '2px 4px',
-                borderRadius: '4px',
-                fontFamily: 'monospace',
-                textDecoration: 'none'
-              }}>
+              <code className="text-zinc-300 text-sm bg-zinc-900/40 px-1.5 py-0.5 rounded font-mono">
                 {children}
               </code>
             ),
             pre: ({ children }) => (
-              <pre style={{ 
-                color: '#111827', 
-                fontSize: '13px', 
-                backgroundColor: '#f3f4f6',
-                padding: '12px',
-                borderRadius: '6px',
-                fontFamily: 'monospace',
-                overflow: 'auto',
-                margin: '16px 0',
-                textDecoration: 'none'
-              }}>
+              <pre className="text-zinc-300 text-sm bg-zinc-900/40 p-4 rounded-lg font-mono overflow-auto my-4">
                 {children}
               </pre>
             )

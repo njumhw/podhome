@@ -81,7 +81,20 @@ export async function GET(req: NextRequest) {
           createdAt: true,
           processingCompletedAt: true,
           publishedAt: true,
-          status: true
+          status: true,
+          topic: {
+            select: {
+              id: true,
+              name: true,
+              color: true
+            }
+          },
+          createdBy: {
+            select: {
+              id: true,
+              username: true
+            }
+          }
         },
         orderBy: {
           createdAt: 'desc'
@@ -92,53 +105,57 @@ export async function GET(req: NextRequest) {
     // 合并数据，优先使用Podcast表的数据
     const mergedData = new Map();
     
-    // 先添加AudioCache数据
-    audioCacheData.forEach(cache => {
-      mergedData.set(cache.id, {
-        id: cache.id,
-        title: cache.title,
-        showAuthor: cache.author,
-        sourceUrl: cache.audioUrl,
-        status: 'READY' as const,
-        publishedAt: cache.publishedAt,
-        duration: cache.duration,
-        createdAt: cache.createdAt,
-        processingStartedAt: cache.createdAt,
-        processingCompletedAt: cache.updatedAt,
-        topic: cache.topic,
-        source: 'audioCache'
+    // 先添加Podcast数据（主要数据源）
+    podcastData.forEach(podcast => {
+      mergedData.set(podcast.id, {
+        id: podcast.id,
+        title: podcast.title,
+        showAuthor: podcast.showAuthor,
+        sourceUrl: podcast.sourceUrl,
+        status: podcast.status,
+        publishedAt: podcast.publishedAt,
+        duration: podcast.duration,
+        createdAt: podcast.createdAt,
+        processingStartedAt: podcast.createdAt,
+        processingCompletedAt: podcast.processingCompletedAt,
+        topic: podcast.topic, // Podcast表的topic是主要数据源
+        createdBy: podcast.createdBy,
+        source: 'podcast'
       });
     });
     
-    // 用Podcast数据覆盖或补充
-    podcastData.forEach(podcast => {
-      if (mergedData.has(podcast.id)) {
-        // 覆盖现有数据，优先使用Podcast的标题和作者
-        const existing = mergedData.get(podcast.id);
-        mergedData.set(podcast.id, {
+    // 用AudioCache数据补充（只补充Podcast表中没有的字段）
+    audioCacheData.forEach(cache => {
+      if (mergedData.has(cache.id)) {
+        // 如果Podcast表中已有，只补充缺失的字段，但topic优先使用Podcast的
+        const existing = mergedData.get(cache.id);
+        mergedData.set(cache.id, {
           ...existing,
-          title: podcast.title || existing.title,
-          showAuthor: podcast.showAuthor || existing.showAuthor,
-          sourceUrl: podcast.sourceUrl || existing.sourceUrl,
-          status: podcast.status || existing.status,
-          processingCompletedAt: podcast.processingCompletedAt || existing.processingCompletedAt,
+          // 如果Podcast表中没有某些字段，使用AudioCache的
+          title: existing.title || cache.title,
+          showAuthor: existing.showAuthor || cache.author,
+          sourceUrl: existing.sourceUrl || cache.audioUrl,
+          publishedAt: existing.publishedAt || cache.publishedAt,
+          duration: existing.duration || cache.duration,
+          // topic始终优先使用Podcast表的（如果Podcast有topic，就用Podcast的；否则用AudioCache的）
+          topic: existing.topic || cache.topic,
           source: 'both'
         });
       } else {
-        // 添加新的Podcast数据
-        mergedData.set(podcast.id, {
-          id: podcast.id,
-          title: podcast.title,
-          showAuthor: podcast.showAuthor,
-          sourceUrl: podcast.sourceUrl,
-          status: podcast.status,
-          publishedAt: podcast.publishedAt,
-          duration: podcast.duration,
-          createdAt: podcast.createdAt,
-          processingStartedAt: podcast.createdAt,
-          processingCompletedAt: podcast.processingCompletedAt,
-          topic: null,
-          source: 'podcast'
+        // 如果Podcast表中没有，添加AudioCache数据
+        mergedData.set(cache.id, {
+          id: cache.id,
+          title: cache.title,
+          showAuthor: cache.author,
+          sourceUrl: cache.audioUrl,
+          status: 'READY' as const,
+          publishedAt: cache.publishedAt,
+          duration: cache.duration,
+          createdAt: cache.createdAt,
+          processingStartedAt: cache.createdAt,
+          processingCompletedAt: cache.updatedAt,
+          topic: cache.topic,
+          source: 'audioCache'
         });
       }
     });
