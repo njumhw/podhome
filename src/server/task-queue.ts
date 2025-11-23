@@ -154,7 +154,7 @@ class TaskQueue {
         orderBy: {
           createdAt: 'desc' // 获取最新的任务
         }
-      });
+      }) as any;
 
       if (!taskRecord) return null;
       const rec: any = taskRecord as any;
@@ -261,7 +261,7 @@ class TaskQueue {
         orderBy: {
           createdAt: 'asc'
         }
-      });
+      }) as any;
 
       if (!nextTask) {
         // 每10次检查输出一次日志，避免日志过多
@@ -554,13 +554,13 @@ class TaskQueue {
 
         try {
           // 检查数据库中是否存在对应的播客（通过 sourceUrl 或 audioUrl 匹配）
-          const podcast = await dbRetry.podcast.findFirst({
+          const podcastResult = await dbRetry.podcast.findFirst({
             where: {
               OR: [
                 { sourceUrl: url },
                 { audioUrl: url }
               ],
-              status: 'READY' // 只检查已完成处理的播客
+              status: 'READY' as any // 只检查已完成处理的播客
             },
             select: {
               id: true,
@@ -568,6 +568,8 @@ class TaskQueue {
               status: true
             }
           });
+          
+          const podcast = podcastResult as { id: string; title: string | null; status: string } | null;
 
           if (podcast) {
             // 播客已存在且状态为 READY，说明任务实际上已完成

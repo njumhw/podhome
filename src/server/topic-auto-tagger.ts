@@ -285,9 +285,9 @@ export async function batchAutoTagPodcasts(
   skipped: number;
   results: Array<{ podcastId: string; title: string; topicName: string | null }>;
 }> {
-  const whereClause = podcastIds 
-    ? { id: { in: podcastIds }, status: 'READY' }
-    : { status: 'READY' }; // 处理所有已就绪的播客（包括已有标签的）
+  const whereClause: any = podcastIds 
+    ? { id: { in: podcastIds }, status: 'READY' as any }
+    : { status: 'READY' as any }; // 处理所有已就绪的播客（包括已有标签的）
   
   const podcasts = await db.podcast.findMany({
     where: whereClause,
