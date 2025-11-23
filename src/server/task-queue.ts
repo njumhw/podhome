@@ -494,7 +494,7 @@ class TaskQueue {
           data: true,
           startedAt: true
         }
-      });
+      }) as Array<{ id: string; data: any; startedAt: Date | null }>;
 
       for (const task of longRunningTasks) {
         if (!timeoutTasks.includes(task.id)) {
