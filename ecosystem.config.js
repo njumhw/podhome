@@ -45,13 +45,13 @@ module.exports = {
     max_restarts: 10,
     env: {
       NODE_ENV: 'production',
-      PORT: 3010,
+      PORT: 3005,
       // 从 .env 文件加载所有环境变量
       ...envVars
     },
     env_production: {
       NODE_ENV: 'production',
-      PORT: 3010,
+      PORT: 3005,
       // 从 .env 文件加载所有环境变量
       ...envVars
     },

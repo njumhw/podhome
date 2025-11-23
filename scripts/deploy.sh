@@ -129,12 +129,27 @@ migrate_database() {
     success "数据库迁移完成"
 }
 
+# 停止应用
+stop_app() {
+    log "停止现有应用..."
+    
+    # 停止 PM2 应用
+    pm2 stop $APP_NAME 2>/dev/null || true
+    
+    # 检查是否有进程占用端口 3005
+    PORT_PID=$(lsof -ti:3005 2>/dev/null || true)
+    if [ ! -z "$PORT_PID" ]; then
+        log "发现端口 3005 被占用 (PID: $PORT_PID)，正在停止..."
+        kill -9 $PORT_PID 2>/dev/null || true
+        sleep 2
+    fi
+    
+    success "应用已停止"
+}
+
 # 重启应用
 restart_app() {
-    log "重启应用..."
-    
-    # 停止现有应用
-    pm2 stop $APP_NAME 2>/dev/null || true
+    log "启动应用..."
     
     # 启动应用
     pm2 start ecosystem.config.js --env $ENV
@@ -158,7 +173,7 @@ health_check() {
     sleep 10
     
     # 检查应用是否响应
-    if curl -f http://localhost:3010/api/health > /dev/null 2>&1; then
+    if curl -f http://localhost:3005/api/health > /dev/null 2>&1; then
         success "健康检查通过"
     else
         warning "健康检查失败，但应用可能仍在启动中"
@@ -182,6 +197,7 @@ main() {
     check_permissions
     create_directories
     backup_current
+    stop_app
     pull_code
     install_dependencies
     build_app
