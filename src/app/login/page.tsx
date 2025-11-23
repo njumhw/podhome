@@ -2,6 +2,7 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 function LoginForm() {
 	const [formData, setFormData] = useState({
@@ -30,7 +31,7 @@ function LoginForm() {
 			const data = await res.json();
 
 			if (!res.ok) {
-				throw new Error(data.error || "登录失败");
+				throw new Error(data.error || "Login failed");
 			}
 
 			// 登录成功，刷新页面并跳转到首页
@@ -43,48 +44,70 @@ function LoginForm() {
 	};
 
 	return (
-		<div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
-			<div className="w-full max-w-md p-8">
-				<div className="text-center mb-8">
-					<h1 className="text-2xl font-semibold tracking-tight mb-2">登录 PodHome</h1>
-					<p className="text-sm text-gray-700 dark:text-gray-300">
-						欢迎回到播客内容转写平台
+		<div className="min-h-screen bg-black flex items-center justify-center px-4">
+			{/* Aurora Glow Backgrounds */}
+			<div className="hidden md:block absolute top-1/4 left-[10%] w-[300px] h-[300px] bg-white rounded-full blur-[120px] opacity-10 animate-pulse-slow pointer-events-none -z-10"></div>
+			<div className="hidden md:block absolute bottom-1/4 right-[10%] w-[300px] h-[300px] bg-purple-600 rounded-full blur-[120px] opacity-20 animate-pulse-slow pointer-events-none -z-10" style={{ animationDelay: '2s' }}></div>
+
+			<div className="relative w-full max-w-md z-10">
+				{/* Back to Home Link */}
+				<Link 
+					href="/" 
+					className="absolute -top-16 left-0 flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors font-mono"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+						<path d="m12 19-7-7 7-7"/>
+						<path d="M19 12H5"/>
+					</svg>
+					Back to Home
+				</Link>
+
+				<div className="text-center mb-10">
+					<h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 flex items-center justify-center gap-3">
+						<span className="text-zinc-100 tracking-tighter font-sans">Podcast</span>
+						<span className="font-serif italic text-2xl sm:text-3xl text-zinc-600 font-light">to</span>
+						<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 font-sans">
+							Insight
+						</span>
+					</h1>
+					<p className="text-sm text-zinc-500 font-mono">
+						Welcome back to Podcast to Insight
 					</p>
 				</div>
 
 				{message && (
-					<div className="mb-4 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg">
+					<div className="mb-6 text-sm text-emerald-400 bg-emerald-900/20 border border-emerald-500/30 px-4 py-3 rounded-lg font-mono">
 						{message}
 					</div>
 				)}
 
-				<form onSubmit={handleSubmit} className="space-y-4">
+				<form onSubmit={handleSubmit} className="space-y-5">
 					<div>
-						<label className="block text-sm font-medium mb-2">邮箱或用户名</label>
+						<label className="block text-xs font-mono text-zinc-400 mb-2 uppercase tracking-wider">Email or Username</label>
 						<input
 							type="text"
 							required
 							value={formData.identifier}
 							onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
-							className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20"
-							placeholder="邮箱或用户名"
+							className="w-full rounded-xl border border-white/10 bg-black/60 backdrop-blur-xl px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all font-sans"
+							placeholder="your@email.com or username"
 						/>
 					</div>
 
 					<div>
-						<label className="block text-sm font-medium mb-2">密码</label>
+						<label className="block text-xs font-mono text-zinc-400 mb-2 uppercase tracking-wider">Password</label>
 						<input
 							type="password"
 							required
 							value={formData.password}
 							onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-							className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20"
-							placeholder="密码"
+							className="w-full rounded-xl border border-white/10 bg-black/60 backdrop-blur-xl px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all font-sans"
+							placeholder="Enter your password"
 						/>
 					</div>
 
 					{error && (
-						<div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">
+						<div className="text-sm text-rose-400 bg-rose-900/20 border border-rose-500/30 px-4 py-3 rounded-lg font-mono">
 							{error}
 						</div>
 					)}
@@ -92,18 +115,18 @@ function LoginForm() {
 					<button
 						type="submit"
 						disabled={isLoading}
-						className="w-full px-4 py-2 text-sm rounded-xl bg-black text-white dark:bg-white dark:text-black disabled:opacity-50 disabled:cursor-not-allowed"
+						className="w-full px-6 py-3 text-sm rounded-xl bg-white text-black font-bold hover:bg-zinc-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-sans"
 					>
-						{isLoading ? "登录中..." : "登录"}
+						{isLoading ? "Signing in..." : "Sign In"}
 					</button>
 				</form>
 
-				<div className="mt-6 text-center">
-					<p className="text-sm text-gray-700 dark:text-gray-300">
-						还没有账号？{" "}
-						<a href="/register" className="text-black dark:text-white hover:underline">
-							立即注册
-						</a>
+				<div className="mt-8 text-center">
+					<p className="text-sm text-zinc-500 font-mono">
+						Don't have an account?{" "}
+						<Link href="/register" className="text-white hover:text-indigo-400 transition-colors underline underline-offset-4">
+							Sign up
+						</Link>
 					</p>
 				</div>
 			</div>

@@ -78,7 +78,7 @@ export default function HomePage() {
         const timestamp = Date.now();
         // 优化：初始只加载需要的数量，减少数据传输
         const [latestRes, hotRes, topicsRes, userRes] = await Promise.allSettled([
-          fetch('/api/public/list?type=latest&limit=24'), // 初始加载24条（2页），减少数据传输
+          fetch('/api/public/list?type=latest&limit=12'), // 初始只加载12条（1页），减少数据传输
           fetch(`/api/public/list?type=hot&limit=6&_t=${timestamp}`),
           fetch('/api/public/topics'),
           fetch("/api/auth/me")

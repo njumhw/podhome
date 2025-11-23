@@ -125,14 +125,25 @@ export async function GET(request: NextRequest) {
       likeCount: 0 // 默认0，hot分支会用聚合结果覆盖
     }));
 
-    const total = podcastTotal;
+    let total = podcastTotal;
 
-    // 如果是热度排序，需要先获取所有数据，然后按点赞数排序，最后去重
+    // 如果是热度排序，使用优化的数据库查询
     if (type === 'hot') {
-      // 获取所有符合条件的播客（因为需要按点赞数排序，不能只取前N条）
-      // 使用 findMany 获取所有数据，然后在内存中按点赞数排序
+      // 优化策略：
+      // 1. 限制查询范围：只查询最近更新的播客（最近90天），减少数据量
+      // 2. 查询全部数据以确保排序准确（但限制在最近90天）
+      // 3. 在内存中去重和排序
+      
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      
+      const optimizedWhere = {
+        ...whereClause,
+        updatedAt: { gte: ninetyDaysAgo } // 只查询最近90天的播客
+      };
+      
       const hotItemsRaw = await prisma.podcast.findMany({
-        where: whereClause,
+        where: optimizedWhere,
         select: {
           id: true,
           title: true,
@@ -148,7 +159,7 @@ export async function GET(request: NextRequest) {
         // 不限制数量，获取所有数据以确保排序准确
       });
       
-      console.log(`[API /api/public/list] 热度排序：获取到 ${hotItemsRaw.length} 条播客数据`);
+      console.log(`[API /api/public/list] 热度排序（优化后）：获取到 ${hotItemsRaw.length} 条播客数据（限制在最近90天）`);
 
       // 去重：同一 sourceUrl 仅保留点赞数最多或最新的那条
       const seen = new Map<string, any>();
@@ -184,9 +195,9 @@ export async function GET(request: NextRequest) {
       // 取前limit个
       items = hotItemsUnique.slice(0, limit).map(i => ({
         id: i.id,
-        title: i.title,
-        author: i.showAuthor || null, // 前端期望author字段
-        showAuthor: i.showAuthor || null, // 保持兼容性
+        title: i.title || '未知标题',
+        author: i.showAuthor || null,
+        showAuthor: i.showAuthor || null,
         publishedAt: i.publishedAt,
         audioUrl: i.audioUrl,
         sourceUrl: i.sourceUrl,
@@ -196,13 +207,8 @@ export async function GET(request: NextRequest) {
         likeCount: i._count?.likes || 0
       }));
       
-      // 更新total为去重后的数量
-      const uniqueTotal = await prisma.podcast.groupBy({
-        by: ['sourceUrl'],
-        where: whereClause,
-        _count: true
-      });
-      // 注意：这里total可能不准确，但至少不会显示重复
+      // 更新total为去重后的数量（估算值）
+      total = hotItemsUnique.length;
     }
     
     console.log(`[API /api/public/list] 最终返回数量: ${items.length}`);

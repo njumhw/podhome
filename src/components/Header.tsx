@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import SimpleProcessingStatus from "./SimpleProcessingStatus";
 import { AboutModal } from "./AboutModal";
 import { useUser } from "@/hooks/useUser";
@@ -102,7 +103,15 @@ export function Header() {
 		<>
 			<header className="w-full sticky top-0 z-10 bg-black/80 backdrop-blur-sm border-b border-white/10">
 				<div className="mx-auto max-w-7xl px-6 py-3 flex items-center justify-between">
-					<h1 className="text-xl font-bold tracking-tight text-white">PodHome</h1>
+					<Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+						<h1 className="text-xl font-bold tracking-tight flex items-center gap-1.5">
+							<span className="text-white font-sans">Podcast</span>
+							<span className="font-serif italic text-lg text-zinc-600 font-light">to</span>
+							<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 font-sans">
+								Insight
+							</span>
+						</h1>
+					</Link>
 					<nav className="flex items-center gap-4">
 						{/* 处理状态图标 */}
 						{processingCount > 0 && (
@@ -167,30 +176,30 @@ export function Header() {
 						</div>
 					) : (
 							<div className="flex items-center gap-4">
-								{/* 关于我们按钮 - 游客也可访问 */}
+								{/* About Us button - accessible to visitors */}
 								<button
 									onClick={() => setShowAboutModal(true)}
 									className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
 								>
-									关于我们
+									About Us
 								</button>
 								
-								{/* 分隔线 */}
+								{/* Separator */}
 								<div className="w-px h-4 bg-white/10"></div>
 								
-								{/* 登录注册 */}
+								{/* Login & Register */}
 								<div className="flex items-center gap-3">
 									<a
 										href="/login"
 										className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
 									>
-										登录
+										Login
 									</a>
 									<a
 										href="/register"
 										className="text-sm px-3 py-1 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/30 transition-colors font-mono"
 									>
-										注册
+										Register
 									</a>
 								</div>
 							</div>
