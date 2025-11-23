@@ -536,7 +536,7 @@ class TaskQueue {
           startedAt: true
         },
         take: 20 // 限制查询数量，避免性能问题
-      });
+      }) as Array<{ id: string; data: any; startedAt: Date | null }>;
 
       if (runningTasks.length === 0) {
         return;
