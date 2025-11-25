@@ -1,10 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  --background: #030207;
+  --foreground: #f7f9ff;
   --font-sans: var(--font-space-grotesk);
   --font-mono: var(--font-jetbrains-mono);
+  --text-muted: #a1a1aa;
+  --card-surface: rgba(24, 24, 27, 0.85);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --header-bg: rgba(0, 0, 0, 0.75);
+  --divider-color: rgba(255, 255, 255, 0.08);
+  --outline-color: rgba(255, 255, 255, 0.25);
+}
+
+[data-theme='light'] {
+  --background: #f6f7fb;
+  --foreground: #0b0d16;
+  --text-muted: #4b5563;
+  --card-surface: rgba(255, 255, 255, 0.92);
+  --card-border: rgba(15, 23, 42, 0.08);
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --divider-color: rgba(15, 23, 42, 0.08);
+  --outline-color: rgba(15, 23, 42, 0.25);
 }
 
 @theme inline {
@@ -13,10 +30,11 @@
 }
 
 body {
-  background: #000000;
-  color: #ffffff;
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-space-grotesk), system-ui, sans-serif;
   position: relative;
+  transition: background 0.4s ease, color 0.4s ease;
 }
 
 /* 添加噪声纹理背景 */
@@ -34,9 +52,247 @@ body::before {
   z-index: 0;
 }
 
+[data-theme='light'] body::before {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(15,23,42,0.03) 0px, transparent 1px, transparent 2px, rgba(15,23,42,0.03) 3px),
+    repeating-linear-gradient(90deg, rgba(15,23,42,0.03) 0px, transparent 1px, transparent 2px, rgba(15,23,42,0.03) 3px);
+}
+
 body > * {
   position: relative;
   z-index: 1;
+}
+
+.header-shell {
+  background-color: var(--header-bg);
+  border-bottom: 1px solid var(--divider-color);
+  transition: background-color 0.4s ease, border-color 0.4s ease;
+}
+
+.theme-toggle-btn {
+  border: 1px solid var(--outline-color);
+  color: var(--foreground);
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+[data-theme='light'] .theme-toggle-btn {
+  background-color: rgba(15, 23, 42, 0.04);
+}
+
+[data-theme='light'] .text-white {
+  color: #0b0d16 !important;
+}
+
+[data-theme='light'] .text-gray-300 {
+  color: #1f2937 !important;
+}
+
+[data-theme='light'] .text-gray-400,
+[data-theme='light'] .text-zinc-400 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme='light'] .text-zinc-500,
+[data-theme='light'] .text-gray-500 {
+  color: #6b7280 !important;
+}
+
+[data-theme='light'] .border-white\/5,
+[data-theme='light'] .border-white\/10,
+[data-theme='light'] .border-white\/20,
+[data-theme='light'] .border-white\/30 {
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+
+[data-theme='light'] .bg-black {
+  background-color: #ffffff !important;
+}
+
+[data-theme='light'] .bg-black\/40 {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+[data-theme='light'] .bg-black\/60 {
+  background-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+[data-theme='light'] .bg-black\/80 {
+  background-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+[data-theme='light'] .bg-black\/95 {
+  background-color: rgba(15, 23, 42, 0.2) !important;
+}
+
+[data-theme='light'] .bg-zinc-900\/40,
+[data-theme='light'] .bg-zinc-900\/60,
+[data-theme='light'] .bg-zinc-900\/95 {
+  background-color: var(--card-surface) !important;
+}
+
+[data-theme='light'] .bg-white\/5 {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+[data-theme='light'] .bg-white\/10 {
+  background-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+[data-theme='light'] .bg-white\/20 {
+  background-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+[data-theme='light'] .text-zinc-600 {
+  color: #475569 !important;
+}
+
+[data-theme='light'] .text-zinc-100 {
+  color: #0b0d16 !important;
+}
+
+[data-theme='light'] .text-gray-200 {
+  color: #1f2937 !important;
+}
+
+[data-theme='light'] .bg-zinc-900\/40 .text-white,
+[data-theme='light'] .bg-zinc-900\/60 .text-white {
+  color: var(--foreground) !important;
+}
+
+/* 白色模式下的排名数字 */
+[data-theme='light'] .ranking-number {
+  color: rgba(15, 23, 42, 0.06) !important;
+}
+
+/* 白色模式下的搜索框背景 */
+[data-theme='light'] .search-box-bg {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+[data-theme='light'] .search-box-bg input {
+  color: var(--foreground) !important;
+}
+
+[data-theme='light'] .search-box-bg input::placeholder {
+  color: #9ca3af !important;
+}
+
+/* 白色模式下的按钮 */
+[data-theme='light'] .btn-primary {
+  background-color: #0b0d16 !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .btn-primary:hover {
+  background-color: #1f2937 !important;
+}
+
+/* 白色模式下的卡片文字 */
+[data-theme='light'] .card-text-primary {
+  color: var(--foreground) !important;
+}
+
+[data-theme='light'] .card-text-secondary {
+  color: var(--text-muted) !important;
+}
+
+/* 白色模式下的卡片背景 */
+[data-theme='light'] .card-bg {
+  background-color: var(--card-surface) !important;
+}
+
+/* 白色模式下的搜索框背景 */
+[data-theme='light'] .bg-zinc-900\/40 {
+  background-color: var(--card-surface) !important;
+}
+
+/* 白色模式下的 prose 文字颜色 */
+[data-theme='light'] .prose {
+  color: var(--foreground) !important;
+}
+
+[data-theme='light'] .prose p,
+[data-theme='light'] .prose li,
+[data-theme='light'] .prose em {
+  color: var(--foreground) !important;
+}
+
+[data-theme='light'] .prose h1,
+[data-theme='light'] .prose h2,
+[data-theme='light'] .prose h3,
+[data-theme='light'] .prose strong {
+  color: var(--foreground) !important;
+}
+
+[data-theme='light'] .prose blockquote {
+  color: var(--text-muted) !important;
+  border-color: rgba(15, 23, 42, 0.2) !important;
+}
+
+[data-theme='light'] .prose code,
+[data-theme='light'] .prose pre {
+  color: var(--foreground) !important;
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+.about-modal .about-modal-btn {
+  background-color: rgba(15, 23, 42, 0.9);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='light'] .about-modal .about-modal-btn {
+  background-color: #111827;
+  color: #ffffff;
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+.skeleton-block {
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+  animation: skeleton-glow 1.6s linear infinite;
+}
+
+@keyframes skeleton-glow {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+[data-theme='light'] .skeleton-block {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+[data-theme='light'] .skeleton-block::after {
+  background: linear-gradient(110deg, transparent 0%, rgba(15,23,42,0.12) 50%, transparent 100%);
+}
+
+.tag-pill {
+  color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='light'] .tag-pill {
+  color: var(--foreground) !important;
+  background-color: rgba(15, 23, 42, 0.04) !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+[data-theme='light'] .topic-pill {
+  color: var(--foreground) !important;
 }
 
 /* 自定义动画延迟 */

@@ -66,7 +66,7 @@ function LoginForm() {
 					<h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 flex items-center justify-center gap-3">
 						<span className="text-zinc-100 tracking-tighter font-sans">Podcast</span>
 						<span className="font-serif italic text-2xl sm:text-3xl text-zinc-600 font-light">to</span>
-						<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 font-sans">
+						<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ffd48f] via-[#ff9f43] to-[#ff6a00] font-sans">
 							Insight
 						</span>
 					</h1>

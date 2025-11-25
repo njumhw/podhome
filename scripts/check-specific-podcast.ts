@@ -2,7 +2,7 @@ import { db } from '../src/server/db';
 
 async function checkSpecificPodcast() {
   try {
-    const url = 'https://www.xiaoyuzhoufm.com/episode/690d959cd99642be96e50ffa';
+    const url = 'https://www.xiaoyuzhoufm.com/episode/64ba0381ead86e7cf1812526';
     
     console.log(`检查播客: ${url}\n`);
     

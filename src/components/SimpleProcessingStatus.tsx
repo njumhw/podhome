@@ -294,23 +294,46 @@ export default function SimpleProcessingStatus({
     );
   };
 
-  if (!isVisible) return null;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!isVisible || !mounted) return null;
 
   const processingCount = processingItems.filter(item => item.status === 'processing').length;
   const completedCount = processingItems.filter(item => item.status === 'completed' || item.status === 'failed').length;
 
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+  const modalContent = (
+    <div 
+      className="fixed inset-0 flex items-center justify-center pointer-events-none" 
+      style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0,
+        zIndex: 99999 
+      }}
+    >
+      {/* 背景遮罩 */}
+      <div 
+        className="absolute inset-0 bg-black/80 dark:bg-black/80 [data-theme='light']:bg-black/40 backdrop-blur-sm pointer-events-auto"
+        onClick={onClose}
+      ></div>
+      
+      {/* 弹窗内容 */}
+      <div className="relative bg-white dark:bg-zinc-900/95 backdrop-blur-xl border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden pointer-events-auto z-10">
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-white/10">
           <div>
-            <h2 className="text-xl font-bold text-white font-sans">Processing Status</h2>
-            <p className="text-sm text-zinc-400 mt-1 font-sans">Up to 2 podcasts can be processed per day</p>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white font-sans">Processing Status</h2>
+            <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1 font-sans">Up to 2 podcasts can be processed per day</p>
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -319,13 +342,13 @@ export default function SimpleProcessingStatus({
         </div>
 
         {/* 标签页 */}
-        <div className="flex border-b border-white/10">
+        <div className="flex border-b border-gray-200 dark:border-white/10">
           <button
             onClick={() => setActiveTab('processing')}
             className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors font-sans ${
               activeTab === 'processing'
-                ? 'border-indigo-500 text-white'
-                : 'border-transparent text-zinc-400 hover:text-zinc-300'
+                ? 'border-indigo-500 text-gray-900 dark:text-white'
+                : 'border-transparent text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-300'
             }`}
           >
             In Progress ({processingCount})
@@ -334,8 +357,8 @@ export default function SimpleProcessingStatus({
             onClick={() => setActiveTab('completed')}
             className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors font-sans ${
               activeTab === 'completed'
-                ? 'border-indigo-500 text-white'
-                : 'border-transparent text-zinc-400 hover:text-zinc-300'
+                ? 'border-indigo-500 text-gray-900 dark:text-white'
+                : 'border-transparent text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-300'
             }`}
           >
             Completed ({completedCount})
@@ -509,4 +532,6 @@ export default function SimpleProcessingStatus({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

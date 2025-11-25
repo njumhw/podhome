@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import SimpleProcessingStatus from "./SimpleProcessingStatus";
 import { AboutModal } from "./AboutModal";
+import { ThemeToggle } from "./ThemeToggle";
 import { useUser } from "@/hooks/useUser";
 
 export function Header() {
@@ -101,13 +102,13 @@ export function Header() {
 
 	return (
 		<>
-			<header className="w-full sticky top-0 z-10 bg-black/80 backdrop-blur-sm border-b border-white/10">
-				<div className="mx-auto max-w-7xl px-6 py-3 flex items-center justify-between">
+			<header className="header-shell w-full sticky top-0 z-10 backdrop-blur-sm">
+				<div className="mx-auto max-w-7xl px-6 py-3 flex items-center justify-between gap-4">
 					<Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
 						<h1 className="text-xl font-bold tracking-tight flex items-center gap-1.5">
-							<span className="text-white font-sans">Podcast</span>
-							<span className="font-serif italic text-lg text-zinc-600 font-light">to</span>
-							<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 font-sans">
+							<span className="text-white dark:text-white [data-theme='light']:text-foreground font-sans">Podcast</span>
+							<span className="font-serif italic text-lg text-zinc-600 dark:text-zinc-600 [data-theme='light']:text-slate-700 font-light">to</span>
+								<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ffd48f] via-[#ff9f43] to-[#ff6a00] font-sans">
 								Insight
 							</span>
 						</h1>
@@ -130,37 +131,37 @@ export function Header() {
 						)}
 						
 					{isLoading ? (
-						<div className="text-sm text-gray-400 font-mono">加载中...</div>
+						<div className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 font-mono">加载中...</div>
 					) : user ? (
 						<div className="flex items-center gap-4">
 							{/* 用户信息区域 */}
 							<div className="flex items-center gap-2">
 								{/* 今日额度显示 */}
 								{dailyUsage.limit > 0 && (
-									<div className="text-xs text-gray-400 bg-zinc-900/40 border border-white/10 px-2 py-1 rounded font-mono">
+									<div className="text-xs text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 px-2 py-1 rounded font-mono">
 										今日额度：{dailyUsage.used}/{dailyUsage.limit}
 									</div>
 								)}
 								{dailyUsage.limit === -1 && (
-									<div className="text-xs text-gray-400 bg-zinc-900/40 border border-white/10 px-2 py-1 rounded font-mono">
+									<div className="text-xs text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 px-2 py-1 rounded font-mono">
 										今日额度：{dailyUsage.used}/∞
 									</div>
 								)}
 								{/* 用户名 */}
-								<span className="text-sm text-white font-medium">
+								<span className="text-sm text-white dark:text-white [data-theme='light']:text-foreground font-medium">
 									{user.username}
 								</span>
 							</div>
 							
 							{/* 分隔线 */}
-							<div className="w-px h-4 bg-white/10"></div>
+							<div className="w-px h-4 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-slate-200"></div>
 							
 							{/* 导航链接 */}
 							<div className="flex items-center gap-3">
 								{/* 关于我们按钮 */}
 								<button
 									onClick={() => setShowAboutModal(true)}
-									className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
+									className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
 								>
 									关于我们
 								</button>
@@ -168,7 +169,7 @@ export function Header() {
 								{/* 退出按钮 */}
 								<button
 									onClick={handleLogout}
-									className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
+									className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
 								>
 									退出
 								</button>
@@ -179,31 +180,33 @@ export function Header() {
 								{/* About Us button - accessible to visitors */}
 								<button
 									onClick={() => setShowAboutModal(true)}
-									className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
+									className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
 								>
 									About Us
 								</button>
 								
 								{/* Separator */}
-								<div className="w-px h-4 bg-white/10"></div>
+								<div className="w-px h-4 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-slate-200"></div>
 								
 								{/* Login & Register */}
 								<div className="flex items-center gap-3">
 									<a
 										href="/login"
-										className="text-sm text-gray-400 hover:text-white transition-colors font-mono"
+										className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
 									>
 										Login
 									</a>
 									<a
 										href="/register"
-										className="text-sm px-3 py-1 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/30 transition-colors font-mono"
+										className="text-sm px-3 py-1 rounded-lg bg-blue-500/20 dark:bg-blue-500/20 [data-theme='light']:bg-blue-500 text-blue-400 dark:text-blue-400 [data-theme='light']:text-white border border-blue-500/50 dark:border-blue-500/50 [data-theme='light']:border-blue-600 hover:bg-blue-500/30 dark:hover:bg-blue-500/30 [data-theme='light']:hover:bg-blue-600 transition-colors font-mono"
 									>
 										Register
 									</a>
 								</div>
 							</div>
 						)}
+						{/* 主题切换按钮 - 放在最右边 */}
+						<ThemeToggle />
 					</nav>
 				</div>
 			</header>

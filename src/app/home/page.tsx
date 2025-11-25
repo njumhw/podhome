@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useToast } from '@/components/Toast';
 import { useUser } from '@/hooks/useUser';
 import { PodcastCard } from '@/components/PodcastCard';
+import MinimalLikeButton from '@/components/MinimalLikeButton';
 
 type PodcastItem = {
   id: string;
@@ -17,6 +18,7 @@ type PodcastItem = {
   topic: string | null;
   updatedAt: string;
   likeCount?: number;
+  likedAt?: string | null;
 };
 
 type SearchResult = {
@@ -55,6 +57,17 @@ export default function HomePage() {
   const [topics, setTopics] = useState<Array<{id: string, name: string, color?: string}>>([]);
   const [allPodcastsTotal, setAllPodcastsTotal] = useState(0);
   const [loading, setLoading] = useState({ latest: false, hot: false, allPodcasts: false });
+  const [activeTab, setActiveTab] = useState<'new' | 'top' | 'liked'>('new');
+  const [likedItems, setLikedItems] = useState<PodcastItem[]>([]);
+  const [likedPage, setLikedPage] = useState(1);
+  const [likedHasMore, setLikedHasMore] = useState(true);
+  const [likedLoading, setLikedLoading] = useState(false);
+  const LIKED_PAGE_SIZE = 15;
+  const tabOptions: Array<{ id: 'new' | 'top' | 'liked'; label: string; icon: string; requiresAuth?: boolean }> = [
+    { id: 'new', label: 'New', icon: '#' },
+    { id: 'top', label: 'Top', icon: '⚡' },
+    { id: 'liked', label: 'Liked', icon: '❤', requiresAuth: true },
+  ];
 
   // 加载主题列表
   const loadTopics = async () => {
@@ -123,6 +136,20 @@ export default function HomePage() {
     loadInitialData();
   }, []);
 
+  useEffect(() => {
+    if (!user) {
+      setLikedItems([]);
+      setLikedPage(1);
+      setLikedHasMore(true);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (activeTab === 'liked' && user && likedItems.length === 0 && !likedLoading) {
+      fetchLikedPodcasts(1);
+    }
+  }, [activeTab, user, likedItems.length, likedLoading]);
+
   const loadLatest = async () => {
     setLoading(prev => ({ ...prev, latest: true }));
     try {
@@ -161,6 +188,239 @@ export default function HomePage() {
 
   const handleLoadLessLatest = () => {
     setLatestDisplayCount(12);
+  };
+
+  const normalizeLikedItem = (item: any, index: number): PodcastItem => {
+    const source = item?.podcast ?? item ?? {};
+    const idValue = source.id ?? item?.podcastId ?? item?.id ?? `liked-${index}`;
+    const safeId = typeof idValue === 'string'
+      ? idValue
+      : typeof idValue === 'number'
+        ? String(idValue)
+        : (idValue?.id ? String(idValue.id) : `liked-${index}`);
+
+    const topicValue = source.topic ?? source.topic?.name ?? item?.topic ?? item?.topic?.name ?? null;
+    return {
+      id: safeId,
+      title: typeof source.title === 'string' ? source.title : (source.title?.text ?? '未知播客'),
+      author: typeof (source.author ?? source.showAuthor) === 'string'
+        ? (source.author ?? source.showAuthor)
+        : '未知作者',
+      publishedAt: source.publishedAt ?? item?.likedAt ?? item?.createdAt ?? null,
+      audioUrl: typeof source.audioUrl === 'string' ? source.audioUrl : '',
+      originalUrl: typeof (source.originalUrl ?? source.sourceUrl) === 'string'
+        ? (source.originalUrl ?? source.sourceUrl)
+        : '',
+      summary: typeof source.summary === 'string' ? source.summary : '',
+      topic: typeof topicValue === 'string' ? topicValue : null,
+      updatedAt: source.updatedAt ?? item?.likedAt ?? item?.createdAt ?? new Date().toISOString(),
+      likeCount: typeof (source.likeCount ?? source.likes) === 'number'
+        ? (source.likeCount ?? source.likes)
+        : 0,
+      likedAt: item?.likedAt ?? item?.createdAt ?? null,
+    };
+  };
+
+  const fetchLikedPodcasts = async (page = 1) => {
+    if (!user) return;
+    setLikedLoading(true);
+    try {
+      const offset = (page - 1) * LIKED_PAGE_SIZE;
+      const res = await fetch(`/api/podcast/liked?limit=${LIKED_PAGE_SIZE}&offset=${offset}`, { cache: 'no-store' });
+      if (!res.ok) {
+        if (res.status === 401) {
+          toast.error('请登录后查看点赞播客');
+        } else {
+          toast.error('加载点赞播客失败');
+        }
+        setLikedHasMore(false);
+        return;
+      }
+      const data = await res.json();
+      const normalized = (data.items ?? []).map((item: any, index: number) =>
+        normalizeLikedItem(item, (page - 1) * LIKED_PAGE_SIZE + index)
+      );
+      setLikedItems((prev) => page === 1 ? normalized : [...prev, ...normalized]);
+      setLikedHasMore(data.pagination?.hasNext ?? false);
+      setLikedPage(page);
+    } catch (error) {
+      console.error('加载点赞播客失败:', error);
+      toast.error('加载点赞播客失败');
+    } finally {
+      setLikedLoading(false);
+    }
+  };
+
+  const handleLoadMoreLiked = () => {
+    if (likedHasMore && !likedLoading) {
+      fetchLikedPodcasts(likedPage + 1);
+    }
+  };
+
+  const handleLikedStatusChange = (podcastId: string, liked: boolean) => {
+    if (!liked) {
+      setLikedItems((prev) => prev.filter((item) => item.id !== podcastId));
+    }
+  };
+
+  const renderNewSection = () => (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <svg className="w-5 h-5 text-[#ff9f43]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+        </svg>
+        <h2 className="text-xl font-bold text-white dark:text-white [data-theme='light']:text-foreground font-mono">New</h2>
+        <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
+      </div>
+
+      {loading.latest ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(12)].map((_, i) => (
+            <div key={i} className="animate-pulse">
+              <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
+            </div>
+          ))}
+        </div>
+      ) : latest.length > 0 ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+            {latest.slice(0, latestDisplayCount).map((item) => (
+              <PodcastCard key={item.id} item={item} />
+            ))}
+          </div>
+          {(latestDisplayCount < latest.length || latestDisplayCount > 12) && (
+            <div className="mt-6 flex justify-center gap-3">
+              {latestDisplayCount < latest.length && (
+                <button
+                  onClick={handleLoadMoreLatest}
+                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm"
+                >
+                  More
+                </button>
+              )}
+              {latestDisplayCount > 12 && (
+                <button
+                  onClick={handleLoadLessLatest}
+                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm"
+                >
+                  Less
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-center text-gray-500 dark:text-gray-500 [data-theme='light']:text-slate-500 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
+          Loading…
+        </div>
+      )}
+    </div>
+  );
+
+  const renderTopSection = () => (
+    <div className="relative mt-12 pt-8 border-t border-white/5">
+      <div className="absolute inset-0 -z-10 flex items-center justify-center pointer-events-none">
+        <div className="w-full h-full bg-gradient-radial from-[#ff6a00]/10 via-[#ff9f43]/5 to-transparent blur-3xl"></div>
+      </div>
+
+      <div className="relative z-10 flex items-center gap-3 mb-6">
+        <svg className="w-5 h-5 text-[#ff9f43]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        <h2 className="text-xl font-bold text-white dark:text-white [data-theme='light']:text-foreground font-mono">Top</h2>
+        <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
+      </div>
+
+      {loading.hot ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="animate-pulse">
+              <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
+            </div>
+          ))}
+        </div>
+      ) : hot.length > 0 ? (
+        <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+          {hot.map((item, index) => (
+            <PodcastCard key={item.id} item={item} rank={index + 1} />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center text-gray-500 dark:text-gray-500 [data-theme='light']:text-slate-500 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
+          Loading…
+        </div>
+      )}
+    </div>
+  );
+
+  const renderLikedSection = () => {
+    if (!user) {
+      return (
+        <div className="text-center text-gray-500 dark:text-gray-400 [data-theme='light']:text-slate-600 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
+          登录后可以查看你点赞过的播客
+        </div>
+      );
+    }
+
+    if (likedLoading && likedItems.length === 0) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="animate-pulse">
+              <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (!likedLoading && likedItems.length === 0) {
+      return (
+        <div className="text-center text-gray-500 dark:text-gray-400 [data-theme='light']:text-slate-600 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
+          暂无点赞的播客，去探索并点赞喜欢的节目吧
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <div className="flex items-center gap-3 mb-6">
+          <svg className="w-5 h-5 text-[#ff9f43]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+            />
+          </svg>
+          <h2 className="text-xl font-bold text-white dark:text-white [data-theme='light']:text-foreground font-mono">Liked</h2>
+          <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+          {likedItems.map((item: any, index: number) => {
+            const podcast = normalizeLikedItem(item, index);
+            return (
+              <div key={podcast.id} className="relative h-full">
+                <PodcastCard item={podcast} />
+              </div>
+            );
+          })}
+        </div>
+
+        {likedHasMore && (
+          <div className="mt-6 flex justify-center">
+            <button
+              onClick={handleLoadMoreLiked}
+              disabled={likedLoading}
+              className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {likedLoading ? 'Loading...' : 'More'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const loadHot = async () => {
@@ -956,7 +1216,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black dark:bg-black [data-theme='light']:bg-background">
       <main className="container mx-auto px-4 py-8">
         {/* Hero Section - 搜索区域 */}
         <div className="relative w-full mt-24 px-6 overflow-visible mb-16">
@@ -964,23 +1224,23 @@ export default function HomePage() {
           {/* Left Glow: White/Silver (Input) */}
           <div className="hidden md:block absolute top-1/2 -translate-y-1/2 left-[5%] w-[300px] h-[300px] bg-white rounded-full blur-[120px] opacity-10 animate-pulse-slow pointer-events-none -z-10"></div>
           
-          {/* Right Glow: Purple (Output) - with delay */}
-          <div className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[5%] w-[300px] h-[300px] bg-purple-600 rounded-full blur-[120px] opacity-20 animate-pulse-slow pointer-events-none -z-10" style={{ animationDelay: '2s' }}></div>
+          {/* Right Glow: Orange (Output) - with delay */}
+          <div className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[5%] w-[300px] h-[300px] bg-[#ff6a00] rounded-full blur-[120px] opacity-30 animate-pulse-slow pointer-events-none -z-10" style={{ animationDelay: '2s' }}></div>
 
           {/* === Main Content === */}
           <div className="relative mx-auto max-w-4xl text-center z-10">
             {/* Typography: "Podcast to Insight" */}
-            <h1 className="mb-10 text-5xl font-bold tracking-tight text-white sm:text-7xl flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-              <span className="text-zinc-100 tracking-tighter">Podcast</span>
-              <span className="font-serif italic text-3xl sm:text-4xl text-zinc-600 font-light">to</span>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300">
+            <h1 className="mb-10 text-5xl font-bold tracking-tight sm:text-7xl flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+              <span className="text-zinc-100 dark:text-zinc-100 [data-theme='light']:!text-foreground tracking-tighter">Podcast</span>
+              <span className="font-serif italic text-3xl sm:text-4xl text-zinc-600 dark:text-zinc-600 [data-theme='light']:!text-zinc-700 font-light">to</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ffd48f] via-[#ff9f43] to-[#ff6a00]">
                 Insight
               </span>
             </h1>
             
             {/* Search Bar */}
-            <div className="relative z-10 group flex items-center rounded-xl bg-black/60 p-2 ring-1 ring-white/10 transition-all focus-within:ring-indigo-500/50 focus-within:shadow-[0_0_60px_-15px_rgba(99,102,241,0.3)] backdrop-blur-2xl">
-              <div className="flex h-12 w-12 items-center justify-center text-zinc-500">
+            <div className="relative z-10 group flex items-center rounded-xl bg-black/60 dark:bg-black/60 [data-theme='light']:bg-white/85 p-2 ring-1 ring-white/10 dark:ring-white/10 [data-theme='light']:ring-slate-200 transition-all focus-within:ring-[#ff8c32]/60 focus-within:shadow-[0_0_60px_-15px_rgba(255,140,50,0.4)] backdrop-blur-2xl">
+              <div className="flex h-12 w-12 items-center justify-center text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="11" cy="11" r="8"></circle>
                   <path d="m21 21-4.35-4.35"></path>
@@ -992,7 +1252,7 @@ export default function HomePage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 placeholder="Paste podcast URL here..."
-                className="flex-1 bg-transparent px-2 py-3 text-lg text-white placeholder-zinc-600 outline-none font-light"
+                className="flex-1 bg-transparent px-2 py-3 text-lg text-white dark:text-white [data-theme='light']:text-foreground placeholder-zinc-600 dark:placeholder-zinc-600 [data-theme='light']:placeholder-slate-400 outline-none font-light"
                 disabled={isSearching}
               />
               <button
@@ -1012,7 +1272,7 @@ export default function HomePage() {
             
             {/* Bottom Subtle Connector Glow */}
             <div className="absolute top-full left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[100px] -z-20 opacity-30 pointer-events-none">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-transparent to-transparent blur-3xl"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-orange-900/40 via-transparent to-transparent blur-3xl"></div>
             </div>
           </div>
 
@@ -1045,14 +1305,14 @@ export default function HomePage() {
             <div className="mt-6">
               {searchResult.hits && searchResult.hits.length > 0 ? (
                 <div className="space-y-3">
-                  <h3 className="font-bold text-white text-sm mb-3 font-mono">搜索结果：</h3>
+                  <h3 className="font-bold text-white dark:text-white [data-theme='light']:text-foreground text-sm mb-3 font-mono">搜索结果：</h3>
                   {searchResult.hits.map((item) => (
                     <Link
                       key={item.id}
                       href={`/podcast/${item.id}`}
-                      className="block p-4 bg-zinc-900/40 backdrop-blur-sm rounded-lg border border-white/10 hover:border-white/20 hover:bg-zinc-900/60 transition-all"
+                      className="block p-4 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 transition-all"
                     >
-                      <h4 className="font-semibold text-white text-sm mb-2">{item.title}</h4>
+                      <h4 className="font-semibold text-white dark:text-white [data-theme='light']:text-foreground text-sm mb-2">{item.title}</h4>
                       <div className="text-xs text-gray-400 mt-1 space-x-2 font-mono">
                         {item.author && <span>{item.author}</span>}
                         {item.publishedAt && (
@@ -1069,13 +1329,40 @@ export default function HomePage() {
                   ))}
                 </div>
               ) : searchResult.notFound ? (
-                <div className="text-center py-8">
+                <div className="py-8">
                   {user ? (
                     <button
                       onClick={() => handleProcessPodcast(searchQuery)}
-                      className="px-6 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl hover:bg-white/20 transition-all duration-200 font-sans text-sm text-white font-medium"
+                      className="group relative mx-auto flex w-full max-w-4xl items-center gap-5 rounded-2xl border border-white/15 bg-gradient-to-r from-white/5 via-white/0 to-white/5 px-6 py-5 text-left shadow-[0_25px_60px_-30px_rgba(255,140,50,0.8)] transition-all hover:border-white/30 hover:shadow-[0_35px_80px_-45px_rgba(255,140,50,0.85)]"
                     >
-                      Podcast not found. Generating fresh insight now...
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-2xl">
+                        ✨
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-lg font-semibold text-white dark:text-white [data-theme='light']:text-foreground">
+                          You&rsquo;re the first to explore this podcast
+                        </p>
+                        <p className="text-sm text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600">
+                          Click to unlock the first Insight and share it with everyone.
+                        </p>
+                      </div>
+                      <div className="ml-4 inline-flex items-center gap-2 rounded-full border border-orange-300/30 dark:border-orange-400/30 [data-theme='light']:border-orange-400/40 bg-gradient-to-r from-[#ffe0a3]/40 via-[#ff9f43]/40 to-[#ff6a00]/40 px-5 py-2 text-sm font-semibold text-white shadow-[0_10px_25px_-15px_rgba(255,122,0,0.55)] transition group-hover:border-white/50 group-hover:shadow-[0_14px_30px_-20px_rgba(255,122,0,0.65)] group-hover:from-[#ffd48f]/50 group-hover:to-[#ff6a00]/50">
+                        Generate Insight
+                        <svg
+                          className="h-3.5 w-3.5"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M3 8h10M9 4l4 4-4 4"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
                     </button>
                   ) : (
                     <div className="bg-zinc-900/40 backdrop-blur-sm border border-white/10 rounded-lg p-6">
@@ -1092,97 +1379,31 @@ export default function HomePage() {
 
         </div>
 
-        {/* 播客网格区域 */}
-        <div className="space-y-12">
-          {/* 最新播客 */}
-          <div>
-            {/* Terminal-style Header */}
-            <div className="flex items-center gap-3 mb-6">
-              <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-              </svg>
-              <h2 className="text-xl font-bold text-white font-mono">New</h2>
-              <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
-            </div>
-            
-            {loading.latest ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(12)].map((_, i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
-                  </div>
-                ))}
-              </div>
-            ) : latest.length > 0 ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-                  {latest.slice(0, latestDisplayCount).map((item) => (
-                    <PodcastCard key={item.id} item={item} />
-                  ))}
-                </div>
-                {(latestDisplayCount < latest.length || latestDisplayCount > 12) && (
-                  <div className="mt-6 flex justify-center gap-3">
-                    {latestDisplayCount < latest.length && (
-                      <button
-                        onClick={handleLoadMoreLatest}
-                        className="px-6 py-2 bg-zinc-900/40 backdrop-blur-sm border border-white/10 hover:border-white/20 hover:bg-zinc-900/60 text-white rounded-lg transition-all font-mono text-sm"
-                      >
-                        More
-                      </button>
-                    )}
-                    {latestDisplayCount > 12 && (
-                      <button
-                        onClick={handleLoadLessLatest}
-                        className="px-6 py-2 bg-zinc-900/40 backdrop-blur-sm border border-white/10 hover:border-white/20 hover:bg-zinc-900/60 text-white rounded-lg transition-all font-mono text-sm"
-                      >
-                        Less
-                      </button>
-                    )}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center text-gray-500 py-12 font-mono text-sm border border-white/5 rounded-lg bg-zinc-900/20">
-                Loading…
-              </div>
-            )}
+        {/* 播客网格区域 Tabs */}
+        <div className="space-y-10">
+          <div className="flex items-center gap-3 border-b border-white/10 pb-4 flex-wrap">
+            {tabOptions.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const disabled = tab.requiresAuth && !user;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => !disabled && setActiveTab(tab.id)}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-all ${
+                    isActive ? 'bg-white/10 text-white shadow-lg' : 'text-gray-500 hover:text-white'
+                  } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* 最热播客 */}
-          <div className="relative mt-12 pt-8 border-t border-white/5">
-            {/* 微弱的彩色光晕背景 */}
-            <div className="absolute inset-0 -z-10 flex items-center justify-center pointer-events-none">
-              <div className="w-full h-full bg-gradient-radial from-purple-500/5 via-indigo-500/3 to-transparent blur-3xl"></div>
-            </div>
-            
-            {/* Terminal-style Header */}
-            <div className="relative z-10 flex items-center gap-3 mb-6">
-              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <h2 className="text-xl font-bold text-white font-mono">Top</h2>
-              <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
-            </div>
-            
-            {loading.hot ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
-                  </div>
-                ))}
-              </div>
-            ) : hot.length > 0 ? (
-              <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-                {hot.map((item, index) => (
-                  <PodcastCard key={item.id} item={item} rank={index + 1} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center text-gray-500 py-12 font-mono text-sm border border-white/5 rounded-lg bg-zinc-900/20">
-                Loading…
-              </div>
-            )}
+          <div>
+            {activeTab === 'new' && renderNewSection()}
+            {activeTab === 'top' && renderTopSection()}
+            {activeTab === 'liked' && renderLikedSection()}
           </div>
         </div>
 
@@ -1190,7 +1411,7 @@ export default function HomePage() {
         <div className="mt-8">
           <button
             onClick={handleShowAllPodcasts}
-            className="w-full py-3 px-4 bg-zinc-900/40 backdrop-blur-sm border border-white/10 hover:border-white/20 hover:bg-zinc-900/60 text-white rounded-lg transition-all flex items-center justify-center gap-2 font-mono text-sm"
+            className="w-full py-3 px-4 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all flex items-center justify-center gap-2 font-mono text-sm"
           >
             <span>{showAllPodcasts ? '收起' : '所有播客'}</span>
             <svg 
@@ -1204,8 +1425,8 @@ export default function HomePage() {
           </button>
 
           {showAllPodcasts && (
-            <div className="mt-4 rounded-lg border border-white/10 bg-zinc-900/40 backdrop-blur-sm p-6">
-              <h2 className="text-2xl font-bold mb-6 text-white">所有播客</h2>
+            <div className="mt-4 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm p-6">
+              <h2 className="text-2xl font-bold mb-6 text-white dark:text-white [data-theme='light']:text-foreground">所有播客</h2>
               
               {/* 主题筛选器 */}
               <div className="mb-6">
@@ -1214,7 +1435,7 @@ export default function HomePage() {
                   <select
                     value={selectedTopic}
                     onChange={(e) => handleTopicChange(e.target.value)}
-                    className="px-3 py-1.5 text-sm border border-white/10 rounded-lg bg-black/40 text-white focus:outline-none focus:border-white/20 font-mono"
+                    className="px-3 py-1.5 text-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 rounded-lg bg-black/40 dark:bg-black/40 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/20 dark:focus:border-white/20 [data-theme='light']:focus:border-slate-300 font-mono"
                   >
                     <option value="">全部主题</option>
                     {topics.map((topic) => (
@@ -1234,7 +1455,7 @@ export default function HomePage() {
                 </div>
                 {selectedTopic && (
                   <div className="text-sm text-gray-400 font-mono">
-                    当前筛选：<span className="font-medium text-white">{selectedTopic}</span>
+                    当前筛选：<span className="font-medium text-white dark:text-white [data-theme='light']:text-foreground">{selectedTopic}</span>
                   </div>
                 )}
               </div>

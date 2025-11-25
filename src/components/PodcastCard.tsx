@@ -81,7 +81,7 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 			{/* 排名数字背景 - 右下角 */}
 			{rank !== undefined && (
 				<div 
-					className="absolute bottom-0 right-0 pointer-events-none"
+					className="absolute bottom-0 right-0 pointer-events-none ranking-number"
 					style={{
 						fontSize: '140px',
 						fontWeight: 'bold',
@@ -99,26 +99,26 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 			)}
 			
 			{/* Meta Header */}
-			<div className="relative z-10 flex justify-between items-center font-mono text-xs text-zinc-500 mb-4">
+			<div className="relative z-10 flex justify-between items-center font-mono text-xs text-zinc-200 dark:text-zinc-200 [data-theme='light']:text-white/70 mb-4">
 				<div className="flex items-center gap-2">
 					{item.topic && (
-						<span className="px-2 py-0.5 rounded border border-white/5 bg-white/5">
+						<span className="px-2 py-0.5 rounded border border-white/10 dark:border-white/10 [data-theme='light']:border-white/30 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-white/10 text-white/80 dark:text-white/80 [data-theme='light']:text-white">
 							#{item.topic}
 						</span>
 					)}
 					{episodeNumber && (
-						<span className="px-2 py-0.5 rounded border border-white/5 bg-white/5">
+						<span className="px-2 py-0.5 rounded border border-white/10 dark:border-white/10 [data-theme='light']:border-white/30 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-white/10 text-white/80 dark:text-white/80 [data-theme='light']:text-white">
 							EP.{episodeNumber}
 						</span>
 					)}
 				</div>
-				<span>{dateStr}</span>
+				<span className="text-white/70 dark:text-white/70 [data-theme='light']:text-white/80">{dateStr}</span>
 			</div>
 			
 			{/* Main Title */}
 			<h3 className={`
-				relative z-10 mt-3 text-base font-bold text-white 
-				group-hover:text-zinc-100
+				relative z-10 mt-3 text-base font-bold text-white dark:text-white [data-theme='light']:text-foreground
+				group-hover:text-zinc-100 dark:group-hover:text-zinc-100 [data-theme='light']:group-hover:text-slate-800
 				line-clamp-3
 				transition-colors duration-300
 				leading-snug
@@ -130,7 +130,7 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 			{/* Footer with Pulse Animation */}
 			<div className="relative z-10 mt-4 flex justify-between items-end flex-shrink-0">
 				{item.author && (
-					<span className="text-sm text-white font-mono font-medium">{item.author}</span>
+					<span className="text-sm text-white dark:text-white [data-theme='light']:text-foreground font-mono font-medium">{item.author}</span>
 				)}
 				
 				{/* Fake Audio Visualizer - 根据标签显示不同颜色 */}
@@ -197,10 +197,9 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 					}}
 				>
 					<div 
-						className="relative h-full rounded-[6px] p-6 flex flex-col overflow-hidden" 
+						className="relative h-full rounded-[6px] p-6 flex flex-col overflow-hidden card-bg" 
 						style={{ 
 							minHeight: '240px',
-							backgroundColor: 'rgb(24, 24, 27)', // zinc-900 完全不透明
 							backdropFilter: 'blur(8px)',
 						}}
 					>
@@ -211,12 +210,12 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 				// 其他排名使用普通边框
 				<div 
 					className={`
-						relative border border-white/5 
-						bg-zinc-900/40 backdrop-blur-sm
+						relative border border-white/5 dark:border-white/5 [data-theme='light']:border-card-border
+						bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm
 						p-6 transition-all duration-300
 						hover:-translate-y-1
-						hover:border-white/10 
-						hover:bg-zinc-900/60
+						hover:border-white/10 dark:hover:border-white/10 [data-theme='light']:hover:border-slate-300
+						hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50
 						${style.border}
 						group-hover:shadow-2xl
 						h-full

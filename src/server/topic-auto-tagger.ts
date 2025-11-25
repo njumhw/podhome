@@ -158,6 +158,17 @@ function containsKeywords(text: string | null | undefined, keywords: string[]): 
 }
 
 /**
+ * 统计关键词匹配次数
+ */
+function countKeywordMatches(text: string | null | undefined, keywords: string[]): number {
+  if (!text) return 0;
+  const lowerText = text.toLowerCase();
+  return keywords.reduce((count, keyword) => {
+    return lowerText.includes(keyword.toLowerCase()) ? count + 1 : count;
+  }, 0);
+}
+
+/**
  * 检查URL是否匹配模式
  */
 function matchesUrlPattern(url: string | null | undefined, patterns: RegExp[]): boolean {
@@ -179,6 +190,65 @@ function matchesAuthor(author: string | null | undefined, authors: string[]): bo
  * @param podcast 播客数据
  * @returns 匹配的主题名称，如果没有匹配则返回 null
  */
+function calculateRuleScore(
+  podcast: {
+    title: string;
+    sourceUrl?: string | null;
+    description?: string | null;
+    showAuthor?: string | null;
+    summary?: string | null;
+    originalTranscript?: string | null;
+  },
+  rule: AutoTagRule
+): number {
+  const { keywords, urlPatterns, authors, sources } = rule.rules;
+  let score = 0;
+
+  if (keywords) {
+    if (keywords.all && keywords.all.length) {
+      const matches =
+        countKeywordMatches(podcast.title, keywords.all) +
+        countKeywordMatches(podcast.description, keywords.all) +
+        countKeywordMatches(podcast.summary, keywords.all) +
+        countKeywordMatches(podcast.originalTranscript, keywords.all);
+      score += matches * 1.5;
+    }
+
+    if (keywords.title && keywords.title.length) {
+      score += countKeywordMatches(podcast.title, keywords.title) * 3;
+    }
+
+    if (keywords.description && keywords.description.length) {
+      score += countKeywordMatches(podcast.description, keywords.description) * 2;
+    }
+
+    if (keywords.summary && keywords.summary.length) {
+      score += countKeywordMatches(podcast.summary, keywords.summary) * 2;
+    }
+
+    if (keywords.transcript && keywords.transcript.length) {
+      score += countKeywordMatches(podcast.originalTranscript, keywords.transcript);
+    }
+  }
+
+  if (urlPatterns && urlPatterns.length && matchesUrlPattern(podcast.sourceUrl, urlPatterns)) {
+    score += 4;
+  }
+
+  if (authors && authors.length && matchesAuthor(podcast.showAuthor, authors)) {
+    score += 3;
+  }
+
+  if (sources && sources.length && podcast.sourceUrl) {
+    const urlLower = podcast.sourceUrl.toLowerCase();
+    if (sources.some(source => urlLower.includes(source.toLowerCase()))) {
+      score += 2;
+    }
+  }
+
+  return score;
+}
+
 export async function autoTagPodcast(
   podcast: {
     title: string;
@@ -197,77 +267,23 @@ export async function autoTagPodcast(
   
   const approvedTopicNames = new Set(approvedTopics.map(t => t.name));
   
-  // 按优先级排序规则
-  const sortedRules = [...AUTO_TAG_RULES].sort((a, b) => b.priority - a.priority);
-  
-  // 尝试匹配每个规则，找到第一个匹配的就返回
-  for (const rule of sortedRules) {
-    // 只匹配已审核的主题
-    if (!approvedTopicNames.has(rule.topicName)) {
-      continue;
-    }
-    
-    const { keywords, urlPatterns, authors, sources } = rule.rules;
-    let matched = false;
-    
-    // 检查关键词匹配
-    if (keywords) {
-      // 检查 all 关键词（任意字段）
-      if (keywords.all) {
-        matched = 
-          containsKeywords(podcast.title, keywords.all) ||
-          containsKeywords(podcast.description, keywords.all) ||
-          containsKeywords(podcast.summary, keywords.all) ||
-          containsKeywords(podcast.originalTranscript, keywords.all);
-      }
-      
-      // 检查特定字段关键词
-      if (!matched) {
-        if (keywords.title && containsKeywords(podcast.title, keywords.title)) {
-          matched = true;
-        }
-        if (keywords.description && containsKeywords(podcast.description, keywords.description)) {
-          matched = true;
-        }
-        if (keywords.summary && containsKeywords(podcast.summary, keywords.summary)) {
-          matched = true;
-        }
-        if (keywords.transcript && containsKeywords(podcast.originalTranscript, keywords.transcript)) {
-          matched = true;
-        }
-      }
-    }
-    
-    // 检查URL模式匹配
-    if (!matched && urlPatterns && urlPatterns.length > 0) {
-      if (matchesUrlPattern(podcast.sourceUrl, urlPatterns)) {
-        matched = true;
-      }
-    }
-    
-    // 检查作者匹配
-    if (!matched && authors && authors.length > 0) {
-      if (matchesAuthor(podcast.showAuthor, authors)) {
-        matched = true;
-      }
-    }
-    
-    // 检查来源匹配
-    if (!matched && sources && sources.length > 0) {
-      if (podcast.sourceUrl) {
-        const urlLower = podcast.sourceUrl.toLowerCase();
-        if (sources.some(source => urlLower.includes(source.toLowerCase()))) {
-          matched = true;
-        }
-      }
-    }
-    
-    if (matched) {
-      return rule.topicName;
+  let bestMatch: { topicName: string; score: number } | null = null;
+
+  for (const rule of AUTO_TAG_RULES) {
+    if (!approvedTopicNames.has(rule.topicName)) continue;
+
+    const score = calculateRuleScore(podcast, rule);
+
+    if (score <= 0) continue;
+
+    const weightedScore = score + rule.priority * 0.01;
+
+    if (!bestMatch || weightedScore > bestMatch.score) {
+      bestMatch = { topicName: rule.topicName, score: weightedScore };
     }
   }
-  
-  return null;
+
+  return bestMatch ? bestMatch.topicName : null;
 }
 
 /**

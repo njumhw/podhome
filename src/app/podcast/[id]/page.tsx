@@ -466,15 +466,13 @@ export default function PodcastDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black">
-        <div className="max-w-[1536px] mx-auto px-8 py-12">
-          <div className="animate-pulse">
-            <div className="h-12 bg-zinc-900 rounded w-3/4 mb-6"></div>
-            <div className="h-4 bg-zinc-900 rounded w-1/3 mb-8"></div>
-            <div className="space-y-10">
-              <div className="h-96 bg-zinc-900 rounded-lg border border-white/5"></div>
-              <div className="h-96 bg-zinc-900 rounded-lg border border-white/5"></div>
-            </div>
+      <div className="min-h-screen bg-black dark:bg-black [data-theme='light']:bg-background">
+        <div className="max-w-[1536px] mx-auto px-8 py-12 space-y-8">
+          <div className="skeleton-block h-12 w-3/4"></div>
+          <div className="skeleton-block h-4 w-1/3"></div>
+          <div className="space-y-10">
+            <div className="skeleton-block h-96 w-full"></div>
+            <div className="skeleton-block h-96 w-full"></div>
           </div>
         </div>
       </div>
@@ -486,7 +484,7 @@ export default function PodcastDetailPage() {
       <div className="min-h-screen bg-black">
         <div className="max-w-[1536px] mx-auto px-8 py-12">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-white mb-6 font-sans">播客不存在</h1>
+            <h1 className="text-3xl font-bold text-white dark:text-white [data-theme='light']:text-foreground mb-6 font-sans">播客不存在</h1>
             <Link href="/home" className="text-indigo-400 hover:text-indigo-300 transition-colors font-mono text-sm">
               返回首页
             </Link>
@@ -499,13 +497,13 @@ export default function PodcastDetailPage() {
   const accentStyle = getStyleFromTitle(podcast.title);
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black dark:bg-black [data-theme='light']:bg-background">
       <div className="max-w-6xl mx-auto px-8 py-12 relative">
         {/* 返回首页按钮 - 右上角 */}
         <div className="absolute top-0 right-6">
           <Link
             href="/home"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors font-mono"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -533,7 +531,7 @@ export default function PodcastDetailPage() {
                   type="text"
                   value={editData.title}
                   onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                  className="w-full p-3 border border-white/5 rounded-lg text-lg font-bold bg-black/40 text-white focus:outline-none focus:border-white/10 font-sans"
+                  className="w-full p-3 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg text-lg font-bold bg-black/40 dark:bg-black/40 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/10 dark:focus:border-white/10 [data-theme='light']:focus:border-slate-300 font-sans"
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -543,7 +541,7 @@ export default function PodcastDetailPage() {
                     type="text"
                     value={editData.author}
                     onChange={(e) => setEditData({ ...editData, author: e.target.value })}
-                    className="w-full p-3 border border-white/5 rounded-lg bg-black/40 text-white focus:outline-none focus:border-white/10 font-mono"
+                    className="w-full p-3 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-black/40 dark:bg-black/40 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/10 dark:focus:border-white/10 [data-theme='light']:focus:border-slate-300 font-mono"
                   />
                 </div>
                 <div>
@@ -552,7 +550,7 @@ export default function PodcastDetailPage() {
                     type="date"
                     value={editData.publishedAt}
                     onChange={(e) => setEditData({ ...editData, publishedAt: e.target.value })}
-                    className="w-full p-3 border border-white/5 rounded-lg bg-black/40 text-white focus:outline-none focus:border-white/10 font-mono"
+                    className="w-full p-3 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-black/40 dark:bg-black/40 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/10 dark:focus:border-white/10 [data-theme='light']:focus:border-slate-300 font-mono"
                   />
                 </div>
               </div>
@@ -560,22 +558,22 @@ export default function PodcastDetailPage() {
           ) : (
             <>
               {/* Media Deck - 统一的媒体卡片 */}
-              <div className="rounded-3xl bg-zinc-900/60 backdrop-blur-xl border border-white/10 p-8 mb-12">
+              <div className="rounded-3xl bg-zinc-900/60 dark:bg-zinc-900/60 [data-theme='light']:bg-card-surface backdrop-blur-xl border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border p-8 mb-12">
                 {/* Top: 标题和元数据 */}
                 <div className="mb-8">
-                  <h1 className="text-3xl md:text-4xl font-bold mb-6 text-white font-sans leading-tight">
+                  <h1 className="text-3xl md:text-4xl font-bold mb-6 text-white dark:text-white [data-theme='light']:text-foreground font-sans leading-tight">
                     {podcast.title.replace(/\s*[-|]\s*[^-|]+$/, '').trim()}
                   </h1>
                   
                   {/* 元数据标签 */}
                   <div className="flex flex-wrap items-center gap-3 font-mono text-sm">
                     {podcast.author && (
-                      <span className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/90">
+                      <span className="tag-pill px-3 py-1.5 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 bg-white/5 dark:bg-white/5 [data-theme='light']:bg-slate-100 text-white/90 dark:text-white/90 [data-theme='light']:text-foreground">
                         {podcast.author}
                       </span>
                     )}
                     {podcast.publishedAt && (
-                      <span className="text-zinc-400">
+                      <span className="text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600">
                         {new Date(podcast.publishedAt).toLocaleDateString('zh-CN', {
                           year: 'numeric',
                           month: '2-digit',
@@ -585,10 +583,10 @@ export default function PodcastDetailPage() {
                     )}
                     {podcast.topic && (
                       <span 
-                        className="px-3 py-1.5 rounded-lg border bg-white/5"
+                        className="topic-pill px-3 py-1.5 rounded-lg border dark:bg-white/5 [data-theme='light']:bg-slate-100"
                         style={{ 
-                          borderColor: podcast.topic.color + '40',
-                          backgroundColor: podcast.topic.color + '10',
+                          borderColor: (podcast.topic.color || '#818cf8') + '40',
+                          backgroundColor: (podcast.topic.color || '#818cf8') + '10',
                           color: podcast.topic.color || '#818cf8'
                         }}
                       >
@@ -606,7 +604,7 @@ export default function PodcastDetailPage() {
                 )}
 
                 {/* Bottom: 播放控制和操作按钮 */}
-                <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                <div className="flex items-center justify-between pt-4 border-t border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200">
                   {/* 左侧：播放控制（已在CompactAudioPlayer中） */}
                   <div className="flex-1"></div>
                   
@@ -718,7 +716,7 @@ export default function PodcastDetailPage() {
                   <circle cx="18.34" cy="5.66" r="1.5" fill="currentColor" />
                   <circle cx="5.66" cy="18.34" r="1.5" fill="currentColor" />
                 </svg>
-                <h2 className="text-2xl font-bold font-sans text-white">Insight</h2>
+                <h2 className="text-2xl font-bold font-sans text-white dark:text-white [data-theme='light']:text-foreground">Insight</h2>
                 <MinimalLikeButton 
                   podcastId={podcast.id} 
                   initialLikeCount={podcast.likeCount || 0}
@@ -729,7 +727,7 @@ export default function PodcastDetailPage() {
               {podcast.summary && !isEditing && (
                 <button
                   onClick={() => handleCopy(podcast.summary || '', 'AI Insights')}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 hover:text-white transition-colors font-mono"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
                   title="复制全文"
                 >
                   {copiedText ? (
@@ -756,13 +754,13 @@ export default function PodcastDetailPage() {
                 <textarea
                   value={editData.summary}
                   onChange={(e) => setEditData({ ...editData, summary: e.target.value })}
-                  className="w-full p-4 border border-white/5 rounded-lg bg-black/40 text-white focus:outline-none focus:border-white/10 font-sans text-base leading-relaxed"
+                  className="w-full p-4 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-black/40 dark:bg-black/40 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/10 dark:focus:border-white/10 [data-theme='light']:focus:border-slate-300 font-sans text-base leading-relaxed"
                   rows={15}
                   placeholder="请输入播客总结内容..."
                 />
               </div>
             ) : (
-              <div className="prose prose-invert prose-lg max-w-none">
+              <div className="prose prose-invert dark:prose-invert [data-theme='light']:prose prose-lg max-w-none">
                 <SummaryDisplay 
                   summary={podcast.summary}
                   report={podcast.summary}
@@ -773,19 +771,19 @@ export default function PodcastDetailPage() {
           </div>
 
           {/* ASR Transcript - Terminal Log Style */}
-          <div className="rounded-lg border border-white/5 bg-black/40 backdrop-blur-sm overflow-hidden">
+          <div className="rounded-lg border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 bg-black/40 dark:bg-black/40 [data-theme='light']:bg-white/90 backdrop-blur-sm overflow-hidden">
             {/* Header: Terminal-style header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-black/60 border-b border-white/5">
+            <div className="flex items-center justify-between px-4 py-3 bg-black/60 dark:bg-black/60 [data-theme='light']:bg-slate-50 border-b border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200">
               <div className="flex items-center gap-3">
                 <div className="flex gap-1.5">
                   <div className="w-3 h-3 rounded-full bg-red-500/60"></div>
                   <div className="w-3 h-3 rounded-full bg-yellow-500/60"></div>
                   <div className="w-3 h-3 rounded-full bg-green-500/60"></div>
                 </div>
-                <h2 className="text-sm font-mono text-zinc-400">ASR Transcript</h2>
+                <h2 className="text-sm font-mono text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600">ASR Transcript</h2>
                 {/* Tab切换：ASR原文 / 报告大纲 */}
                 {podcast.reportOutline && (
-                  <div className="flex items-center gap-1 border border-white/5 rounded-lg p-1 bg-black/40">
+                  <div className="flex items-center gap-1 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg p-1 bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-100">
                     <button
                       onClick={() => setAsrTab('asr')}
                       className={`px-3 py-1 text-xs rounded transition-colors font-mono ${
@@ -859,7 +857,7 @@ export default function PodcastDetailPage() {
                 <textarea
                   value={editData.script}
                   onChange={(e) => setEditData({ ...editData, script: e.target.value })}
-                  className="w-full p-4 border border-white/5 rounded-lg bg-black/60 text-white focus:outline-none focus:border-white/10 font-mono text-sm leading-relaxed"
+                  className="w-full p-4 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-black/60 dark:bg-black/60 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/10 dark:focus:border-white/10 [data-theme='light']:focus:border-slate-300 font-mono text-sm leading-relaxed"
                   rows={20}
                   placeholder="请输入ASR原文内容..."
                 />
@@ -887,7 +885,7 @@ export default function PodcastDetailPage() {
                       {podcast.originalTranscript}
                     </div>
                   ) : (
-                    <div className="p-6 text-zinc-500 text-xs font-mono text-center bg-black/40">
+                    <div className="p-6 text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500 text-xs font-mono text-center bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-50">
                       {podcast.originalTranscript ? '' : 'No ASR transcript available'}
                     </div>
                   )
@@ -926,7 +924,7 @@ export default function PodcastDetailPage() {
                       </ReactMarkdown>
                     </div>
                   ) : (
-                    <div className="p-6 text-zinc-500 text-xs font-mono text-center bg-black/40">
+                    <div className="p-6 text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500 text-xs font-mono text-center bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-50">
                       暂无报告大纲
                     </div>
                   )
@@ -936,8 +934,8 @@ export default function PodcastDetailPage() {
           </div>
           
           {/* Discussion Section - Glassmorphism Panel */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-8 shadow-2xl">
-            <h2 className="text-2xl font-bold mb-8 font-sans text-white">Discussion</h2>
+          <div className="rounded-2xl border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 bg-white/5 dark:bg-white/5 [data-theme='light']:bg-white/90 backdrop-blur-xl p-8 shadow-2xl">
+            <h2 className="text-2xl font-bold mb-8 font-sans text-white dark:text-white [data-theme='light']:text-foreground">Discussion</h2>
             
             {/* Comment Input */}
             {user ? (
@@ -946,14 +944,14 @@ export default function PodcastDetailPage() {
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   placeholder="写下你的评论..."
-                  className="w-full px-4 py-3 border border-white/10 rounded-xl bg-white/5 backdrop-blur-sm text-white placeholder-zinc-400 focus:outline-none focus:border-white/20 focus:bg-white/10 resize-none font-sans text-base transition-all"
+                  className="w-full px-4 py-3 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 rounded-xl bg-white/5 dark:bg-white/5 [data-theme='light']:bg-white backdrop-blur-sm text-white dark:text-white [data-theme='light']:text-foreground placeholder-zinc-400 dark:placeholder-zinc-400 [data-theme='light']:placeholder-slate-400 focus:outline-none focus:border-white/20 dark:focus:border-white/20 [data-theme='light']:focus:border-slate-300 focus:bg-white/10 dark:focus:bg-white/10 [data-theme='light']:focus:bg-white resize-none font-sans text-base transition-all"
                   rows={3}
                 />
                 <div className="flex justify-end mt-3">
                   <button
                     onClick={handleSubmitComment}
                     disabled={!newComment.trim() || isSubmittingComment}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono text-xs backdrop-blur-sm"
+                    className="px-4 py-2 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-slate-900 hover:bg-white/20 dark:hover:bg-white/20 [data-theme='light']:hover:bg-slate-800 border border-white/20 dark:border-white/20 [data-theme='light']:border-slate-300 rounded-xl text-white dark:text-white [data-theme='light']:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono text-xs backdrop-blur-sm"
                   >
                     {isSubmittingComment ? '提交中...' : '发表评论'}
                   </button>
@@ -961,8 +959,8 @@ export default function PodcastDetailPage() {
               </div>
             ) : (
               <div className="mb-8 p-6 bg-white/5 border border-white/10 rounded-xl text-center backdrop-blur-sm">
-                <p className="text-zinc-300 mb-2 font-sans text-sm">请先登录后发表评论</p>
-                <Link href="/login" className="text-white hover:text-zinc-200 underline transition-colors font-sans text-sm">
+                <p className="text-zinc-300 dark:text-zinc-300 [data-theme='light']:text-slate-700 mb-2 font-sans text-sm">请先登录后发表评论</p>
+                <Link href="/login" className="text-white dark:text-white [data-theme='light']:text-foreground hover:text-zinc-200 dark:hover:text-zinc-200 [data-theme='light']:hover:text-slate-800 underline transition-colors font-sans text-sm">
                   立即登录
                 </Link>
               </div>
@@ -971,7 +969,7 @@ export default function PodcastDetailPage() {
             {/* Comment List */}
             <div className="space-y-4">
               {comments.length === 0 ? (
-                <div className="text-center text-zinc-400 py-12 font-sans text-sm">
+                <div className="text-center text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-500 py-12 font-sans text-sm">
                   暂无评论，来发表第一条评论吧！
                 </div>
               ) : (
@@ -980,11 +978,11 @@ export default function PodcastDetailPage() {
                   {comments
                     .slice(0, showAllComments ? comments.length : 5)
                     .map((comment) => (
-                    <div key={comment.id} className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-all">
+                    <div key={comment.id} className="p-4 rounded-xl bg-white/5 dark:bg-white/5 [data-theme='light']:bg-slate-50 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 backdrop-blur-sm hover:bg-white/10 dark:hover:bg-white/10 [data-theme='light']:hover:bg-slate-100 transition-all">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <span className="font-medium text-white font-sans">{comment.author}</span>
+                            <span className="font-medium text-white dark:text-white [data-theme='light']:text-foreground font-sans">{comment.author}</span>
                             <span className="text-xs text-zinc-400 font-mono">
                               {new Date(comment.createdAt).toLocaleDateString()}
                             </span>

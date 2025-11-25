@@ -25,7 +25,7 @@ export function SummaryDisplay({
   
   if (!content) {
     return (
-      <div className={`text-zinc-500 text-center py-8 font-mono text-sm ${className}`} style={style}>
+      <div className={`text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500 text-center py-8 font-mono text-sm ${className}`} style={style}>
         {fallbackText}
       </div>
     );
@@ -49,52 +49,52 @@ export function SummaryDisplay({
           remarkPlugins={[remarkGfm]}
           components={{
             p: ({ children }) => (
-              <p className="text-zinc-300 text-base leading-7 mb-4 font-sans">
+              <p className="text-zinc-300 dark:text-zinc-300 [data-theme='light']:text-foreground text-base leading-7 mb-4 font-sans">
                 {children}
               </p>
             ),
             li: ({ children }) => (
-              <li className="text-zinc-300 text-base leading-7 mb-2 font-sans">
+              <li className="text-zinc-300 dark:text-zinc-300 [data-theme='light']:text-foreground text-base leading-7 mb-2 font-sans">
                 {children}
               </li>
             ),
             h1: ({ children }) => (
-              <h1 className="text-white text-2xl font-bold mb-5 mt-6 font-sans">
+              <h1 className="text-white dark:text-white [data-theme='light']:text-foreground text-2xl font-bold mb-5 mt-6 font-sans">
                 {children}
               </h1>
             ),
             h2: ({ children }) => (
-              <h2 className="text-white text-xl font-bold mb-4 mt-5 font-sans">
+              <h2 className="text-white dark:text-white [data-theme='light']:text-foreground text-xl font-bold mb-4 mt-5 font-sans">
                 {children}
               </h2>
             ),
             h3: ({ children }) => (
-              <h3 className="text-white text-lg font-bold mb-3 mt-4 font-sans">
+              <h3 className="text-white dark:text-white [data-theme='light']:text-foreground text-lg font-bold mb-3 mt-4 font-sans">
                 {children}
               </h3>
             ),
             strong: ({ children }) => (
-              <strong className="text-white font-semibold">
+              <strong className="text-white dark:text-white [data-theme='light']:text-foreground font-semibold">
                 {children}
               </strong>
             ),
             em: ({ children }) => (
-              <em className="text-zinc-300 italic">
+              <em className="text-zinc-300 dark:text-zinc-300 [data-theme='light']:text-foreground italic">
                 {children}
               </em>
             ),
             blockquote: ({ children }) => (
-              <blockquote className="text-zinc-400 text-base leading-7 border-l-4 border-white/20 pl-4 my-4 italic">
+              <blockquote className="text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 text-base leading-7 border-l-4 border-white/20 dark:border-white/20 [data-theme='light']:border-slate-300 pl-4 my-4 italic">
                 {children}
               </blockquote>
             ),
             code: ({ children }) => (
-              <code className="text-zinc-300 text-sm bg-zinc-900/40 px-1.5 py-0.5 rounded font-mono">
+              <code className="text-zinc-300 dark:text-zinc-300 [data-theme='light']:text-foreground text-sm bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 px-1.5 py-0.5 rounded font-mono">
                 {children}
               </code>
             ),
             pre: ({ children }) => (
-              <pre className="text-zinc-300 text-sm bg-zinc-900/40 p-4 rounded-lg font-mono overflow-auto my-4">
+              <pre className="text-zinc-300 dark:text-zinc-300 [data-theme='light']:text-foreground text-sm bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 p-4 rounded-lg font-mono overflow-auto my-4">
                 {children}
               </pre>
             )

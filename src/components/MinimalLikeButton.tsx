@@ -8,13 +8,19 @@ interface MinimalLikeButtonProps {
   initialLikeCount?: number;
   initialLiked?: boolean;
   className?: string;
+  disableInitialFetch?: boolean;
+  onStatusChange?: (liked: boolean, likeCount: number) => void;
+  onRequireLogin?: () => void;
 }
 
 export default function MinimalLikeButton({ 
   podcastId, 
   initialLikeCount = 0, 
   initialLiked = false,
-  className = ''
+  className = '',
+  disableInitialFetch = false,
+  onStatusChange,
+  onRequireLogin,
 }: MinimalLikeButtonProps) {
   const [likeCount, setLikeCount] = useState(initialLikeCount);
   const [liked, setLiked] = useState(initialLiked);
@@ -23,6 +29,8 @@ export default function MinimalLikeButton({
 
   // 获取点赞状态
   useEffect(() => {
+    if (disableInitialFetch) return;
+
     const fetchLikeStatus = async () => {
       try {
         const response = await fetch(`/api/podcast/like?podcastId=${podcastId}`);
@@ -30,6 +38,7 @@ export default function MinimalLikeButton({
           const data = await response.json();
           setLikeCount(data.likeCount);
           setLiked(data.liked);
+          onStatusChange?.(data.liked, data.likeCount);
         }
       } catch (error) {
         console.error('获取点赞状态失败:', error);
@@ -37,7 +46,7 @@ export default function MinimalLikeButton({
     };
 
     fetchLikeStatus();
-  }, [podcastId]);
+  }, [podcastId, disableInitialFetch, onStatusChange]);
 
   const handleLike = async () => {
     if (loading) return;
@@ -58,8 +67,12 @@ export default function MinimalLikeButton({
         setLikeCount(data.likeCount);
         setLiked(data.liked);
         success(data.message);
+        onStatusChange?.(data.liked, data.likeCount);
       } else {
         const errorData = await response.json();
+        if (response.status === 401) {
+          onRequireLogin?.();
+        }
         error(errorData.error || '操作失败');
       }
     } catch (err) {
