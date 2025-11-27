@@ -61,6 +61,28 @@ export async function checkDatabaseHealth(): Promise<boolean> {
 	}
 }
 
+// 强制重新连接数据库（用于解决连接池耗尽或连接异常问题）
+export async function reconnectDatabase(): Promise<void> {
+	try {
+		console.log('[数据库] 尝试重新连接数据库...');
+		// 断开现有连接
+		if (global.prismaGlobal) {
+			await global.prismaGlobal.$disconnect().catch(() => {});
+		}
+		// 清除全局缓存
+		global.prismaGlobal = undefined;
+		// 重新创建连接
+		const newClient = createPrismaClient();
+		global.prismaGlobal = newClient;
+		// 测试连接
+		await newClient.$queryRaw`SELECT 1`;
+		console.log('[数据库] 重新连接成功');
+	} catch (error) {
+		console.error('[数据库] 重新连接失败:', error);
+		throw error;
+	}
+}
+
 // 优雅关闭数据库连接
 export async function closeDatabaseConnection(): Promise<void> {
 	try {

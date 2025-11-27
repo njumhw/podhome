@@ -7,7 +7,8 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 
 // 在服务器端初始化应用
 if (typeof window === 'undefined') {
-  import("@/server/startup");
+  // 使用动态导入避免客户端打包
+  void import("@/server/startup");
 }
 
 // 加载字体

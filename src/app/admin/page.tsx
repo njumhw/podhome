@@ -42,7 +42,7 @@ type User = {
 };
 
 export default function AdminPage() {
-	const [active, setActive] = useState<"invites" | "topics" | "users" | "tasks" | "cost" | "audio" | "prompts" | "podcasts">("invites");
+	const [active, setActive] = useState<"invites" | "topics" | "users" | "cost" | "audio" | "prompts" | "podcasts">("invites");
 
 	return (
 		<div className="space-y-6">
@@ -59,7 +59,7 @@ export default function AdminPage() {
 				</Link>
 			</div>
 			<div className="inline-flex rounded-xl border border-black/10 dark:border-white/10 p-1 bg-white/60 dark:bg-black/40 backdrop-blur">
-				{(["invites","topics","users","tasks","cost","audio","prompts","podcasts"] as const).map(k => (
+				{(["invites","topics","users","cost","audio","prompts","podcasts"] as const).map(k => (
 					<button key={k} onClick={() => setActive(k)} className={`px-3 py-1.5 text-sm rounded-lg ${active===k?"bg-black text-white dark:bg-white dark:text-black":"text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10"}`}>{label(k)}</button>
 				))}
 			</div>
@@ -67,7 +67,6 @@ export default function AdminPage() {
 			{active === "invites" && <InvitesPanel />}
 			{active === "topics" && <TopicsPanel />}
 			{active === "users" && <UsersPanel />}
-			{active === "tasks" && <TasksPanel />}
 			{active === "cost" && <CostPanel />}
 			{active === "audio" && <AudioConfigPanel />}
 			{active === "prompts" && <PromptManager />}
@@ -82,7 +81,6 @@ function label(k: string) {
 			invites: "邀请码",
 			topics: "主题审核",
 			users: "用户管理",
-			tasks: "任务日志",
 			cost: "成本监控",
 			audio: "音频配置",
 			prompts: "提示词管理",
@@ -93,8 +91,6 @@ function label(k: string) {
 
 function InvitesPanel() {
 	const [count, setCount] = useState(1);
-	const [maxUses, setMaxUses] = useState(1);
-	const [expiresAt, setExpiresAt] = useState("");
 	const [items, setItems] = useState<Invite[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -113,7 +109,7 @@ function InvitesPanel() {
 		setLoading(true);
 		setError(null);
 		try {
-			const res = await fetch("/api/admin/invite/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ count, maxUses, expiresAt: expiresAt || undefined }) });
+			const res = await fetch("/api/admin/invite/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ count }) });
 			if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
 			await loadCodes(); // 重新加载邀请码列表
 		} catch (e: any) { setError(e.message || "请求失败"); }
@@ -125,8 +121,6 @@ function InvitesPanel() {
 		<div className="space-y-3">
 			<div className="flex gap-2 items-center text-sm">
 				<input type="number" min={1} max={100} value={count} onChange={(e)=>setCount(+e.target.value)} className="w-20 rounded-lg border border-black/10 px-2 py-1 text-sm bg-white/60 dark:bg-black/40" />
-				<input type="number" min={1} max={100} value={maxUses} onChange={(e)=>setMaxUses(+e.target.value)} className="w-20 rounded-lg border border-black/10 px-2 py-1 text-sm bg-white/60 dark:bg-black/40" />
-				<input type="datetime-local" value={expiresAt} onChange={(e)=>setExpiresAt(e.target.value)} className="rounded-lg border border-black/10 px-2 py-1 text-sm bg-white/60 dark:bg-black/40" />
 				<button onClick={create} disabled={loading} className="px-3 py-1.5 text-sm rounded-lg bg-black text-white dark:bg-white dark:text-black disabled:opacity-50">生成</button>
 			</div>
 			{error && <div className="text-xs text-red-600 p-2 bg-red-50 dark:bg-red-900/20 rounded">{error}</div>}
@@ -495,15 +489,22 @@ function UsersPanel() {
 		setItems(data.items ?? []);
 	}
 	useEffect(()=>{load();},[]);
-	async function act(userId: string, action: "promote"|"demote"|"ban"|"unban") {
+	async function act(userId: string, action: "promote"|"demote"|"ban"|"unban"|"set_vip"|"remove_vip"|"upgrade_to_podcaster") {
 		const res = await fetch("/api/admin/users", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId, action }) });
 		if (!res.ok) { setError(await res.text()); return; }
 		load();
 	}
 	
 	function getRoleBadge(role: string) {
-		const colors = role === "ADMIN" ? "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
-		return <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors}`}>{role === "ADMIN" ? "管理员" : "普通用户"}</span>;
+		const roleMap: Record<string, { label: string; colors: string }> = {
+			READER: { label: "读者", colors: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+			PODCASTER: { label: "创作者", colors: "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300" },
+			PODCASTER_VIP: { label: "VIP创作者", colors: "bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300" },
+			ADMIN: { label: "管理员", colors: "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300" },
+			USER: { label: "普通用户", colors: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+		};
+		const roleInfo = roleMap[role] || { label: role, colors: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" };
+		return <span className={`px-2 py-1 rounded-full text-xs font-medium ${roleInfo.colors}`}>{roleInfo.label}</span>;
 	}
 	
 	function getStatusBadge(isBanned: boolean) {
@@ -570,21 +571,41 @@ function UsersPanel() {
 												</span>
 											) : (
 												<>
-													{u.role === "USER" ? (
-														<button 
-															onClick={()=>act(u.id, "promote")} 
-															className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
-														>
-															设为管理员
-														</button>
-													) : (
+													{u.role === "ADMIN" ? (
 														<button 
 															onClick={()=>act(u.id, "demote")} 
 															className="px-2 py-1 text-xs rounded bg-gray-600 text-white hover:bg-gray-700"
 														>
-															设为普通用户
+															降级
 														</button>
-													)}
+													) : u.role === "PODCASTER_VIP" ? (
+														<>
+															<button 
+																onClick={()=>act(u.id, "remove_vip")} 
+																className="px-2 py-1 text-xs rounded bg-gray-600 text-white hover:bg-gray-700"
+															>
+																取消VIP
+															</button>
+														</>
+													) : u.role === "PODCASTER" ? (
+														<>
+															<button 
+																onClick={()=>act(u.id, "set_vip")} 
+																className="px-2 py-1 text-xs rounded bg-purple-600 text-white hover:bg-purple-700"
+															>
+																设为VIP
+															</button>
+														</>
+													) : u.role === "READER" ? (
+														<>
+															<button 
+																onClick={()=>act(u.id, "upgrade_to_podcaster")} 
+																className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700"
+															>
+																升级为创作者
+															</button>
+														</>
+													) : null}
 													
 													{u.isBanned ? (
 														<button 
@@ -611,32 +632,6 @@ function UsersPanel() {
 					</table>
 				</div>
 			</div>
-		</div>
-	);
-}
-
-function TasksPanel() {
-	const [items, setItems] = useState<any[]>([]);
-	const [error, setError] = useState<string | null>(null);
-	async function load() {
-		setError(null);
-		const res = await fetch(`/api/logs/task`);
-		if (!res.ok) { setError(await res.text()); setItems([]); return; }
-		const data = await res.json();
-		setItems(data.items ?? []);
-	}
-	useEffect(()=>{load();},[]);
-	return (
-		<div className="text-sm space-y-2">
-			{error && <div className="text-xs text-red-600">{error}</div>}
-			{items.map(x => (
-				<div key={x.id} className="grid grid-cols-5 gap-2 border-b border-black/10 py-2">
-					<div className="col-span-2 truncate">{x.podcastId}</div>
-					<div>{x.type}</div>
-					<div>{x.status}</div>
-					<div className="text-right">{(x.durationMs ?? 0)}ms</div>
-				</div>
-			))}
 		</div>
 	);
 }
@@ -677,18 +672,29 @@ function PodcastsPanel() {
 	const [totalPages, setTotalPages] = useState(1);
 	const [status, setStatus] = useState('all');
 	const [search, setSearch] = useState('');
-	const [stats, setStats] = useState<any>({});
+	const [summary, setSummary] = useState<{
+		totalPodcasts: number;
+		totalTasks: number;
+		readyPodcasts: number;
+		processingPodcasts: number;
+		failedPodcasts: number;
+		totalProcessingDurationMs: number;
+		totalDurationSeconds: number;
+		refreshedAt: string;
+	} | null>(null);
 
 	const loadPodcasts = async () => {
 		setLoading(true);
 		setError(null);
 		try {
+			const needsRefresh = summary === null;
 			const params = new URLSearchParams({
 				page: page.toString(),
 				limit: '20',
 				status,
 				...(search && { search })
 			});
+			if (needsRefresh) params.set('refresh', '1');
 
 			const res = await fetch(`/api/admin/podcasts?${params}`);
 			if (!res.ok) {
@@ -699,7 +705,7 @@ function PodcastsPanel() {
 			const data = await res.json();
 			setPodcasts(data.podcasts || []);
 			setTotalPages(data.pagination?.totalPages || 1);
-			setStats(data.stats || {});
+			setSummary(data.summary || null);
 		} catch (err: any) {
 			setError(err.message);
 		} finally {
@@ -801,6 +807,20 @@ function PodcastsPanel() {
 		return new Date(date).toLocaleString('zh-CN');
 	};
 
+	const formatHours = (hours: number) => `${(Math.round(hours * 10) / 10).toLocaleString()} 小时`;
+
+	const formatAudioDuration = (seconds: number | null | undefined) => {
+		if (!seconds) return '0 小时';
+		const hours = seconds / 3600;
+		return formatHours(hours);
+	};
+
+	const formatTotalDuration = (ms: number | null | undefined) => {
+		if (!ms) return '0 小时';
+		const hours = ms / 3_600_000;
+		return formatHours(hours);
+	};
+
 	return (
 		<div className="space-y-6">
 			{error && (
@@ -809,25 +829,50 @@ function PodcastsPanel() {
 				</div>
 			)}
 
-			{/* 统计信息 */}
-			<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-				<div className="bg-white border border-gray-200 rounded-lg p-4">
-					<div className="text-2xl font-bold text-gray-900">{stats.total || 0}</div>
-					<div className="text-sm text-gray-600">总播客数</div>
+			{/* 全量统计信息 */}
+			{summary && (
+				<div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+					<div className="bg-white border border-gray-200 rounded-lg p-4">
+						<div className="text-xs text-gray-500">总播客</div>
+						<div className="text-2xl font-bold text-gray-900 mt-1">{summary.totalPodcasts}</div>
+					</div>
+					<div className="bg-white border border-gray-200 rounded-lg p-4">
+						<div className="text-xs text-gray-500">已完成</div>
+						<div className="text-2xl font-bold text-green-600 mt-1">{summary.readyPodcasts}</div>
+					</div>
+					<div className="bg-white border border-gray-200 rounded-lg p-4">
+						<div className="text-xs text-gray-500">处理中</div>
+						<div className="text-2xl font-bold text-blue-600 mt-1">{summary.processingPodcasts}</div>
+					</div>
+					<div className="bg-white border border-gray-200 rounded-lg p-4">
+						<div className="text-xs text-gray-500">失败</div>
+						<div className="text-2xl font-bold text-red-600 mt-1">{summary.failedPodcasts}</div>
+					</div>
+					<div className="bg-white border border-gray-200 rounded-lg p-4">
+						<div className="text-xs text-gray-500">累计任务</div>
+						<div className="text-2xl font-bold text-purple-600 mt-1">{summary.totalTasks}</div>
+					</div>
+					<div className="bg-white border border-gray-200 rounded-lg p-4">
+						<div className="text-xs text-gray-500">总音频时长（去重）</div>
+						<div className="text-2xl font-bold text-gray-900 mt-1">
+							{formatAudioDuration(summary.totalDurationSeconds)}
+						</div>
+						<div className="text-xs text-gray-500 mt-1">仅统计已完成播客</div>
+					</div>
+					<div className="bg-white border border-gray-200 rounded-lg p-4 md:col-span-2">
+						<div className="text-xs text-gray-500">累计处理时长（去重）</div>
+						<div className="text-2xl font-bold text-gray-900 mt-1">
+							{formatTotalDuration(summary.totalProcessingDurationMs)}
+						</div>
+						<div className="text-xs text-gray-500 mt-1">仅统计已完成播客</div>
+					</div>
 				</div>
-				<div className="bg-white border border-gray-200 rounded-lg p-4">
-					<div className="text-2xl font-bold text-green-600">{stats.READY || 0}</div>
-					<div className="text-sm text-gray-600">已完成</div>
+			)}
+			{summary && (
+				<div className="text-xs text-gray-500">
+					数据每小时刷新 · 上次更新 {new Date(summary.refreshedAt).toLocaleString('zh-CN')}
 				</div>
-				<div className="bg-white border border-gray-200 rounded-lg p-4">
-					<div className="text-2xl font-bold text-blue-600">{stats.PROCESSING || 0}</div>
-					<div className="text-sm text-gray-600">处理中</div>
-				</div>
-				<div className="bg-white border border-gray-200 rounded-lg p-4">
-					<div className="text-2xl font-bold text-red-600">{stats.FAILED || 0}</div>
-					<div className="text-sm text-gray-600">失败</div>
-				</div>
-			</div>
+			)}
 
 			{/* 筛选和搜索 */}
 			<div className="bg-white border border-gray-200 rounded-lg p-4">

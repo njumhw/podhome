@@ -473,9 +473,14 @@ export default function SimpleProcessingStatus({
                       <p className="text-xs text-zinc-400 mt-1 font-sans">
                         {item.status === 'completed' 
                           ? `Completed: ${item.completedAt ? new Date(item.completedAt).toLocaleString() : 'Unknown'}`
-                          : 'Processing failed. Please try again or contact support.'
+                          : '不好意思，因为不知道什么原因，这个播客处理失败啦。'
                         }
                       </p>
+                      {item.status === 'failed' && (
+                        <p className="text-xs text-zinc-400 mt-1 font-sans">
+                          请钉钉联系【阿茅】或微信添加【njumwh】吧～
+                        </p>
+                      )}
                       
                       {/* 处理指标 */}
                       {item.status === 'completed' && item.metrics && (
@@ -498,12 +503,12 @@ export default function SimpleProcessingStatus({
                       {item.status === 'failed' && (
                         <button
                           onClick={() => {
-                            // 可以添加联系阿茅的逻辑，比如打开邮件或显示联系方式
-                            alert('Please contact support: maoweihao@example.com or WeChat: your_wechat_id');
+                            // 显示联系方式
+                            alert('请钉钉联系【阿茅】或微信添加【njumwh】');
                           }}
                           className="px-3 py-1.5 text-xs text-rose-400 border border-rose-500/50 rounded-lg hover:bg-rose-500/10 transition-colors font-sans"
                         >
-                          Contact
+                          联系
                         </button>
                       )}
                       <button

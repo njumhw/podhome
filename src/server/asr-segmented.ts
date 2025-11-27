@@ -6,6 +6,7 @@
 import { qwenTranscribeFromUrl } from "@/clients/qwen-asr";
 import { uploadToOssAndGetPublicUrl } from "@/server/storage";
 import { ASR_CONFIG } from "./asr-config";
+import { detectAudioFormat, convertMp3ToM4a } from "@/server/audio-converter";
 import os from "os";
 import path from "path";
 import fs from "fs";
@@ -75,9 +76,16 @@ export async function transcribeAudioWithSegmentation(
   
   async function downloadWholeToTemp(sourceUrl: string): Promise<string> {
     const tmp = await ensureTmpDir();
-    const tmpFile = path.join(tmp, `src-${Date.now()}-${Math.random().toString(36).slice(2)}.m4a`);
     
-    console.log(`开始下载音频: ${sourceUrl}`);
+    // 检测音频格式
+    const format = detectAudioFormat(sourceUrl);
+    console.log(`[音频下载] 检测到音频格式: ${format}, URL: ${sourceUrl}`);
+    
+    // 根据格式确定临时文件扩展名
+    const originalExt = format === 'mp3' ? '.mp3' : '.m4a';
+    const tmpFile = path.join(tmp, `src-${Date.now()}-${Math.random().toString(36).slice(2)}${originalExt}`);
+    
+    console.log(`开始下载音频: ${sourceUrl} (格式: ${format})`);
     
     const isProduction = process.env.NODE_ENV === 'production';
     
@@ -209,6 +217,60 @@ export async function transcribeAudioWithSegmentation(
           }
           
           console.log(`音频下载完成 (${strategy.name}): ${tmpFile} (${stat.size} 字节)`);
+          
+          // 如果是MP3格式，必须转换为M4A（因为后续处理需要M4A格式）
+          if (format === 'mp3') {
+            console.log(`[音频转换] 检测到MP3格式，开始转换为M4A...`);
+            console.log(`[音频转换] 输入文件: ${tmpFile}, 大小: ${stat.size} 字节`);
+            
+            try {
+              const convertedFile = await convertMp3ToM4a(tmpFile);
+              
+              // 验证转换后的文件
+              const convertedStats = await fs.promises.stat(convertedFile).catch(() => null);
+              if (!convertedStats || convertedStats.size === 0) {
+                throw new Error(`转换后的文件无效: ${convertedFile}`);
+              }
+              
+              console.log(`[音频转换] ✅ MP3已转换为M4A: ${convertedFile}, 大小: ${convertedStats.size} 字节`);
+              
+              // 删除原始MP3文件
+              try {
+                await fs.promises.unlink(tmpFile);
+                console.log(`[音频转换] 已删除原始MP3文件: ${tmpFile}`);
+              } catch (e) {
+                console.warn(`[音频转换] 删除原始MP3文件失败: ${e}`);
+              }
+              
+              return convertedFile;
+            } catch (convertError) {
+              const errorMsg = convertError instanceof Error ? convertError.message : String(convertError);
+              console.error(`[音频转换] ❌ MP3转M4A失败:`, errorMsg);
+              console.error(`[音频转换] 错误详情:`, convertError);
+              
+              // 清理可能创建的不完整转换文件
+              try {
+                const tmp = await ensureTmpDir();
+                const files = await fs.promises.readdir(tmp);
+                const convertedFiles = files.filter(f => f.includes('converted-') && f.endsWith('.m4a'));
+                for (const f of convertedFiles) {
+                  try {
+                    await fs.promises.unlink(path.join(tmp, f));
+                    console.log(`[音频转换] 已清理不完整的转换文件: ${f}`);
+                  } catch (e) {
+                    // 忽略清理错误
+                  }
+                }
+              } catch (e) {
+                // 忽略清理错误
+              }
+              
+              // MP3转M4A失败是致命错误，不能继续使用MP3文件
+              throw new Error(`MP3转M4A失败，无法继续处理: ${errorMsg}`);
+            }
+          }
+          
+          // 如果已经是M4A或未知格式，直接返回
           return tmpFile;
           
         } catch (error: any) {
@@ -260,37 +322,121 @@ export async function transcribeAudioWithSegmentation(
   async function cutOne(localFile: string, start: number, duration: number): Promise<Buffer> {
     const tmp = await ensureTmpDir();
     const outFile = path.join(tmp, `seg-${start}-${duration}-${Date.now()}-${Math.random().toString(36).slice(2)}.m4a`);
-    const cmd = `"${getFfmpegPath()}" -ss ${start} -t ${duration} -i "${localFile}" -vn -acodec aac -b:a 128k -movflags +faststart -hide_banner -loglevel error -y "${outFile}"`;
+    
+    // 检查输入文件是否存在且有效
+    const inputStat = await fs.promises.stat(localFile).catch(() => null);
+    if (!inputStat || inputStat.size === 0) {
+      throw new Error(`输入音频文件无效或为空: ${localFile}`);
+    }
+    
+    // 使用warning级别而不是error，这样可以看到更多信息，但不会太冗长
+    const cmd = `"${getFfmpegPath()}" -ss ${start} -t ${duration} -i "${localFile}" -vn -acodec aac -b:a 128k -movflags +faststart -hide_banner -loglevel warning -y "${outFile}"`;
     
     try {
-      await exec(cmd, { timeout: 120000 });
+      const { stdout, stderr } = await exec(cmd, { timeout: 120000 });
       
-      const stat = await fs.promises.stat(outFile);
-      if (stat.size === 0) {
-        throw new Error(`切割后的音频文件为空: ${start}-${start + duration}秒`);
+      // 如果FFmpeg有警告或错误输出，记录它（可能包含重要信息）
+      if (stderr && stderr.trim()) {
+        // 过滤掉常见的非关键警告
+        const importantWarnings = stderr.split('\n').filter((line: string) => {
+          const lower = line.toLowerCase();
+          return !lower.includes('deprecated') && 
+                 !lower.includes('experimental') &&
+                 !lower.includes('non-monotonous') &&
+                 line.trim().length > 0;
+        });
+        if (importantWarnings.length > 0) {
+          console.warn(`⚠️ FFmpeg警告 (片段 ${start}-${start + duration}秒):`, importantWarnings.join('; '));
+        }
       }
       
+      // 检查输出文件是否存在且有效
+      const stat = await fs.promises.stat(outFile).catch(() => null);
+      if (!stat) {
+        throw new Error(`切割后的音频文件不存在: ${start}-${start + duration}秒`);
+      }
+      if (stat.size === 0) {
+        throw new Error(`切割后的音频文件为空: ${start}-${start + duration}秒 (${stat.size} 字节)`);
+      }
+      
+      // 验证文件头（M4A文件应该以 'ftyp' 开头，通常在偏移4字节处）
       const buf = await fs.promises.readFile(outFile);
+      if (buf.length < 8) {
+        throw new Error(`切割后的音频文件过小: ${start}-${start + duration}秒 (${buf.length} 字节)`);
+      }
+      
+      // 检查是否是有效的M4A文件（ftyp box通常在偏移4字节处）
+      const ftypIndex = buf.indexOf('ftyp', 4);
+      if (ftypIndex === -1 || ftypIndex > 20) {
+        // 不是严格的M4A格式，但可能仍然有效（某些编码器可能不同）
+        console.warn(`⚠️ 片段 ${start}-${start + duration}秒 可能不是标准M4A格式，但继续处理 (大小: ${buf.length} 字节)`);
+      }
+      
       fs.promises.unlink(outFile).catch(() => {});
       return buf;
     } catch (error: any) {
       fs.promises.unlink(outFile).catch(() => {});
-      throw new Error(`音频切割失败 (${start}-${start + duration}秒): ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode = (error as any)?.code;
+      const errorSignal = (error as any)?.signal;
+      const errorStderr = (error as any)?.stderr;
+      
+      // 提供更详细的错误信息
+      let detailedError = `音频切割失败 (${start}-${start + duration}秒): ${errorMessage}`;
+      if (errorCode) {
+        detailedError += ` (错误代码: ${errorCode})`;
+      }
+      if (errorSignal) {
+        detailedError += ` (信号: ${errorSignal})`;
+      }
+      
+      // 记录FFmpeg的详细错误输出
+      if (errorStderr) {
+        const stderrLines = errorStderr.split('\n').filter((line: string) => line.trim().length > 0);
+        if (stderrLines.length > 0) {
+          console.error(`   FFmpeg错误输出:`, stderrLines.join('; '));
+          detailedError += ` (FFmpeg: ${stderrLines.slice(0, 3).join('; ')})`;
+        }
+      }
+      
+      // 检查是否是输入文件的问题
+      if (errorMessage.includes('No such file') || errorMessage.includes('Invalid data')) {
+        console.error(`   ⚠️ 可能是输入音频文件有问题: ${localFile}`);
+      }
+      
+      throw new Error(detailedError);
     }
   }
   
   // Step 1: 下载音频
   let localFile = "";
   try {
-    console.log(`开始下载音频: ${audioUrl}`);
+    console.log(`[ASR分段] 开始下载音频: ${audioUrl}`);
+    const format = detectAudioFormat(audioUrl);
+    console.log(`[ASR分段] 检测到音频格式: ${format}`);
+    
     localFile = await downloadWholeToTemp(audioUrl);
-    console.log(`音频下载完成: ${localFile}`);
+    
+    // 验证下载后的文件
+    const fileStats = await fs.promises.stat(localFile).catch(() => null);
+    if (!fileStats) {
+      throw new Error(`下载后的文件不存在: ${localFile}`);
+    }
+    console.log(`[ASR分段] 音频下载完成: ${localFile}, 大小: ${(fileStats.size / 1024 / 1024).toFixed(2)}MB`);
+    
+    // 验证文件格式（检查扩展名）
+    const fileExt = path.extname(localFile).toLowerCase();
+    if (fileExt !== '.m4a') {
+      console.warn(`[ASR分段] ⚠️ 警告: 下载后的文件扩展名不是.m4a: ${fileExt}`);
+    } else {
+      console.log(`[ASR分段] ✅ 文件格式验证通过: ${fileExt}`);
+    }
   } catch (e: any) {
     const errorMsg = e instanceof Error ? e.message : String(e);
-    console.error(`音频下载失败 (${audioUrl}):`, errorMsg);
+    console.error(`[ASR分段] ❌ 音频下载/转换失败 (${audioUrl}):`, errorMsg);
     // 保留完整的错误信息，包括堆栈
     const fullError = e instanceof Error ? `${errorMsg}\n${e.stack || ''}` : errorMsg;
-    throw new Error(`音频下载失败: ${fullError}`);
+    throw new Error(`音频下载/转换失败: ${fullError}`);
   }
   
   // Step 2: 获取时长并规划分段
@@ -306,9 +452,10 @@ export async function transcribeAudioWithSegmentation(
   
   // Step 3: 切割并上传到OSS
   const uploaded: { index: number; url: string }[] = [];
-  // 并发数：OSS上传可以安全地提升到5（阿里云OSS支持高并发，主要受网络带宽限制）
-  // ASR转写也使用5（通义千问API通常支持，但需要监控是否有QPS限制）
-  const maxConcurrent = 5; // 从3提升到5，平衡效率和稳定性
+  // 并发数：降低到3以减少网络压力，特别是对于长时间音频（22+分段）
+  // OSS上传现在有重试机制（最多3次），所以可以适当降低并发数
+  // ASR转写也使用3（通义千问API通常支持，但需要监控是否有QPS限制）
+  const maxConcurrent = 3; // 降低到3，平衡效率和稳定性，减少网络压力
   
   async function runPool<T>(items: any[], worker: (it: any) => Promise<T>, n: number): Promise<T[]> {
     const ret: T[] = new Array(items.length) as any;
@@ -326,38 +473,79 @@ export async function transcribeAudioWithSegmentation(
   }
   
   try {
+    // 为每个分段添加超时保护，防止单个分段卡住整个流程
+    const SEGMENT_TIMEOUT = 5 * 60 * 1000; // 每个分段最多5分钟（包括切分和上传）
+    
     const results = await runPool(segments, async (s) => {
-      try {
-        console.log(`切割片段 ${s.index + 1}/${count}: ${s.start}-${s.end}秒`);
-        const buf = await cutOne(localFile, s.start, s.len);
-        const key = `temp/asr-${s.start}-${s.end}-${Date.now()}.m4a`;
-        const url = await uploadToOssAndGetPublicUrl(key, buf, "audio/mp4");
-        if (!url) {
-          const errorMsg = `OSS上传失败，跳过分段 ${s.start}-${s.end}秒（请检查OSS配置和网络连接）`;
-          console.error(`❌ ${errorMsg}`);
+      // 使用Promise.race添加超时保护
+      const segmentPromise = (async () => {
+        try {
+          console.log(`切割片段 ${s.index + 1}/${count}: ${s.start}-${s.end}秒`);
+          const buf = await cutOne(localFile, s.start, s.len);
+          
+          // 验证切分后的Buffer
+          if (!buf || buf.length === 0) {
+            const errorMsg = `切分后的片段为空: ${s.start}-${s.end}秒`;
+            console.error(`❌ ${errorMsg}`);
+            return null;
+          }
+          
+          console.log(`片段 ${s.index + 1}/${count} 切分成功，大小: ${buf.length} 字节`);
+          
+          const key = `temp/asr-${s.start}-${s.end}-${Date.now()}.m4a`;
+          const url = await uploadToOssAndGetPublicUrl(key, buf, "audio/mp4");
+          if (!url) {
+            const errorMsg = `OSS上传失败，跳过分段 ${s.start}-${s.end}秒（片段大小: ${buf.length} 字节，请检查OSS配置和网络连接）`;
+            console.error(`❌ ${errorMsg}`);
+            return null;
+          }
+          console.log(`✅ 片段 ${s.index + 1}/${count} 上传成功: ${url} (${buf.length} 字节)`);
+          return { index: s.index, url };
+        } catch (error: any) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          const errorStack = error instanceof Error ? error.stack : undefined;
+          console.error(`❌ 分段处理失败 ${s.start}-${s.end}秒:`, errorMsg);
+          if (errorStack) {
+            console.error(`   错误堆栈: ${errorStack.substring(0, 500)}`);
+          }
+          // 如果是切分失败，记录更详细的信息
+          if (errorMsg.includes('切割') || errorMsg.includes('cut')) {
+            console.error(`   这可能是音频文件本身的问题，请检查原始音频文件是否完整`);
+          }
           return null;
         }
-        console.log(`✅ 片段 ${s.index + 1}/${count} 上传成功: ${url}`);
-        return { index: s.index, url };
-      } catch (error: any) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`❌ 分段处理失败 ${s.start}-${s.end}秒:`, errorMsg);
-        if (error instanceof Error && error.stack) {
-          console.error(`   错误堆栈: ${error.stack.substring(0, 300)}`);
-        }
-        return null;
-      }
+      })();
+      
+      // 超时保护
+      const timeoutPromise = new Promise<null>((resolve) => {
+        setTimeout(() => {
+          console.error(`⏱️ 分段 ${s.index + 1}/${count} (${s.start}-${s.end}秒) 处理超时（超过${SEGMENT_TIMEOUT / 1000}秒），跳过`);
+          resolve(null);
+        }, SEGMENT_TIMEOUT);
+      });
+      
+      // 使用Promise.race，如果超时就返回null，继续处理其他分段
+      return await Promise.race([segmentPromise, timeoutPromise]);
     }, maxConcurrent);
     
     const validResults = results.filter((r): r is { index: number; url: string } => r !== null);
     uploaded.push(...validResults);
+    const failedCount = count - uploaded.length;
     console.log(`成功上传 ${uploaded.length}/${count} 个片段到OSS`);
     
     // 如果所有片段都上传失败，抛出详细错误
     if (uploaded.length === 0) {
-      const errorMsg = `所有 ${count} 个音频分段OSS上传均失败，请检查OSS配置和网络连接`;
+      const errorMsg = `所有 ${count} 个音频分段OSS上传均失败，请检查OSS配置和网络连接。可能原因：1) OSS配置错误 2) 网络连接问题 3) OSS权限问题 4) 音频文件格式问题`;
       console.error(`❌ ${errorMsg}`);
+      console.error(`   建议：检查开发服务器日志中的详细OSS错误信息`);
       throw new Error(errorMsg);
+    }
+    
+    // 如果大部分分段失败，给出警告但继续处理
+    if (failedCount > count * 0.5) {
+      console.warn(`⚠️ 警告：${failedCount}/${count} 个分段上传失败（超过50%），但将继续处理已上传的 ${uploaded.length} 个分段`);
+    } else if (failedCount > 0) {
+      console.warn(`⚠️ ${failedCount}/${count} 个分段上传失败，但将继续处理已上传的 ${uploaded.length} 个分段`);
     }
   } catch (e: any) {
     fs.promises.unlink(localFile).catch(() => {});

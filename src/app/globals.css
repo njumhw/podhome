@@ -14,12 +14,12 @@
 }
 
 [data-theme='light'] {
-  --background: #f6f7fb;
+  --background: #f5f4f1;
   --foreground: #0b0d16;
   --text-muted: #4b5563;
-  --card-surface: rgba(255, 255, 255, 0.92);
+  --card-surface: #faf9f6;
   --card-border: rgba(15, 23, 42, 0.08);
-  --header-bg: rgba(255, 255, 255, 0.9);
+  --header-bg: rgba(250, 249, 246, 0.95);
   --divider-color: rgba(15, 23, 42, 0.08);
   --outline-color: rgba(15, 23, 42, 0.25);
 }
@@ -280,19 +280,8 @@ body > * {
   background: linear-gradient(110deg, transparent 0%, rgba(15,23,42,0.12) 50%, transparent 100%);
 }
 
-.tag-pill {
-  color: rgba(255, 255, 255, 0.9);
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-[data-theme='light'] .tag-pill {
-  color: var(--foreground) !important;
-  background-color: rgba(15, 23, 42, 0.04) !important;
-  border-color: rgba(15, 23, 42, 0.12) !important;
-}
-
-[data-theme='light'] .topic-pill {
-  color: var(--foreground) !important;
+.text-black-light {
+  color: #000 !important;
 }
 
 /* 自定义动画延迟 */
@@ -405,4 +394,18 @@ input[type="range"].slider:disabled::-moz-range-thumb {
 
 .animate-pulse-slow {
   animation: pulse-slow 4s ease-in-out infinite;
+}
+
+/* 淡入动画，用于光源初始加载 - 降低最终透明度使其更柔和 */
+@keyframes fade-in-glow {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0.38;
+  }
+}
+
+.animate-fade-in-glow {
+  animation: fade-in-glow 3s ease-out forwards;
 }

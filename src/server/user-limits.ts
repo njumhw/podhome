@@ -1,44 +1,44 @@
 import { db } from "@/server/db";
 import { UserRole } from "@prisma/client";
 
-export interface UserLimitConfig {
-	guest: {
-		canUpload: false;
-		dailyLimit: 0;
-	};
-	user: {
-		canUpload: true;
-		dailyLimit: 2;
-	};
-	admin: {
-		canUpload: true;
-		dailyLimit: -1; // 无限制
-	};
-}
-
-export const USER_LIMITS: UserLimitConfig = {
-	guest: {
-		canUpload: false,
-		dailyLimit: 0
-	},
-	user: {
-		canUpload: true,
-		dailyLimit: 2
-	},
-	admin: {
-		canUpload: true,
-		dailyLimit: -1
-	}
-};
-
 // 检查用户是否可以上传
-export function canUserUpload(role: UserRole): boolean {
-	return USER_LIMITS[role.toLowerCase() as keyof UserLimitConfig].canUpload;
+export function canUserUpload(role: UserRole | null): boolean {
+	if (!role) return false; // Visitor 不能上传
+	
+	switch (role) {
+		case UserRole.READER:
+			return false; // Reader 不能上传
+		case UserRole.PODCASTER:
+			return true; // Podcaster 可以上传
+		case UserRole.PODCASTER_VIP:
+			return true; // VIP 可以上传
+		case UserRole.ADMIN:
+			return true; // 管理员可以上传
+		case UserRole.USER:
+			return true; // 旧角色，兼容处理
+		default:
+			return false;
+	}
 }
 
 // 获取用户每日上传限制
-export function getUserDailyLimit(role: UserRole): number {
-	return USER_LIMITS[role.toLowerCase() as keyof UserLimitConfig].dailyLimit;
+export function getUserDailyLimit(role: UserRole | null): number {
+	if (!role) return 0; // Visitor 不能上传
+	
+	switch (role) {
+		case UserRole.READER:
+			return 0; // Reader 不能上传
+		case UserRole.PODCASTER:
+			return 2; // Podcaster 每日 2 次
+		case UserRole.PODCASTER_VIP:
+			return -1; // VIP 无限制
+		case UserRole.ADMIN:
+			return -1; // 管理员无限制
+		case UserRole.USER:
+			return 2; // 旧角色，兼容处理
+		default:
+			return 0;
+	}
 }
 
 // 检查用户今日上传次数
@@ -63,7 +63,7 @@ export async function getUserTodayUploadCount(userId: string): Promise<number> {
 }
 
 // 检查用户是否超过上传限制
-export async function checkUserUploadLimit(userId: string, role: UserRole): Promise<{
+export async function checkUserUploadLimit(userId: string, role: UserRole | null): Promise<{
 	allowed: boolean;
 	reason?: string;
 	currentCount: number;
@@ -71,16 +71,32 @@ export async function checkUserUploadLimit(userId: string, role: UserRole): Prom
 }> {
 	// 检查是否可以上传
 	if (!canUserUpload(role)) {
+		if (!role) {
+			return {
+				allowed: false,
+				reason: "请登录后上传",
+				currentCount: 0,
+				limit: 0
+			};
+		}
+		if (role === UserRole.READER) {
+			return {
+				allowed: false,
+				reason: "需要 Podcaster 权限才能上传",
+				currentCount: 0,
+				limit: 0
+			};
+		}
 		return {
 			allowed: false,
-			reason: "游客用户不能上传音频",
+			reason: "当前角色不能上传音频",
 			currentCount: 0,
 			limit: 0
 		};
 	}
 	
-	// 管理员无限制
-	if (role === UserRole.ADMIN) {
+	// VIP 和管理员无限制
+	if (role === UserRole.PODCASTER_VIP || role === UserRole.ADMIN) {
 		return {
 			allowed: true,
 			currentCount: 0,
@@ -88,11 +104,11 @@ export async function checkUserUploadLimit(userId: string, role: UserRole): Prom
 		};
 	}
 	
-	// 检查普通用户的每日限制
+	// 检查 Podcaster 的每日限制
 	const currentCount = await getUserTodayUploadCount(userId);
 	const limit = getUserDailyLimit(role);
 	
-	if (currentCount >= limit) {
+	if (limit > 0 && currentCount >= limit) {
 		return {
 			allowed: false,
 			reason: `今日上传次数已达上限（${limit}次）`,

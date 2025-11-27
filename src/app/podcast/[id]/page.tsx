@@ -13,6 +13,7 @@ import MinimalLikeButton from '@/components/MinimalLikeButton';
 import AudioPlayer from '@/components/AudioPlayer';
 import CompactAudioPlayer from '@/components/CompactAudioPlayer';
 import { getStyleFromTitle } from '@/utils/podcast-styles';
+import VisitorLimitModal from '@/components/VisitorLimitModal';
 
 type Topic = {
   id: string;
@@ -83,6 +84,8 @@ export default function PodcastDetailPage() {
   const toast = useToast();
   
   const [showTopicModal, setShowTopicModal] = useState(false);
+  const [showVisitorLimitModal, setShowVisitorLimitModal] = useState(false);
+  const [visitorLimitInfo, setVisitorLimitInfo] = useState<{ count: number; limit: number } | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -104,7 +107,14 @@ export default function PodcastDetailPage() {
       // 添加时间戳防止缓存
       const res = await fetch(`/api/public/podcast?id=${id}&t=${Date.now()}`);
       if (!res.ok) {
-        if (res.status === 404) {
+        if (res.status === 403) {
+          // Visitor 限制
+          const errorData = await res.json();
+          setVisitorLimitInfo({ count: errorData.count || 3, limit: errorData.limit || 3 });
+          setShowVisitorLimitModal(true);
+          setError('今日查看次数已用完');
+          return;
+        } else if (res.status === 404) {
           throw new Error('播客不存在');
         } else if (res.status === 503) {
           throw new Error('数据库连接问题，请稍后重试');
@@ -114,6 +124,22 @@ export default function PodcastDetailPage() {
       }
       const data = await res.json();
       setPodcast(data);
+
+      if (data.visitorInfo) {
+        const info = {
+          count: data.visitorInfo.used ?? 0,
+          limit: data.visitorInfo.total ?? 3,
+        };
+        setVisitorLimitInfo(info);
+        if (info.count >= info.limit) {
+          setShowVisitorLimitModal(true);
+        } else {
+          setShowVisitorLimitModal(false);
+        }
+      } else {
+        setVisitorLimitInfo(null);
+        setShowVisitorLimitModal(false);
+      }
       
       // 记录访问日志
       try {
@@ -176,16 +202,19 @@ export default function PodcastDetailPage() {
         setUser(userData.user);
         // 只有明确是 ADMIN 角色的用户才设置为管理员
         setIsAdmin(userData.user?.role === 'ADMIN');
+        setShowVisitorLimitModal(false);
       } else {
         // 如果请求失败，确保 isAdmin 为 false
         setIsAdmin(false);
         setUser(null);
+        setShowVisitorLimitModal(false);
       }
     } catch (error) {
       console.error('Failed to check user:', error);
       // 出错时也确保 isAdmin 为 false
       setIsAdmin(false);
       setUser(null);
+      setShowVisitorLimitModal(false);
     }
   };
 
@@ -525,6 +554,23 @@ export default function PodcastDetailPage() {
         <div className="mb-12">
           {isEditing ? (
             <div className="space-y-4 p-6 rounded-lg border border-white/5 bg-zinc-900/40 backdrop-blur-sm">
+              {isAdmin && (
+                <div className="flex items-center justify-end gap-3 mb-4">
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={isSaving}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs text-emerald-300 border border-emerald-500/50 rounded-lg hover:bg-emerald-500/10 disabled:opacity-50 transition-colors font-mono"
+                  >
+                    {isSaving ? '保存中…' : '保存'}
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs text-zinc-400 border border-white/10 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                  >
+                    取消
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-2 font-mono">标题</label>
                 <input
@@ -610,45 +656,17 @@ export default function PodcastDetailPage() {
                   
                   {/* 右侧：操作按钮 */}
                   <div className="flex items-center gap-2">
-                    {isAdmin && (
-                      <>
-                        {isEditing ? (
-                          <>
-                            <button
-                              onClick={handleSaveEdit}
-                              disabled={isSaving}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-400 border border-emerald-500/50 rounded-lg hover:bg-emerald-500/10 disabled:opacity-50 transition-colors font-mono"
-                              title={isSaving ? '保存中...' : '保存'}
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              {isSaving ? '保存中...' : '保存'}
-                            </button>
-                            <button
-                              onClick={handleCancelEdit}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
-                              title="取消"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                              取消
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={handleEdit}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
-                            title="编辑"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            编辑
-                          </button>
-                        )}
-                      </>
+                    {isAdmin && !isEditing && (
+                      <button
+                        onClick={handleEdit}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                        title="编辑"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        编辑
+                      </button>
                     )}
                     {podcast?.audioUrl && (
                       <button
@@ -766,6 +784,30 @@ export default function PodcastDetailPage() {
                   report={podcast.summary}
                   fallbackText="暂无播客总结"
                 />
+              </div>
+            )}
+
+            {!isEditing && (
+              <div className="mt-6 flex flex-wrap items-center gap-3 justify-between border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg px-4 py-3 bg-black/30 dark:bg-black/30 [data-theme='light']:bg-slate-100/70">
+                <div className="text-sm text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600 font-mono">
+                  值得一读？快点赞并分享给你的小伙伴们吧
+                </div>
+                <div className="flex items-center gap-2">
+                  <MinimalLikeButton 
+                    podcastId={podcast.id} 
+                    initialLikeCount={podcast.likeCount || 0}
+                  />
+                  <button
+                    onClick={handleShare}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                    title="分享播客"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                    分享
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1156,6 +1198,13 @@ export default function PodcastDetailPage() {
           </div>
         </div>
       )}
+
+      <VisitorLimitModal
+        isOpen={showVisitorLimitModal}
+        onClose={() => setShowVisitorLimitModal(false)}
+        count={visitorLimitInfo?.count || 3}
+        limit={visitorLimitInfo?.limit || 3}
+      />
     </div>
   );
 }

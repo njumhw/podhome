@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/server/db";
-import { requireUser } from "@/server/auth";
+import { getSessionUser, requireUser } from "@/server/auth";
 import { jsonError } from "@/utils/http";
 
 const createCommentSchema = z.object({
@@ -62,10 +62,10 @@ export async function GET(req: NextRequest) {
     // 获取当前用户信息（如果已登录）
     let currentUserId: string | null = null;
     try {
-      const user = await requireUser().catch(() => null);
+      const user = await getSessionUser();
       currentUserId = user?.id || null;
-    } catch {
-      // 用户未登录，继续处理
+    } catch (error) {
+      console.warn("Failed to resolve session user for comments:", error);
     }
 
     const formattedComments = comments.map(comment => ({

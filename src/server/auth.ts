@@ -35,9 +35,11 @@ export async function setSession(userId: string) {
 	const secret = getEnv().AUTH_SECRET;
 	const token = encode({ userId, issuedAt: Date.now() }, secret);
 	const c = await cookies();
+	// 生产环境使用 HTTPS，设置 secure: true；开发环境允许 HTTP
+	const isProduction = process.env.NODE_ENV === 'production';
 	c.set(SESSION_COOKIE, token, {
 		httpOnly: true,
-		secure: false, // 在 HTTP 环境下设置为 false
+		secure: isProduction, // 生产环境使用 HTTPS，开发环境允许 HTTP
 		sameSite: "lax",
 		path: "/",
 		maxAge: Math.floor(SESSION_TTL_MS / 1000),

@@ -10,7 +10,6 @@ export default function RegisterPage() {
 		username: "",
 		password: "",
 		confirmPassword: "",
-		inviteCode: "",
 	});
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState("");
@@ -41,7 +40,6 @@ export default function RegisterPage() {
 					email: formData.email,
 					username: formData.username,
 					password: formData.password,
-					inviteCode: formData.inviteCode,
 				}),
 			});
 
@@ -88,11 +86,11 @@ export default function RegisterPage() {
 						</span>
 					</h1>
 					<p className="text-sm text-zinc-500 font-mono mb-4">
-						Create your account and start exploring
+						注册即可获得 Reader 权限，无限浏览所有播客！
 					</p>
 					<div className="inline-flex items-center gap-4 text-xs text-zinc-400 bg-zinc-900/40 border border-white/5 px-4 py-2 rounded-lg font-mono">
-						<span>✨ 2 podcasts/day</span>
-						<span>💬 Comments & interactions</span>
+						<span>✨ 无限浏览</span>
+						<span>💬 点赞、评论、收藏</span>
 					</div>
 				</div>
 
@@ -145,20 +143,6 @@ export default function RegisterPage() {
 						/>
 					</div>
 
-					<div>
-						<label className="block text-xs font-mono text-zinc-400 mb-2 uppercase tracking-wider">Invite Code</label>
-						<input
-							type="text"
-							required
-							value={formData.inviteCode}
-							onChange={(e) => setFormData({ ...formData, inviteCode: e.target.value })}
-							className="w-full rounded-xl border border-white/10 bg-black/60 backdrop-blur-xl px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all font-sans"
-							placeholder="Enter your invite code"
-						/>
-						<p className="text-xs text-zinc-500 font-mono mt-2">
-							Contact 阿茅 (WeChat: njumwh) for an invite code
-						</p>
-					</div>
 
 					{error && (
 						<div className="text-sm text-rose-400 bg-rose-900/20 border border-rose-500/30 px-4 py-3 rounded-lg font-mono">

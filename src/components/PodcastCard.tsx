@@ -99,20 +99,15 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 			)}
 			
 			{/* Meta Header */}
-			<div className="relative z-10 flex justify-between items-center font-mono text-xs text-zinc-200 dark:text-zinc-200 [data-theme='light']:text-white/70 mb-4">
+			<div className="relative z-10 flex justify-between items-center font-mono text-xs text-zinc-200 dark:text-zinc-200 [data-theme='light']:text-slate-900 mb-4">
 				<div className="flex items-center gap-2">
 					{item.topic && (
-						<span className="px-2 py-0.5 rounded border border-white/10 dark:border-white/10 [data-theme='light']:border-white/30 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-white/10 text-white/80 dark:text-white/80 [data-theme='light']:text-white">
+						<span className="px-2 py-0.5 rounded border border-white/20 dark:border-white/20 [data-theme='light']:border-slate-400 bg-white/20 dark:bg-white/20 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-black font-semibold">
 							#{item.topic}
 						</span>
 					)}
-					{episodeNumber && (
-						<span className="px-2 py-0.5 rounded border border-white/10 dark:border-white/10 [data-theme='light']:border-white/30 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-white/10 text-white/80 dark:text-white/80 [data-theme='light']:text-white">
-							EP.{episodeNumber}
-						</span>
-					)}
 				</div>
-				<span className="text-white/70 dark:text-white/70 [data-theme='light']:text-white/80">{dateStr}</span>
+				<span className="text-white/70 dark:text-white/70 [data-theme='light']:text-slate-700">{dateStr}</span>
 			</div>
 			
 			{/* Main Title */}
@@ -130,7 +125,9 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 			{/* Footer with Pulse Animation */}
 			<div className="relative z-10 mt-4 flex justify-between items-end flex-shrink-0">
 				{item.author && (
-					<span className="text-sm text-white dark:text-white [data-theme='light']:text-foreground font-mono font-medium">{item.author}</span>
+					<span className="text-sm text-white dark:text-white [data-theme='light']:text-slate-900 font-mono font-medium">
+						{item.author}
+					</span>
 				)}
 				
 				{/* Fake Audio Visualizer - 根据标签显示不同颜色 */}
@@ -196,11 +193,36 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 						e.currentTarget.style.boxShadow = '0 0 0 0 rgba(0,0,0,0)';
 					}}
 				>
-					<div 
-						className="relative h-full rounded-[6px] p-6 flex flex-col overflow-hidden card-bg" 
-						style={{ 
+					<div
+						className={`
+							relative border border-white/5 dark:border-white/5 [data-theme='light']:border-card-border
+							bg-[#0f0f0f] dark:bg-[#0f0f0f] [data-theme='light']:bg-card-surface
+							p-6 transition-all duration-300
+							hover:-translate-y-1
+							hover:border-white/10 dark:hover:border-white/10 [data-theme='light']:hover:border-slate-300
+							hover:bg-[#151515] dark:hover:bg-[#151515] [data-theme='light']:hover:bg-slate-50
+							${style.border}
+							group-hover:shadow-2xl
+							h-full
+							flex flex-col
+							overflow-hidden
+							card-bg
+						`}
+						style={{
+							boxShadow: '0 0 0 0 rgba(0,0,0,0)',
 							minHeight: '240px',
 							backdropFilter: 'blur(8px)',
+						}}
+						onMouseEnter={(e) => {
+							const glowColor = rank === 1 
+								? 'rgba(239, 68, 68, 0.35)'
+								: rank === 2
+								? 'rgba(249, 115, 22, 0.35)'
+								: 'rgba(251, 191, 36, 0.35)';
+							e.currentTarget.style.boxShadow = `0 10px 40px ${glowColor}`;
+						}}
+						onMouseLeave={(e) => {
+							e.currentTarget.style.boxShadow = '0 0 0 0 rgba(0,0,0,0)';
 						}}
 					>
 						<CardContent />
@@ -221,6 +243,7 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 						h-full
 						flex flex-col
 						overflow-hidden
+						card-bg
 					`}
 					style={{
 						boxShadow: '0 0 0 0 rgba(0,0,0,0)',
@@ -240,3 +263,5 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 		</Link>
 	);
 }
+
+export default PodcastCard;

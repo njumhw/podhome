@@ -4,12 +4,12 @@ import { db } from "@/server/db";
 import crypto from "crypto";
 import { setSession } from "@/server/auth";
 import { jsonError } from "@/utils/http";
+import { UserRole } from "@prisma/client";
 
 const bodySchema = z.object({
 	email: z.string().email(),
 	username: z.string().min(2).max(32),
 	password: z.string().min(8),
-	inviteCode: z.string().min(6),
 });
 
 function hashPassword(password: string): string {
@@ -23,25 +23,33 @@ export async function POST(req: NextRequest) {
 	const parsed = bodySchema.safeParse(json);
 	if (!parsed.success) return jsonError("Bad Request", 400);
 
-	const { email, username, password, inviteCode } = parsed.data;
+	const { email, username, password } = parsed.data;
 
-	const invite = await db.inviteCode.findUnique({ where: { code: inviteCode } });
-	if (!invite) return jsonError("Invalid invite", 400);
-	if (invite.expiresAt && invite.expiresAt < new Date()) return jsonError("Invite expired", 400);
-	if (invite.uses >= invite.maxUses) return jsonError("Invite exhausted", 400);
+	// 检查邮箱和用户名是否已存在
+	const existingUser = await db.user.findFirst({
+		where: {
+			OR: [{ email }, { username }],
+		},
+	});
 
+	if (existingUser) {
+		if (existingUser.email === email) {
+			return jsonError("Email already exists", 400);
+		}
+		if (existingUser.username === username) {
+			return jsonError("Username already exists", 400);
+		}
+	}
+
+	// 创建用户，默认角色为 READER
 	const user = await db.user.create({
 		data: {
 			email,
 			username,
 			passwordHash: hashPassword(password),
+			role: UserRole.READER, // 默认角色为 READER
 		},
 		select: { id: true },
-	});
-
-	await db.inviteCode.update({
-		where: { code: inviteCode },
-		data: { uses: { increment: 1 }, usedById: user.id },
 	});
 
 	await setSession(user.id);

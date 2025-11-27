@@ -1,8 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/server/db';
+import { getSessionUser } from '@/server/auth';
+import { buildVisitorInfo, getVisitorUsage, recordVisitorAccess } from '@/server/visitorLimit';
+
+// 获取客户端 IP 地址
+function getClientIp(req: NextRequest): string {
+	const forwarded = req.headers.get('x-forwarded-for');
+	if (forwarded) {
+		return forwarded.split(',')[0].trim();
+	}
+	const realIp = req.headers.get('x-real-ip');
+	if (realIp) {
+		return realIp;
+	}
+	// NextRequest 没有 ip 属性，使用 'unknown' 作为默认值
+	return 'unknown';
+}
+
+// 获取 User-Agent
+function getUserAgent(req: NextRequest): string {
+	return req.headers.get('user-agent') || 'unknown';
+}
 
 export async function GET(request: NextRequest) {
   try {
+    const clientIp = getClientIp(request);
+    const userAgent = getUserAgent(request);
+
+    // 尝试获取用户（可能为 null，表示 Visitor）
+    let user = null;
+    try {
+      user = await getSessionUser();
+    } catch (error) {
+      console.warn('[VisitorLimit] getSessionUser failed, fallback to visitor mode:', error);
+    }
+
+    let visitorUsage = null;
+    if (!user) {
+      visitorUsage = await getVisitorUsage(clientIp, userAgent);
+      if (!visitorUsage.allowed) {
+        return NextResponse.json(
+          {
+            error: 'VISITOR_LIMIT_EXCEEDED',
+            message: '今日查看次数已用完，请注册登录后无限浏览',
+            count: visitorUsage.count,
+            limit: visitorUsage.limit,
+          },
+          { status: 403 }
+        );
+      }
+    }
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const url = searchParams.get('url');
@@ -76,6 +123,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    let resolvedFromAudioCache = false;
     // 如果在Podcast表没找到，查AudioCache表
     if (!podcast) {
       const audioCache = await prisma.audioCache.findFirst({
@@ -97,6 +145,7 @@ export async function GET(request: NextRequest) {
       });
 
       if (audioCache) {
+        resolvedFromAudioCache = true;
         podcast = {
           id: audioCache.id,
           title: audioCache.title || '未知标题',
@@ -126,7 +175,16 @@ export async function GET(request: NextRequest) {
       where: { podcastId: podcast.id }
     });
 
-    const response = NextResponse.json({
+    await recordVisitorAccess({
+      podcastId: resolvedFromAudioCache ? null : podcast.id,
+      audioCacheId: resolvedFromAudioCache ? podcast.id : null,
+      userId: user?.id ?? null,
+      userIp: user ? null : clientIp,
+      userAgent: user ? null : userAgent,
+    });
+
+    // 如果是 Visitor，返回剩余次数信息
+    const responseData: any = {
       id: podcast.id,
       title: podcast.title,
       author: podcast.showAuthor,
@@ -141,7 +199,13 @@ export async function GET(request: NextRequest) {
       report: podcast.summary,
       updatedAt: podcast.updatedAt,
       likeCount
-    });
+    };
+
+    if (!user && visitorUsage) {
+      responseData.visitorInfo = buildVisitorInfo(visitorUsage);
+    }
+
+    const response = NextResponse.json(responseData);
     
     // 细粒度缓存：短期缓存10秒，缓解瞬时高并发
     response.headers.set('Cache-Control', 'public, max-age=10, s-maxage=10, stale-while-revalidate=30');
@@ -160,8 +224,9 @@ export async function GET(request: NextRequest) {
       );
     }
     
+    const debugPayload = process.env.NODE_ENV !== 'production' ? { details: errorMessage } : {};
     return NextResponse.json(
-      { error: '获取播客详情失败' },
+      { error: '获取播客详情失败', ...debugPayload },
       { status: 500 }
     );
   }

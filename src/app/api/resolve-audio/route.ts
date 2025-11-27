@@ -4,6 +4,7 @@ import { jsonError } from "@/utils/http";
 import { parseXiaoyuzhouEpisode } from "@/server/parsers/xiaoyuzhou";
 import { parseStablePodcast } from "@/server/parsers/stable-podcast-parser";
 import { getCachedAudio, setCachedAudio } from "@/server/audio-cache";
+import { detectAudioFormat } from "@/server/audio-converter";
 
 const bodySchema = z.object({
 	url: z.string().url(),
@@ -20,6 +21,10 @@ export async function POST(req: NextRequest) {
         const meta = await resolvePodcast(url);
         if (!meta.audioUrl) return jsonError("无法获取音频链接", 404);
 
+        // 检测音频格式
+        const audioFormat = detectAudioFormat(meta.audioUrl);
+        console.log(`[音频解析] 检测到音频格式: ${audioFormat}, URL: ${meta.audioUrl}`);
+        
         // 检查缓存
         const cached = await getCachedAudio(meta.audioUrl);
         if (cached) {
@@ -28,7 +33,7 @@ export async function POST(req: NextRequest) {
                 success: true,
                 cached: true,
                 url: meta.audioUrl,
-                format: meta.audioUrl.includes('.m4a') ? 'm4a' : 'unknown',
+                format: audioFormat,
                 title: cached.title || (meta as any).title || null,
                 podcastTitle: (meta as any).podcastTitle ?? null,
                 author: cached.author || (meta as any).author || (meta as any).podcastTitle || null,
@@ -44,7 +49,7 @@ export async function POST(req: NextRequest) {
 
         const audioInfo = {
             url: meta.audioUrl,
-            format: meta.audioUrl.includes('.m4a') ? 'm4a' : 'unknown',
+            format: audioFormat,
             title: (meta as any).title ?? null,
             podcastTitle: (meta as any).podcastTitle ?? null,
             author: (meta as any).author ?? null,

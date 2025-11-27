@@ -93,3 +93,4 @@ export function getGradientFromTitle(title: string) {
   return `bg-gradient-to-br ${colorMap[style.text] || 'from-blue-500/30 via-blue-600/20 to-blue-700/10'}`;
 }
 
+

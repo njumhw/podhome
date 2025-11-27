@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/components/Toast';
 import { useUser } from '@/hooks/useUser';
+import UpgradeModal from '@/components/UpgradeModal';
 import { PodcastCard } from '@/components/PodcastCard';
 import MinimalLikeButton from '@/components/MinimalLikeButton';
 
@@ -47,9 +48,18 @@ export default function HomePage() {
   const { user } = useUser();
   const toast = useToast();
 
+  const LATEST_INITIAL_LIMIT = 9;
+  const LATEST_PREFETCH_LIMIT = 60;
   const [latest, setLatest] = useState<PodcastItem[]>([]);
-  const [latestDisplayCount, setLatestDisplayCount] = useState(12); // 默认显示12个
+  const [latestDisplayCount, setLatestDisplayCount] = useState(0); // 默认先不显示，数据返回后再设置
+  const [latestHasMore, setLatestHasMore] = useState(false); // 是否还有更多数据
+  const [latestPrefetched, setLatestPrefetched] = useState(false);
+  const MAX_DISPLAY_COUNT = 30; // 最大显示数量上限，避免性能问题
+  const latestPrefetchPromiseRef = useRef<Promise<PodcastItem[] | null> | null>(null);
   const [hot, setHot] = useState<PodcastItem[]>([]);
+  const [hotMode, setHotMode] = useState<'30d' | 'all'>('30d');
+  const [hotDisplayCount, setHotDisplayCount] = useState(9); // 默认显示9个
+  const [hotHasMore, setHotHasMore] = useState(false); // 是否还有更多数据
   const [allPodcasts, setAllPodcasts] = useState<PodcastItem[]>([]);
   const [showAllPodcasts, setShowAllPodcasts] = useState(false);
   const [allPodcastsPage, setAllPodcastsPage] = useState(1);
@@ -62,7 +72,11 @@ export default function HomePage() {
   const [likedPage, setLikedPage] = useState(1);
   const [likedHasMore, setLikedHasMore] = useState(true);
   const [likedLoading, setLikedLoading] = useState(false);
-  const LIKED_PAGE_SIZE = 15;
+  const [likedDisplayCount, setLikedDisplayCount] = useState(9); // 默认显示9个
+  const LIKED_PAGE_SIZE = 6; // 每次加载6个
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [catalogSummary, setCatalogSummary] = useState<{ totalPodcasts: number; totalMinutes: number } | null>(null);
+  const [summaryDisplay, setSummaryDisplay] = useState<{ podcasts: number; hours: number }>({ podcasts: 0, hours: 0 });
   const tabOptions: Array<{ id: 'new' | 'top' | 'liked'; label: string; icon: string; requiresAuth?: boolean }> = [
     { id: 'new', label: 'New', icon: '#' },
     { id: 'top', label: 'Top', icon: '⚡' },
@@ -82,59 +96,238 @@ export default function HomePage() {
     }
   };
 
+  const fetchWithTimeout = async (url: string, timeout = 30000): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.warn('[fetchWithTimeout] 请求超时:', url);
+        return new Response(
+          JSON.stringify({ error: 'Request timeout', url }),
+          {
+            status: 408,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      throw error;
+    }
+  };
+
+  const prefetchLatest = (limit = LATEST_PREFETCH_LIMIT, options?: { resetDisplay?: boolean; force?: boolean }): Promise<PodcastItem[] | null> => {
+    if (!options?.force) {
+      if (limit <= LATEST_PREFETCH_LIMIT && latestPrefetched) {
+        return Promise.resolve(latest);
+      }
+      if (latestPrefetchPromiseRef.current) {
+        return latestPrefetchPromiseRef.current;
+      }
+    }
+
+    const fetchTask = (async () => {
+      try {
+        const res = await fetchWithTimeout(`/api/public/list?type=latest&limit=${limit}`);
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('[首页] 预加载最新播客失败:', res.status, errorText);
+          return null;
+        }
+        const data: ListResult = await res.json();
+        const items = data.items || [];
+        setLatest(items);
+        if (options?.resetDisplay) {
+          // 重置时，如果数据足够，显示9个；否则显示实际数量
+          const resetCount = items.length >= LATEST_INITIAL_LIMIT ? LATEST_INITIAL_LIMIT : items.length;
+          setLatestDisplayCount(resetCount);
+        } else {
+          setLatestDisplayCount(prev => {
+            if (prev === 0 && items.length > 0) {
+              // 初始加载：如果数据足够，显示9个；否则显示实际数量
+              return items.length >= LATEST_INITIAL_LIMIT ? LATEST_INITIAL_LIMIT : items.length;
+            }
+            // 预加载时：如果已经设置了显示数量，不要减少它；如果数据更多，可以增加
+            if (prev >= LATEST_INITIAL_LIMIT) {
+              return prev; // 保持当前显示数量，不减少
+            }
+            // 如果当前显示数量小于9，且数据足够，设置为9
+            if (items.length >= LATEST_INITIAL_LIMIT && prev < LATEST_INITIAL_LIMIT) {
+              return LATEST_INITIAL_LIMIT;
+            }
+            return Math.min(prev, items.length);
+          });
+        }
+        setLatestHasMore(data.pagination?.hasNext || items.length >= limit);
+        if (limit >= LATEST_PREFETCH_LIMIT) {
+          setLatestPrefetched(true);
+        }
+        return items;
+      } catch (error) {
+        console.error('预加载最新播客失败:', error);
+        return null;
+      }
+    })();
+
+    const wrappedPromise = fetchTask
+      .then((result) => {
+        latestPrefetchPromiseRef.current = null;
+        return result;
+      })
+      .catch((error) => {
+        latestPrefetchPromiseRef.current = null;
+        throw error;
+      });
+
+    latestPrefetchPromiseRef.current = wrappedPromise;
+    return wrappedPromise;
+  };
+
   // 加载首页数据 - 优化并行加载
   useEffect(() => {
     const loadInitialData = async () => {
-      try {
-        // 并行加载所有数据
-        // 添加时间戳参数，避免浏览器缓存
-        const timestamp = Date.now();
-        // 优化：初始只加载需要的数量，减少数据传输
-        const [latestRes, hotRes, topicsRes, userRes] = await Promise.allSettled([
-          fetch('/api/public/list?type=latest&limit=12'), // 初始只加载12条（1页），减少数据传输
-          fetch(`/api/public/list?type=hot&limit=6&_t=${timestamp}`),
-          fetch('/api/public/topics'),
-          fetch("/api/auth/me")
-        ]);
+      const timestamp = Date.now();
 
-        // 处理最新播客
-        if (latestRes.status === 'fulfilled') {
+      setLoading(prev => ({ ...prev, latest: true, hot: true }));
+
+      const [latestRes, hotRes, topicsRes] = await Promise.allSettled([
+        fetchWithTimeout(`/api/public/list?type=latest&limit=${LATEST_INITIAL_LIMIT}`),
+        fetchWithTimeout(`/api/public/list?type=hot&limit=15&_t=${timestamp}`),
+        fetchWithTimeout('/api/public/topics')
+      ]);
+
+      // 最新
+      if (latestRes.status === 'fulfilled') {
+        try {
           if (latestRes.value.ok) {
             const data = await latestRes.value.json();
-            console.log('[首页] 最新播客数据:', data.items?.length || 0, '条');
-            setLatest(data.items || []);
+            const items = data.items || [];
+            setLatest(items);
+            // 确保初始显示数量为9（如果数据足够）
+            const initialCount = items.length >= LATEST_INITIAL_LIMIT ? LATEST_INITIAL_LIMIT : items.length;
+            setLatestDisplayCount(initialCount);
+            setLatestHasMore(data.pagination?.hasNext || items.length >= LATEST_INITIAL_LIMIT);
+            // 背景预加载更多数据
+            prefetchLatest();
           } else {
             const errorText = await latestRes.value.text();
             console.error('[首页] 获取最新播客失败:', latestRes.value.status, errorText);
             setLatest([]);
+            setLatestHasMore(false);
           }
-        } else {
-          console.error('[首页] 获取最新播客请求失败:', latestRes.reason);
+        } catch (error) {
+          console.error('[首页] 解析最新播客失败:', error);
           setLatest([]);
+          setLatestHasMore(false);
         }
+      } else {
+        console.error('[首页] 最新播客请求失败:', latestRes.reason);
+        setLatest([]);
+        setLatestHasMore(false);
+      }
+      setLoading(prev => ({ ...prev, latest: false }));
 
-        // 处理热门播客
-        if (hotRes.status === 'fulfilled' && hotRes.value.ok) {
-          const data = await hotRes.value.json();
-          setHot(data.items || []);
-        }
-
-        // 处理主题
-        if (topicsRes.status === 'fulfilled' && topicsRes.value.ok) {
-          const data = await topicsRes.value.json();
-          if (data.success) {
-            setTopics(data.topics);
+      // 最热
+      if (hotRes.status === 'fulfilled') {
+        try {
+          if (hotRes.value.ok) {
+            const data = await hotRes.value.json();
+            const items = data.items || [];
+            setHot(items);
+            const defaultCount = items.length === 0 ? 0 : Math.min(9, items.length);
+            setHotDisplayCount(defaultCount);
+            setHotHasMore(data.pagination?.hasNext || items.length >= 15);
+            setHotMode('30d');
+          } else {
+            const errorText = await hotRes.value.text();
+            console.error('[首页] 获取热门播客失败:', hotRes.value.status, errorText);
+            setHot([]);
+            setHotHasMore(false);
+            setHotDisplayCount(0);
           }
+        } catch (error) {
+          console.error('[首页] 解析热门播客失败:', error);
+          setHot([]);
+          setHotHasMore(false);
+          setHotDisplayCount(0);
         }
+      } else {
+        console.error('[首页] 获取热门播客请求失败:', hotRes.reason);
+        setHot([]);
+        setHotHasMore(false);
+        setHotDisplayCount(0);
+      }
+      setLoading(prev => ({ ...prev, hot: false }));
 
-        // 用户状态由useUser hook管理，这里不需要处理
-      } catch (error) {
-        console.error('Failed to load initial data:', error);
+      // 主题
+      if (topicsRes.status === 'fulfilled') {
+        try {
+          if (topicsRes.value.ok) {
+            const data = await topicsRes.value.json();
+            if (data.success) {
+              setTopics(data.topics);
+            }
+          }
+        } catch (error) {
+          console.error('解析主题失败:', error);
+        }
+      } else {
+        console.error('加载主题失败:', topicsRes.reason);
       }
     };
 
-    loadInitialData();
+    loadInitialData().catch((error) => {
+      console.error('加载首页初始数据失败:', error);
+      setLatest([]);
+      setHot([]);
+      setLatestHasMore(false);
+      setHotHasMore(false);
+    });
   }, []);
+
+  useEffect(() => {
+    const loadSummary = async () => {
+      try {
+        const res = await fetch('/api/public/summary', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        setCatalogSummary({
+          totalPodcasts: data.totalPodcasts ?? 0,
+          totalMinutes: data.totalDurationMinutes ?? Math.round((data.totalDurationSeconds ?? 0) / 60),
+        });
+      } catch (error) {
+        console.error('加载目录摘要失败:', error);
+      }
+    };
+    loadSummary();
+  }, []);
+
+  useEffect(() => {
+    if (!catalogSummary) return;
+    const targetPodcasts = catalogSummary.totalPodcasts;
+    const targetHours = Math.max(0, Math.round((catalogSummary.totalMinutes ?? 0) / 60));
+    const duration = 1500;
+    const start = performance.now();
+
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const tick = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = easeOutCubic(progress);
+      setSummaryDisplay({
+        podcasts: Math.round(targetPodcasts * eased),
+        hours: Math.round(targetHours * eased),
+      });
+      if (progress < 1) {
+        requestAnimationFrame(tick);
+      }
+    };
+
+    requestAnimationFrame(tick);
+  }, [catalogSummary]);
 
   useEffect(() => {
     if (!user) {
@@ -146,20 +339,36 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab === 'liked' && user && likedItems.length === 0 && !likedLoading) {
+      // 初始加载时，加载9个（如果少于9个就显示所有）
       fetchLikedPodcasts(1);
+      setLikedDisplayCount(9); // 重置为9
     }
   }, [activeTab, user, likedItems.length, likedLoading]);
+
+  useEffect(() => {
+    // 当likedItems更新时，设置初始显示数量
+    if (likedItems.length > 0) {
+      // 如果当前显示数量是初始值9，且实际数据少于9个，显示所有
+      if (likedDisplayCount === 9 && likedItems.length < 9) {
+        setLikedDisplayCount(likedItems.length);
+      }
+      // 如果显示数量超过了实际数据量，调整到实际数据量
+      else if (likedDisplayCount > likedItems.length && !likedHasMore) {
+        // 只有在没有更多数据时才调整到实际数据量
+        setLikedDisplayCount(likedItems.length);
+      }
+    }
+  }, [likedItems.length, likedDisplayCount, likedHasMore]);
 
   const loadLatest = async () => {
     setLoading(prev => ({ ...prev, latest: true }));
     try {
-      const res = await fetch('/api/public/list?type=latest&limit=100'); // 加载更多，用于分页显示
-      const data: ListResult = await res.json();
-      setLatest(data.items || []);
-      setLatestDisplayCount(12); // 重置显示数量为12
+      await prefetchLatest(LATEST_PREFETCH_LIMIT, { resetDisplay: true, force: true });
     } catch (error) {
       console.error('Failed to load latest:', error);
       setLatest([]);
+      setLatestHasMore(false);
+      setLatestDisplayCount(0);
     } finally {
       setLoading(prev => ({ ...prev, latest: false }));
     }
@@ -167,27 +376,41 @@ export default function HomePage() {
 
   const handleLoadMoreLatest = async () => {
     const currentCount = latestDisplayCount;
-    const nextCount = currentCount + 12;
+    const nextCount = Math.min(currentCount + 6, MAX_DISPLAY_COUNT); // 每次加载6个，但不超过上限
+    
+    // 如果已达到上限，不再加载
+    if (nextCount >= MAX_DISPLAY_COUNT && currentCount >= MAX_DISPLAY_COUNT) {
+      return;
+    }
     
     // 如果需要的数量超过当前加载的数量，先加载更多数据
-    if (nextCount > latest.length && latest.length < 100) {
+    if (nextCount > latest.length) {
       try {
-        const res = await fetch(`/api/public/list?type=latest&limit=100`);
-        const data: ListResult = await res.json();
-        setLatest(data.items || []);
-        setLatestDisplayCount(nextCount);
+        const updatedItems = await prefetchLatest(Math.max(LATEST_PREFETCH_LIMIT, nextCount));
+        const available = updatedItems?.length ?? latest.length;
+        if (available >= nextCount) {
+          setLatestDisplayCount(nextCount);
+        } else if (available > latestDisplayCount) {
+          setLatestDisplayCount(Math.min(available, MAX_DISPLAY_COUNT));
+        }
       } catch (error) {
         console.error('Failed to load more latest:', error);
-        // 即使加载失败，也尝试显示更多
-        setLatestDisplayCount(nextCount);
+        if (latest.length >= nextCount) {
+          setLatestDisplayCount(nextCount);
+        }
       }
     } else {
       setLatestDisplayCount(nextCount);
+      // 如果已达到上限，隐藏More按钮
+      if (nextCount >= MAX_DISPLAY_COUNT) {
+        setLatestHasMore(false);
+      }
     }
   };
 
-  const handleLoadLessLatest = () => {
-    setLatestDisplayCount(12);
+  const handleHotModeToggle = (mode: '30d' | 'all') => {
+    if (mode === hotMode) return;
+    loadHot(mode);
   };
 
   const normalizeLikedItem = (item: any, index: number): PodcastItem => {
@@ -225,8 +448,10 @@ export default function HomePage() {
     if (!user) return;
     setLikedLoading(true);
     try {
-      const offset = (page - 1) * LIKED_PAGE_SIZE;
-      const res = await fetch(`/api/podcast/liked?limit=${LIKED_PAGE_SIZE}&offset=${offset}`, { cache: 'no-store' });
+      // 第一页加载9个，后续每页加载6个
+      const limit = page === 1 ? 9 : LIKED_PAGE_SIZE;
+      const offset = page === 1 ? 0 : 9 + (page - 2) * LIKED_PAGE_SIZE;
+      const res = await fetch(`/api/podcast/liked?limit=${limit}&offset=${offset}`, { cache: 'no-store' });
       if (!res.ok) {
         if (res.status === 401) {
           toast.error('请登录后查看点赞播客');
@@ -238,7 +463,7 @@ export default function HomePage() {
       }
       const data = await res.json();
       const normalized = (data.items ?? []).map((item: any, index: number) =>
-        normalizeLikedItem(item, (page - 1) * LIKED_PAGE_SIZE + index)
+        normalizeLikedItem(item, offset + index)
       );
       setLikedItems((prev) => page === 1 ? normalized : [...prev, ...normalized]);
       setLikedHasMore(data.pagination?.hasNext ?? false);
@@ -251,9 +476,20 @@ export default function HomePage() {
     }
   };
 
-  const handleLoadMoreLiked = () => {
+  const handleLoadMoreLiked = async () => {
+    // 如果已达到上限，不再加载
+    if (likedDisplayCount >= MAX_DISPLAY_COUNT) {
+      return;
+    }
+    
     if (likedHasMore && !likedLoading) {
-      fetchLikedPodcasts(likedPage + 1);
+      // 先加载更多数据
+      await fetchLikedPodcasts(likedPage + 1);
+      // 然后增加显示数量（每次6个），但不超过上限
+      setLikedDisplayCount(prev => Math.min(prev + 6, MAX_DISPLAY_COUNT));
+    } else if (!likedHasMore && likedDisplayCount < likedItems.length) {
+      // 如果没有更多数据可加载，但还有未显示的数据，直接增加显示数量
+      setLikedDisplayCount(prev => Math.min(prev + 6, Math.min(likedItems.length, MAX_DISPLAY_COUNT)));
     }
   };
 
@@ -288,26 +524,108 @@ export default function HomePage() {
               <PodcastCard key={item.id} item={item} />
             ))}
           </div>
-          {(latestDisplayCount < latest.length || latestDisplayCount > 12) && (
+          {((latestDisplayCount < latest.length || latestHasMore) || latestDisplayCount > 9) && (
             <div className="mt-6 flex justify-center gap-3">
-              {latestDisplayCount < latest.length && (
+              {(latestDisplayCount < latest.length || latestHasMore) && latestDisplayCount < MAX_DISPLAY_COUNT && (
                 <button
                   onClick={handleLoadMoreLatest}
-                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm"
+                  disabled={loading.latest}
+                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  More
+                  {loading.latest ? 'Loading...' : 'More'}
                 </button>
               )}
-              {latestDisplayCount > 12 && (
+              {latestDisplayCount > 9 && (
                 <button
-                  onClick={handleLoadLessLatest}
-                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm"
+                  onClick={() => setLatestDisplayCount(9)}
+                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm"
                 >
                   Less
                 </button>
               )}
             </div>
           )}
+          {latestDisplayCount >= MAX_DISPLAY_COUNT && (
+            <div className="mt-4 text-center text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-500 text-sm font-mono">
+              已显示最多 {MAX_DISPLAY_COUNT} 个播客
+            </div>
+          )}
+          
+          {/* 所有播客按钮 - 只在New tab显示，位置更靠下 */}
+          <div className="mt-12">
+            <button
+              onClick={handleShowAllPodcasts}
+              className="w-full py-3 px-4 bg-black/40 dark:bg-black/40 [data-theme='light']:bg-gray-300 backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-gray-400 hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-gray-500 hover:bg-black/60 dark:hover:bg-black/60 [data-theme='light']:hover:bg-gray-400 text-white dark:text-white [data-theme='light']:text-gray-800 rounded-2xl transition-all flex items-center justify-center gap-2 font-mono text-sm"
+            >
+              <span>{showAllPodcasts ? '收起' : '所有播客'}</span>
+              <svg 
+                className={`w-4 h-4 transition-transform ${showAllPodcasts ? 'rotate-180' : ''}`}
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showAllPodcasts && (
+              <div className="mt-4 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm p-6">
+                <h2 className="text-2xl font-bold mb-6 text-white dark:text-white [data-theme='light']:text-foreground">所有播客</h2>
+                
+                {/* 主题筛选器 */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-sm font-medium text-gray-400 font-mono">按主题筛选：</span>
+                    <select
+                      value={selectedTopic}
+                      onChange={(e) => handleTopicChange(e.target.value)}
+                      className="px-3 py-1.5 text-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 rounded-lg bg-black/40 dark:bg-black/40 [data-theme='light']:bg-[#faf9f6] text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/20 dark:focus:border-white/20 [data-theme='light']:focus:border-slate-300 font-mono"
+                    >
+                      <option value="">全部主题</option>
+                      {topics.map((topic) => (
+                        <option key={topic.id} value={topic.name}>
+                          {topic.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {loading.allPodcasts ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="animate-pulse">
+                        <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : allPodcasts.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+                      {allPodcasts.map((item) => (
+                        <PodcastCard key={item.id} item={item} />
+                      ))}
+                    </div>
+                    {allPodcastsTotal > allPodcasts.length && (
+                      <div className="mt-6 flex justify-center">
+                        <button
+                          onClick={() => loadAllPodcasts(allPodcastsPage + 1, selectedTopic)}
+                          disabled={loading.allPodcasts}
+                          className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {loading.allPodcasts ? 'Loading...' : '加载更多'}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center text-gray-500 dark:text-gray-500 [data-theme='light']:text-slate-500 py-12 font-mono text-sm">
+                    暂无播客
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </>
       ) : (
         <div className="text-center text-gray-500 dark:text-gray-500 [data-theme='light']:text-slate-500 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
@@ -318,33 +636,90 @@ export default function HomePage() {
   );
 
   const renderTopSection = () => (
-    <div className="relative mt-12 pt-8 border-t border-white/5">
+    <div className="relative">
       <div className="absolute inset-0 -z-10 flex items-center justify-center pointer-events-none">
         <div className="w-full h-full bg-gradient-radial from-[#ff6a00]/10 via-[#ff9f43]/5 to-transparent blur-3xl"></div>
       </div>
 
-      <div className="relative z-10 flex items-center gap-3 mb-6">
-        <svg className="w-5 h-5 text-[#ff9f43]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-        <h2 className="text-xl font-bold text-white dark:text-white [data-theme='light']:text-foreground font-mono">Top</h2>
+      <div className="relative z-10 flex flex-wrap items-center gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <svg className="w-5 h-5 text-[#ff9f43]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <h2 className="text-xl font-bold text-white dark:text-white [data-theme='light']:text-foreground font-mono">Top</h2>
+        </div>
         <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleHotModeToggle('30d')}
+            className={`px-3 py-1 rounded-md text-xs font-mono transition-all ${
+              hotMode === '30d'
+                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-white'
+                : 'bg-transparent border border-white/10 text-white/70 hover:border-white/30'
+            }`}
+          >
+            近30天
+          </button>
+          <button
+            onClick={() => handleHotModeToggle('all')}
+            className={`px-3 py-1 rounded-md text-xs font-mono transition-all ${
+              hotMode === 'all'
+                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-white'
+                : 'bg-transparent border border-white/10 text-white/70 hover:border-white/30'
+            }`}
+          >
+            全量Top 10
+          </button>
+        </div>
       </div>
 
       {loading.hot ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
+          {[...Array(9)].map((_, i) => (
             <div key={i} className="animate-pulse">
               <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
             </div>
           ))}
         </div>
       ) : hot.length > 0 ? (
-        <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-          {hot.map((item, index) => (
-            <PodcastCard key={item.id} item={item} rank={index + 1} />
-          ))}
-        </div>
+        <>
+          {hotMode === 'all' && (
+            <div className="mb-4 text-sm font-mono text-white/70 dark:text-white/70 [data-theme='light']:text-slate-600">
+              展示全量点赞榜前 10 名
+            </div>
+          )}
+          <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+            {hot.slice(0, hotDisplayCount).map((item, index) => (
+              <PodcastCard key={item.id} item={item} rank={index + 1} />
+            ))}
+          </div>
+          {hotMode === '30d' && ((hotDisplayCount < hot.length || hotHasMore) || hotDisplayCount > 9) && (
+            <div className="mt-6 flex justify-center gap-3">
+              {(hotDisplayCount < hot.length || hotHasMore) && hotDisplayCount < MAX_DISPLAY_COUNT && (
+                <button
+                  onClick={handleLoadMoreHot}
+                  disabled={loading.hot}
+                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading.hot ? 'Loading...' : 'More'}
+                </button>
+              )}
+              {hotDisplayCount > 9 && (
+                <button
+                  onClick={() => setHotDisplayCount(9)}
+                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm"
+                >
+                  Less
+                </button>
+              )}
+            </div>
+          )}
+          {hotDisplayCount >= MAX_DISPLAY_COUNT && (
+            <div className="mt-4 text-center text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-500 text-sm font-mono">
+              已显示最多 {MAX_DISPLAY_COUNT} 个播客
+            </div>
+          )}
+        </>
       ) : (
         <div className="text-center text-gray-500 dark:text-gray-500 [data-theme='light']:text-slate-500 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
           Loading…
@@ -398,7 +773,7 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-          {likedItems.map((item: any, index: number) => {
+          {likedItems.slice(0, likedDisplayCount).map((item: any, index: number) => {
             const podcast = normalizeLikedItem(item, index);
             return (
               <div key={podcast.id} className="relative h-full">
@@ -408,34 +783,105 @@ export default function HomePage() {
           })}
         </div>
 
-        {likedHasMore && (
-          <div className="mt-6 flex justify-center">
-            <button
-              onClick={handleLoadMoreLiked}
-              disabled={likedLoading}
-              className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {likedLoading ? 'Loading...' : 'More'}
-            </button>
+        {((likedHasMore || likedDisplayCount < likedItems.length) || likedDisplayCount > 9) && (
+          <div className="mt-6 flex justify-center gap-3">
+            {(likedHasMore || likedDisplayCount < likedItems.length) && likedDisplayCount < MAX_DISPLAY_COUNT && (
+              <button
+                onClick={handleLoadMoreLiked}
+                disabled={likedLoading}
+                className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {likedLoading ? 'Loading...' : 'More'}
+              </button>
+            )}
+            {likedDisplayCount > 9 && (
+              <button
+                onClick={() => setLikedDisplayCount(Math.min(9, likedItems.length))}
+                className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm"
+              >
+                Less
+              </button>
+            )}
+          </div>
+        )}
+        {likedDisplayCount >= MAX_DISPLAY_COUNT && (
+          <div className="mt-4 text-center text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-500 text-sm font-mono">
+            已显示最多 {MAX_DISPLAY_COUNT} 个播客
           </div>
         )}
       </div>
     );
   };
 
-  const loadHot = async () => {
+  const loadHot = async (mode: '30d' | 'all' = '30d') => {
+    const limit = mode === 'all' ? 10 : 15;
+    const typeParam = mode === 'all' ? 'hot_all' : 'hot';
     setLoading(prev => ({ ...prev, hot: true }));
     try {
-      // 添加时间戳参数，避免浏览器缓存
-      const res = await fetch(`/api/public/list?type=hot&limit=6&_t=${Date.now()}`);
+      const res = await fetch(`/api/public/list?type=${typeParam}&limit=${limit}&_t=${Date.now()}`);
       const data: ListResult = await res.json();
-      console.log('[首页] 最热播客数据:', data.items?.length || 0, '条', data.items?.map(i => ({ title: i.title.substring(0, 30), likeCount: i.likeCount })));
-      setHot(data.items || []);
+      const items = data.items || [];
+      console.log('[首页] 最热播客数据:', items.length, '条', mode);
+      setHot(items);
+      setHotMode(mode);
+      if (mode === 'all') {
+        setHotDisplayCount(items.length);
+        setHotHasMore(false);
+      } else {
+        const defaultCount = items.length === 0 ? 0 : Math.min(9, items.length);
+        setHotDisplayCount(defaultCount);
+        setHotHasMore(data.pagination?.hasNext || items.length >= limit);
+      }
     } catch (error) {
       console.error('Failed to load hot:', error);
       setHot([]);
+      if (mode === '30d') {
+        setHotHasMore(false);
+      }
     } finally {
       setLoading(prev => ({ ...prev, hot: false }));
+    }
+  };
+
+  const handleLoadMoreHot = async () => {
+    const currentCount = hotDisplayCount;
+    const nextCount = Math.min(currentCount + 6, MAX_DISPLAY_COUNT); // 每次加载6个，但不超过上限
+    
+    // 如果已达到上限，不再加载
+    if (nextCount >= MAX_DISPLAY_COUNT && currentCount >= MAX_DISPLAY_COUNT) {
+      return;
+    }
+    
+    // 如果需要的数量超过当前加载的数量，先加载更多数据
+    if (hotMode === 'all') {
+      return;
+    }
+    if (nextCount > hot.length) {
+      try {
+        // 优化：只加载需要的数据量，避免加载过多
+        const loadCount = Math.min(nextCount, MAX_DISPLAY_COUNT);
+        setLoading(prev => ({ ...prev, hot: true }));
+        const res = await fetch(`/api/public/list?type=hot&limit=${loadCount}&_t=${Date.now()}`);
+        const data: ListResult = await res.json();
+        setHot(data.items || []);
+        setHotDisplayCount(nextCount);
+        // 更新是否有更多数据（如果已达到上限，则不再显示More按钮）
+        setHotHasMore(nextCount < MAX_DISPLAY_COUNT && (data.pagination?.hasNext || (data.items?.length || 0) >= loadCount));
+      } catch (error) {
+        console.error('Failed to load more hot:', error);
+        // 即使加载失败，也尝试显示更多（如果已有数据）
+        if (hot.length >= nextCount) {
+          setHotDisplayCount(nextCount);
+        }
+      } finally {
+        setLoading(prev => ({ ...prev, hot: false }));
+      }
+    } else {
+      setHotDisplayCount(nextCount);
+      // 如果已达到上限，隐藏More按钮
+      if (nextCount >= MAX_DISPLAY_COUNT) {
+        setHotHasMore(false);
+      }
     }
   };
 
@@ -443,7 +889,7 @@ export default function HomePage() {
   const loadAllPodcasts = async (page = 1, topic = '') => {
     setLoading(prev => ({ ...prev, allPodcasts: true }));
     try {
-      let url = `/api/public/list?type=latest&limit=10&page=${page}`;
+      let url = `/api/public/list?type=latest&limit=10&page=${page}&includeSummary=true`;
       if (topic) {
         url += `&topic=${encodeURIComponent(topic)}`;
       }
@@ -525,6 +971,23 @@ export default function HomePage() {
   };
 
   const handleProcessPodcast = async (url: string) => {
+    // 检查用户权限
+    if (!user) {
+      toast.error('请先登录', '请先登录后再处理播客', {
+        action: {
+          label: '去登录',
+          onClick: () => window.location.href = '/login'
+        }
+      });
+      return;
+    }
+
+    // 检查是否为 Reader，如果是则弹出升级提示
+    if (user.role === 'READER') {
+      setShowUpgradeModal(true);
+      return;
+    }
+
     // 检查是否已经在处理这个URL
     const existing = localStorage.getItem('processingPodcasts');
     const items = existing ? JSON.parse(existing) : [];
@@ -744,8 +1207,10 @@ export default function HomePage() {
       pollCount++;
       try {
         console.log(`📡 轮询任务状态 (第${pollCount}次): ${taskId}`);
+        // 增加超时时间到30秒，因为长时间音频处理可能需要更长时间
+        // 特别是对于22+分段的音频，服务器端处理时间可能较长
         const res = await fetch(`/api/task-status?taskId=${taskId}`, {
-          signal: AbortSignal.timeout(10000) // 10秒超时
+          signal: AbortSignal.timeout(30000) // 30秒超时（从10秒增加到30秒）
         });
         
         if (!res.ok) {
@@ -976,10 +1441,12 @@ export default function HomePage() {
           taskId
         });
         
-        // 如果是超时错误，给更多重试机会
-        if (errorName === 'AbortError' || errorMessage.includes('timeout') || errorMessage.includes('超时')) {
-          console.warn('⏱️ 请求超时，继续重试...');
-          if (consecutiveErrors >= maxConsecutiveErrors * 2) {
+        // 如果是超时错误，给更多重试机会（特别是对于长时间音频处理）
+        // 超时错误可能是网络问题或服务器处理时间过长，不应该立即标记为失败
+        if (errorName === 'AbortError' || errorName === 'TimeoutError' || errorMessage.includes('timeout') || errorMessage.includes('超时') || errorMessage.includes('timed out')) {
+          console.warn('⏱️ 请求超时，继续重试...（这可能是网络问题或服务器处理时间较长）');
+          // 对于超时错误，给更多重试机会（从2倍增加到3倍）
+          if (consecutiveErrors >= maxConsecutiveErrors * 3) {
             clearInterval(pollInterval);
             
             // 在标记为失败之前，先尝试通过URL搜索播客，看看是否已经成功保存
@@ -1219,13 +1686,13 @@ export default function HomePage() {
     <div className="min-h-screen bg-black dark:bg-black [data-theme='light']:bg-background">
       <main className="container mx-auto px-4 py-8">
         {/* Hero Section - 搜索区域 */}
-        <div className="relative w-full mt-24 px-6 overflow-visible mb-16">
+        <div className="relative w-full mt-16 px-6 overflow-visible mb-10">
           {/* === Aurora Glow Backgrounds === */}
           {/* Left Glow: White/Silver (Input) */}
-          <div className="hidden md:block absolute top-1/2 -translate-y-1/2 left-[5%] w-[300px] h-[300px] bg-white rounded-full blur-[120px] opacity-10 animate-pulse-slow pointer-events-none -z-10"></div>
+          <div className="hidden md:block absolute top-3/5 -translate-y-1/2 left-0 w-[300px] h-[300px] bg-white rounded-full blur-[120px] opacity-24 animate-pulse-slow pointer-events-none -z-10" style={{ transform: 'translate(-30%, -50%)' }}></div>
           
-          {/* Right Glow: Orange (Output) - with delay */}
-          <div className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[5%] w-[300px] h-[300px] bg-[#ff6a00] rounded-full blur-[120px] opacity-30 animate-pulse-slow pointer-events-none -z-10" style={{ animationDelay: '2s' }}></div>
+          {/* Right Glow: Orange (Output) - with fade-in and delay, reduced opacity for smoother appearance */}
+          <div className="hidden md:block absolute top-3/5 -translate-y-1/2 right-0 w-[300px] h-[300px] bg-[#ff6a00] rounded-full blur-[120px] opacity-0 pointer-events-none -z-10 animate-fade-in-glow animate-pulse-slow" style={{ transform: 'translate(30%, -50%)', animationDelay: '1.5s, 3.5s', animationFillMode: 'forwards' }}></div>
 
           {/* === Main Content === */}
           <div className="relative mx-auto max-w-4xl text-center z-10">
@@ -1239,7 +1706,7 @@ export default function HomePage() {
             </h1>
             
             {/* Search Bar */}
-            <div className="relative z-10 group flex items-center rounded-xl bg-black/60 dark:bg-black/60 [data-theme='light']:bg-white/85 p-2 ring-1 ring-white/10 dark:ring-white/10 [data-theme='light']:ring-slate-200 transition-all focus-within:ring-[#ff8c32]/60 focus-within:shadow-[0_0_60px_-15px_rgba(255,140,50,0.4)] backdrop-blur-2xl">
+            <div className="relative z-10 group flex items-center rounded-xl bg-black/60 dark:bg-black/60 [data-theme='light']:bg-[#faf9f6]/90 p-2 ring-1 ring-white/10 dark:ring-white/10 [data-theme='light']:ring-slate-200 transition-all focus-within:ring-[#ff8c32]/60 focus-within:shadow-[0_0_60px_-15px_rgba(255,140,50,0.4)] backdrop-blur-2xl">
               <div className="flex h-12 w-12 items-center justify-center text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="11" cy="11" r="8"></circle>
@@ -1276,29 +1743,15 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 权益说明 - 仅对游客显示 */}
-          {!user && (
-            <div className="mt-4 p-4 bg-zinc-900/40 backdrop-blur-sm rounded-lg border border-white/10">
-              <div className="flex items-center justify-between text-xs text-gray-400 font-mono">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-gray-500 rounded-full"></span>
-                    游客：仅可搜索和浏览
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    用户：每天转录2个 + 评论互动
-                  </span>
-                </div>
-                <a 
-                  href="/register" 
-                  className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
-                >
-                  注册 →
-                </a>
+          {false && catalogSummary && (
+            <div className="absolute bottom-[-18px] right-[10%] text-right font-mono text-[12px] tracking-[0.2em] text-white/45">
+              <div className="uppercase">total catalog</div>
+              <div className="text-white/75 tracking-normal font-semibold text-[15px]">
+                {(catalogSummary?.totalPodcasts ?? 0).toLocaleString()} podcasts · {(catalogSummary?.totalMinutes ?? 0).toLocaleString()} min
               </div>
             </div>
           )}
+
 
           {/* 搜索结果 */}
           {searchResult && (
@@ -1381,131 +1834,47 @@ export default function HomePage() {
 
         {/* 播客网格区域 Tabs */}
         <div className="space-y-10">
-          <div className="flex items-center gap-3 border-b border-white/10 pb-4 flex-wrap">
-            {tabOptions.map((tab) => {
-              const isActive = activeTab === tab.id;
-              const disabled = tab.requiresAuth && !user;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => !disabled && setActiveTab(tab.id)}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-all ${
-                    isActive ? 'bg-white/10 text-white shadow-lg' : 'text-gray-500 hover:text-white'
-                  } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-3 border-b border-white/10 pb-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              {tabOptions.map((tab) => {
+                const isActive = activeTab === tab.id;
+                const disabled = tab.requiresAuth && !user;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => !disabled && setActiveTab(tab.id)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-all ${
+                      isActive ? 'bg-white/10 text-white shadow-lg' : 'text-gray-500 hover:text-white'
+                    } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    <span className="text-base sm:text-lg">{tab.icon}</span>
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {catalogSummary && (
+              <div className="ml-auto text-xs font-mono tabular-nums tracking-wider text-zinc-500 flex items-center gap-2">
+                <span>{summaryDisplay.podcasts.toLocaleString()} PODS</span>
+                <span className="text-white/30">|</span>
+                <span>{summaryDisplay.hours.toLocaleString()} HRS</span>
+              </div>
+            )}
           </div>
 
-          <div>
+          <div className="mt-6">
             {activeTab === 'new' && renderNewSection()}
             {activeTab === 'top' && renderTopSection()}
             {activeTab === 'liked' && renderLikedSection()}
           </div>
         </div>
 
-        {/* 所有播客展开区域 */}
-        <div className="mt-8">
-          <button
-            onClick={handleShowAllPodcasts}
-            className="w-full py-3 px-4 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all flex items-center justify-center gap-2 font-mono text-sm"
-          >
-            <span>{showAllPodcasts ? '收起' : '所有播客'}</span>
-            <svg 
-              className={`w-4 h-4 transition-transform ${showAllPodcasts ? 'rotate-180' : ''}`}
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {showAllPodcasts && (
-            <div className="mt-4 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm p-6">
-              <h2 className="text-2xl font-bold mb-6 text-white dark:text-white [data-theme='light']:text-foreground">所有播客</h2>
-              
-              {/* 主题筛选器 */}
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="text-sm font-medium text-gray-400 font-mono">按主题筛选：</span>
-                  <select
-                    value={selectedTopic}
-                    onChange={(e) => handleTopicChange(e.target.value)}
-                    className="px-3 py-1.5 text-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 rounded-lg bg-black/40 dark:bg-black/40 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/20 dark:focus:border-white/20 [data-theme='light']:focus:border-slate-300 font-mono"
-                  >
-                    <option value="">全部主题</option>
-                    {topics.map((topic) => (
-                      <option key={topic.id} value={topic.name}>
-                        {topic.name}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedTopic && (
-                    <button
-                      onClick={() => handleTopicChange('')}
-                      className="px-3 py-1.5 text-xs bg-zinc-800 text-gray-400 border border-white/10 rounded-lg hover:bg-zinc-700 transition-colors font-mono"
-                    >
-                      清除筛选
-                    </button>
-                  )}
-                </div>
-                {selectedTopic && (
-                  <div className="text-sm text-gray-400 font-mono">
-                    当前筛选：<span className="font-medium text-white dark:text-white [data-theme='light']:text-foreground">{selectedTopic}</span>
-                  </div>
-                )}
-              </div>
-              
-              {loading.allPodcasts ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[...Array(9)].map((_, i) => (
-                    <div key={i} className="animate-pulse">
-                      <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6 items-stretch">
-                    {allPodcasts.map((item) => (
-                      <PodcastCard key={item.id} item={item} />
-                    ))}
-                  </div>
-
-                  {/* 分页 */}
-                  {allPodcastsTotal > 10 && (
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm text-gray-400 font-mono">
-                        共 {allPodcastsTotal} 个播客，第 {allPodcastsPage} 页
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handlePageChange(allPodcastsPage - 1)}
-                          disabled={allPodcastsPage <= 1}
-                          className="px-3 py-1.5 text-sm bg-zinc-800 text-gray-400 border border-white/10 rounded-lg hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-mono"
-                        >
-                          上一页
-                        </button>
-                        <button
-                          onClick={() => handlePageChange(allPodcastsPage + 1)}
-                          disabled={allPodcastsPage * 10 >= allPodcastsTotal}
-                          className="px-3 py-1.5 text-sm bg-zinc-800 text-gray-400 border border-white/10 rounded-lg hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-mono"
-                        >
-                          下一页
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </div>
       </main>
+
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </div>
   );
 }

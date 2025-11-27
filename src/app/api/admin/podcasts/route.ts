@@ -1,217 +1,230 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
 import { requireUser } from '@/server/auth';
+import { getPodcastSummary } from '@/server/services/podcastSummary';
 
 // 获取播客列表
 export async function GET(req: NextRequest) {
-  try {
-    // 权限检查 - 如果用户未登录或不是管理员，返回空数据而不是错误
-    try {
-      const user = await requireUser();
-      if (user.role !== 'ADMIN') {
-        return NextResponse.json({ 
-          success: true, 
-          podcasts: [], 
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          stats: { total: 0 }
-        });
-      }
-    } catch (error) {
-      // 用户未登录，返回空数据
-      return NextResponse.json({ 
-        success: true, 
-        podcasts: [], 
-        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-        stats: { total: 0 }
-      });
-    }
+	try {
+		// 权限检查 - 如果用户未登录或不是管理员，返回空数据而不是错误
+		try {
+			const user = await requireUser();
+			if (user.role !== "ADMIN") {
+				return NextResponse.json({
+					success: true,
+					podcasts: [],
+					pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+					stats: { total: 0 },
+					summary: {
+						totalPodcasts: 0,
+						totalTasks: 0,
+						readyPodcasts: 0,
+						processingPodcasts: 0,
+						failedPodcasts: 0,
+						totalProcessingDurationMs: 0,
+					},
+				});
+			}
+		} catch (error) {
+			// 用户未登录，返回空数据
+			return NextResponse.json({
+				success: true,
+				podcasts: [],
+				pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+				stats: { total: 0 },
+				summary: {
+					totalPodcasts: 0,
+					totalTasks: 0,
+					readyPodcasts: 0,
+					processingPodcasts: 0,
+					failedPodcasts: 0,
+					totalProcessingDurationMs: 0,
+				},
+			});
+		}
 
-    const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const status = searchParams.get('status');
-    const search = searchParams.get('search');
+		const { searchParams } = new URL(req.url);
+		const page = parseInt(searchParams.get("page") || "1");
+		const limit = parseInt(searchParams.get("limit") || "20");
+		const status = searchParams.get("status");
+		const search = searchParams.get("search");
+		const refreshSummary = searchParams.get("refresh") === "1";
 
-    const skip = (page - 1) * limit;
+		const skip = (page - 1) * limit;
 
-    // 构建查询条件
-    const where: any = {};
-    if (status && status !== 'all') {
-      where.status = status;
-    }
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { showAuthor: { contains: search, mode: 'insensitive' } },
-        { sourceUrl: { contains: search, mode: 'insensitive' } }
-      ];
-    }
+		// 查询两个表并合并数据，同时获取任务总数用于统计
+		const [audioCacheData, podcastData, totalTaskCount] = await Promise.all([
+			db.audioCache.findMany({
+				select: {
+					id: true,
+					title: true,
+					author: true,
+					audioUrl: true,
+					duration: true,
+					createdAt: true,
+					updatedAt: true,
+					publishedAt: true,
+					topic: {
+						select: {
+							id: true,
+							name: true,
+							color: true,
+						},
+					},
+				},
+				orderBy: {
+					createdAt: "desc",
+				},
+			}),
+			db.podcast.findMany({
+				select: {
+					id: true,
+					title: true,
+					showAuthor: true,
+					sourceUrl: true,
+					duration: true,
+					createdAt: true,
+					processingStartedAt: true,
+					processingCompletedAt: true,
+					publishedAt: true,
+					status: true,
+					topic: {
+						select: {
+							id: true,
+							name: true,
+							color: true,
+						},
+					},
+					createdBy: {
+						select: {
+							id: true,
+							username: true,
+						},
+					},
+				},
+				orderBy: {
+					createdAt: "desc",
+				},
+			}),
+			db.taskQueue.count(),
+		]);
 
-    // 查询两个表并合并数据
-    const [audioCacheData, podcastData] = await Promise.all([
-      db.audioCache.findMany({
-        select: {
-          id: true,
-          title: true,
-          author: true,
-          audioUrl: true,
-          duration: true,
-          createdAt: true,
-          updatedAt: true,
-          publishedAt: true,
-          topic: {
-            select: {
-              id: true,
-              name: true,
-              color: true
-            }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      }),
-      db.podcast.findMany({
-        select: {
-          id: true,
-          title: true,
-          showAuthor: true,
-          sourceUrl: true,
-          duration: true,
-          createdAt: true,
-          processingCompletedAt: true,
-          publishedAt: true,
-          status: true,
-          topic: {
-            select: {
-              id: true,
-              name: true,
-              color: true
-            }
-          },
-          createdBy: {
-            select: {
-              id: true,
-              username: true
-            }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      })
-    ]);
+		// 合并数据，优先使用Podcast表的数据
+		const mergedData = new Map();
 
-    // 合并数据，优先使用Podcast表的数据
-    const mergedData = new Map();
-    
-    // 先添加Podcast数据（主要数据源）
-    podcastData.forEach(podcast => {
-      mergedData.set(podcast.id, {
-        id: podcast.id,
-        title: podcast.title,
-        showAuthor: podcast.showAuthor,
-        sourceUrl: podcast.sourceUrl,
-        status: podcast.status,
-        publishedAt: podcast.publishedAt,
-        duration: podcast.duration,
-        createdAt: podcast.createdAt,
-        processingStartedAt: podcast.createdAt,
-        processingCompletedAt: podcast.processingCompletedAt,
-        topic: podcast.topic, // Podcast表的topic是主要数据源
-        createdBy: podcast.createdBy,
-        source: 'podcast'
-      });
-    });
-    
-    // 用AudioCache数据补充（只补充Podcast表中没有的字段）
-    audioCacheData.forEach(cache => {
-      if (mergedData.has(cache.id)) {
-        // 如果Podcast表中已有，只补充缺失的字段，但topic优先使用Podcast的
-        const existing = mergedData.get(cache.id);
-        mergedData.set(cache.id, {
-          ...existing,
-          // 如果Podcast表中没有某些字段，使用AudioCache的
-          title: existing.title || cache.title,
-          showAuthor: existing.showAuthor || cache.author,
-          sourceUrl: existing.sourceUrl || cache.audioUrl,
-          publishedAt: existing.publishedAt || cache.publishedAt,
-          duration: existing.duration || cache.duration,
-          // topic始终优先使用Podcast表的（如果Podcast有topic，就用Podcast的；否则用AudioCache的）
-          topic: existing.topic || cache.topic,
-          source: 'both'
-        });
-      } else {
-        // 如果Podcast表中没有，添加AudioCache数据
-        mergedData.set(cache.id, {
-          id: cache.id,
-          title: cache.title,
-          showAuthor: cache.author,
-          sourceUrl: cache.audioUrl,
-          status: 'READY' as const,
-          publishedAt: cache.publishedAt,
-          duration: cache.duration,
-          createdAt: cache.createdAt,
-          processingStartedAt: cache.createdAt,
-          processingCompletedAt: cache.updatedAt,
-          topic: cache.topic,
-          source: 'audioCache'
-        });
-      }
-    });
+		// 先添加Podcast数据（主要数据源）
+		podcastData.forEach((podcast) => {
+			mergedData.set(podcast.id, {
+				id: podcast.id,
+				title: podcast.title,
+				showAuthor: podcast.showAuthor,
+				sourceUrl: podcast.sourceUrl,
+				status: podcast.status,
+				publishedAt: podcast.publishedAt,
+				duration: podcast.duration,
+				createdAt: podcast.createdAt,
+				processingStartedAt: podcast.processingStartedAt,
+				processingCompletedAt: podcast.processingCompletedAt,
+				topic: podcast.topic, // Podcast表的topic是主要数据源
+				createdBy: podcast.createdBy,
+				source: "podcast",
+			});
+		});
 
-    // 转换为数组并应用搜索过滤
-    let podcasts = Array.from(mergedData.values());
-    
-    if (search) {
-      podcasts = podcasts.filter(p => 
-        (p.title && p.title.toLowerCase().includes(search.toLowerCase())) ||
-        (p.showAuthor && p.showAuthor.toLowerCase().includes(search.toLowerCase())) ||
-        (p.sourceUrl && p.sourceUrl.toLowerCase().includes(search.toLowerCase()))
-      );
-    }
-    
-    if (status && status !== 'all') {
-      podcasts = podcasts.filter(p => p.status === status);
-    }
+		// 用AudioCache数据补充（只补充Podcast表中没有的字段）
+		audioCacheData.forEach((cache) => {
+			if (mergedData.has(cache.id)) {
+				// 如果Podcast表中已有，只补充缺失的字段，但topic优先使用Podcast的
+				const existing = mergedData.get(cache.id);
+				mergedData.set(cache.id, {
+					...existing,
+					// 如果Podcast表中没有某些字段，使用AudioCache的
+					title: existing.title || cache.title,
+					showAuthor: existing.showAuthor || cache.author,
+					sourceUrl: existing.sourceUrl || cache.audioUrl,
+					publishedAt: existing.publishedAt || cache.publishedAt,
+					duration: existing.duration || cache.duration,
+					// topic始终优先使用Podcast表的（如果Podcast有topic，就用Podcast的；否则用AudioCache的）
+					topic: existing.topic || cache.topic,
+					source: "both",
+				});
+			} else {
+				// 如果Podcast表中没有，添加AudioCache数据
+				mergedData.set(cache.id, {
+					id: cache.id,
+					title: cache.title,
+					showAuthor: cache.author,
+									sourceUrl: cache.audioUrl,
+					status: "READY" as const,
+					publishedAt: cache.publishedAt,
+					duration: cache.duration,
+					createdAt: cache.createdAt,
+					processingStartedAt: cache.createdAt,
+					processingCompletedAt: cache.updatedAt,
+					topic: cache.topic,
+					source: "audioCache",
+				});
+			}
+		});
 
-    // 应用分页
-    const total = podcasts.length;
-    podcasts = podcasts.slice(skip, skip + limit);
+		// 转换为数组并应用搜索过滤
+		let podcasts = Array.from(mergedData.values());
+		if (search) {
+			podcasts = podcasts.filter(
+				(p) =>
+					(p.title && p.title.toLowerCase().includes(search.toLowerCase())) ||
+					(p.showAuthor && p.showAuthor.toLowerCase().includes(search.toLowerCase())) ||
+					(p.sourceUrl && p.sourceUrl.toLowerCase().includes(search.toLowerCase()))
+			);
+		}
 
-    // 确保标题和作者不为空
-    podcasts = podcasts.map(p => ({
-      ...p,
-      title: p.title || '未知标题',
-      showAuthor: p.showAuthor || '未知作者'
-    }));
+		if (status && status !== "all") {
+			podcasts = podcasts.filter((p) => p.status === status);
+		}
 
-    // 统计信息
-    const statusCounts = {
-      READY: podcasts.filter(p => p.status === 'READY').length,
-      PROCESSING: podcasts.filter(p => p.status === 'PROCESSING').length,
-      FAILED: podcasts.filter(p => p.status === 'FAILED').length,
-      total: total
-    };
+		// 当前筛选结果统计
+		const filteredStatusCounts = podcasts.reduce(
+			(acc, p) => {
+				if (p.status === "READY") acc.READY += 1;
+				else if (p.status === "PROCESSING") acc.PROCESSING += 1;
+				else if (p.status === "FAILED") acc.FAILED += 1;
+				return acc;
+			},
+			{ READY: 0, PROCESSING: 0, FAILED: 0 }
+		);
 
-    return NextResponse.json({
-      success: true,
-      podcasts,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit)
-      },
-      stats: {
-        ...statusCounts
-      }
-    });
+		// 应用分页
+		const total = podcasts.length;
+		const paged = podcasts.slice(skip, skip + limit).map((p) => ({
+			...p,
+			title: p.title || "未知标题",
+			showAuthor: p.showAuthor || "未知作者",
+		}));
 
-  } catch (error) {
-    console.error('获取播客列表失败:', error);
-    return NextResponse.json({ success: false, error: '获取播客列表失败' }, { status: 500 });
-  }
+		const summary = await getPodcastSummary(refreshSummary);
+
+		return NextResponse.json({
+			success: true,
+			podcasts: paged,
+			pagination: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
+			},
+			stats: {
+				total,
+				READY: filteredStatusCounts.READY,
+				PROCESSING: filteredStatusCounts.PROCESSING,
+				FAILED: filteredStatusCounts.FAILED,
+			},
+			summary: summary ?? null,
+		});
+	} catch (error) {
+		console.error("获取播客列表失败:", error);
+		console.error("[admin/podcasts] failed to load:", error);
+		return NextResponse.json({ success: false, error: (error as Error).message ?? "获取播客列表失败" }, { status: 500 });
+	}
 }
 
 // 删除播客

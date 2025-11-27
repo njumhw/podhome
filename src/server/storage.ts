@@ -119,44 +119,108 @@ function getOssClient(): OSS | null {
 export async function uploadToOssAndGetPublicUrl(
   path: string,
   file: Buffer,
-  contentType: string
+  contentType: string,
+  maxRetries: number = 3
 ): Promise<string | null> {
-  try {
-    const client = getOssClient();
-    if (!client || !OSS_BUCKET || !OSS_REGION) {
-      console.warn('OSS客户端未配置，无法上传文件', {
-        hasClient: !!client,
-        hasBucket: !!OSS_BUCKET,
-        hasRegion: !!OSS_REGION,
-        hasAccessKeyId: !!OSS_ACCESS_KEY_ID,
-        hasAccessKeySecret: !!OSS_ACCESS_KEY_SECRET
-      });
-      return null;
-    }
-    
-    console.log(`开始上传到OSS: ${path} (${file.length} 字节)`);
-    const result = await client.put(path, file, { headers: { 'Content-Type': contentType } });
-    console.log(`OSS上传成功: ${path}`, result.res?.status || 'OK');
-    
-    // Public URL on OSS
-    const url = `https://${OSS_BUCKET}.oss-${OSS_REGION}.aliyuncs.com/${encodeURI(path)}`;
-    return url;
-  } catch (error: any) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorCode = (error as any)?.code;
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    
-    console.error(`❌ OSS上传失败 (${path}):`, errorMessage);
-    if (errorCode) {
-      console.error(`   错误代码: ${errorCode}`);
-    }
-    if (errorStack) {
-      console.error(`   错误堆栈: ${errorStack.substring(0, 500)}`);
-    }
-    
-    // 不抛出错误，返回null让调用者处理
+  const client = getOssClient();
+  if (!client || !OSS_BUCKET || !OSS_REGION) {
+    console.warn('OSS客户端未配置，无法上传文件', {
+      hasClient: !!client,
+      hasBucket: !!OSS_BUCKET,
+      hasRegion: !!OSS_REGION,
+      hasAccessKeyId: !!OSS_ACCESS_KEY_ID,
+      hasAccessKeySecret: !!OSS_ACCESS_KEY_SECRET
+    });
     return null;
   }
+  
+  let lastError: any = null;
+  
+  // 重试机制：最多重试3次，指数退避
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 1) {
+        // 指数退避：第1次重试等待1秒，第2次等待2秒，第3次等待4秒
+        const delay = Math.min(1000 * Math.pow(2, attempt - 2), 4000);
+        console.log(`重试上传到OSS (${attempt}/${maxRetries}): ${path}，等待 ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        console.log(`开始上传到OSS: ${path} (${file.length} 字节)`);
+      }
+      
+      // 验证文件大小（OSS有文件大小限制）
+      const maxFileSize = 5 * 1024 * 1024 * 1024; // 5GB
+      if (file.length > maxFileSize) {
+        throw new Error(`文件过大: ${(file.length / 1024 / 1024).toFixed(2)} MB，超过OSS限制`);
+      }
+      
+      // 验证文件不为空
+      if (file.length === 0) {
+        throw new Error(`文件为空，无法上传`);
+      }
+      
+      const result = await client.put(path, file, { 
+        headers: { 
+          'Content-Type': contentType,
+          'Content-Length': file.length.toString()
+        } 
+      });
+      console.log(`✅ OSS上传成功: ${path} (${(file.length / 1024).toFixed(2)} KB)`, result.res?.status || 'OK');
+      
+      // Public URL on OSS
+      const url = `https://${OSS_BUCKET}.oss-${OSS_REGION}.aliyuncs.com/${encodeURI(path)}`;
+      return url;
+    } catch (error: any) {
+      lastError = error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode = (error as any)?.code;
+      const errorStatus = (error as any)?.status;
+      const errorRequestId = (error as any)?.requestId;
+      const errorHostId = (error as any)?.hostId;
+      
+      // 提取OSS SDK的详细错误信息
+      const ossErrorDetails: string[] = [];
+      if (errorCode) ossErrorDetails.push(`错误代码: ${errorCode}`);
+      if (errorStatus) ossErrorDetails.push(`HTTP状态: ${errorStatus}`);
+      if (errorRequestId) ossErrorDetails.push(`请求ID: ${errorRequestId}`);
+      if (errorHostId) ossErrorDetails.push(`主机ID: ${errorHostId}`);
+      
+      if (attempt < maxRetries) {
+        console.warn(`⚠️ OSS上传失败 (${attempt}/${maxRetries}): ${path} - ${errorMessage}`);
+        if (ossErrorDetails.length > 0) {
+          console.warn(`   详细信息: ${ossErrorDetails.join(', ')}`);
+        }
+        console.warn(`   文件大小: ${(file.length / 1024).toFixed(2)} KB，将重试...`);
+      } else {
+        // 最后一次尝试失败，记录详细错误
+        console.error(`❌ OSS上传失败 (${path}):`, errorMessage);
+        if (ossErrorDetails.length > 0) {
+          console.error(`   详细信息: ${ossErrorDetails.join(', ')}`);
+        }
+        console.error(`   文件大小: ${(file.length / 1024).toFixed(2)} KB`);
+        console.error(`   Content-Type: ${contentType}`);
+        
+        // 检查是否是常见的OSS错误
+        if (errorCode === 'AccessDenied') {
+          console.error(`   ⚠️ 访问被拒绝：请检查OSS权限配置`);
+        } else if (errorCode === 'InvalidAccessKeyId' || errorCode === 'SignatureDoesNotMatch') {
+          console.error(`   ⚠️ 认证失败：请检查OSS AccessKey配置`);
+        } else if (errorCode === 'NoSuchBucket') {
+          console.error(`   ⚠️ 存储桶不存在：请检查OSS_BUCKET配置`);
+        } else if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ETIMEDOUT')) {
+          console.error(`   ⚠️ 网络连接问题：请检查网络连接或OSS服务状态`);
+        }
+        
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        if (errorStack) {
+          console.error(`   错误堆栈: ${errorStack.substring(0, 500)}`);
+        }
+      }
+    }
+  }
+  
+  // 所有重试都失败，返回null让调用者处理
+  return null;
 }
 
 

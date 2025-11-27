@@ -30,6 +30,7 @@ model User {
 model InviteCode {
   id          String    @id @default(cuid())
   code        String    @unique
+  targetRole  UserRole  @default(PODCASTER) // 邀请码目标角色（目前仅用于 Reader → Podcaster 升级）
   createdAt   DateTime  @default(now())
   expiresAt   DateTime?
   maxUses     Int       @default(1)
@@ -116,6 +117,8 @@ model AccessLog {
   id           String      @id @default(cuid())
   podcastId    String?
   userId       String?
+  userIp       String?     // Visitor 的 IP 地址
+  userAgent    String?     // Visitor 的 User-Agent
   createdAt    DateTime    @default(now())
   audioCacheId String?
   audioCache   AudioCache? @relation(fields: [audioCacheId], references: [id])
@@ -125,6 +128,7 @@ model AccessLog {
   @@index([podcastId, createdAt])
   @@index([audioCacheId, createdAt])
   @@index([createdAt])
+  @@index([userIp, userAgent, createdAt]) // Visitor 访问计数查询优化
 }
 
 model TaskLog {
@@ -283,9 +287,12 @@ model PodcastLike {
 }
 
 enum UserRole {
-  USER
-  ADMIN
-  GUEST
+  READER          // 读者：无需邀请码注册，可浏览、点赞、评论，不能上传
+  PODCASTER       // 播客创作者：通过邀请码升级，每日可上传 2 次
+  PODCASTER_VIP   // VIP 播客创作者：管理员授权，无限制上传
+  ADMIN           // 管理员：所有权限 + 后台管理
+  USER            // 旧角色（已废弃，保留用于兼容）
+  GUEST           // 游客角色（已废弃，保留用于兼容）
 }
 
 enum PodcastStatus {

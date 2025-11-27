@@ -6,6 +6,7 @@ import { qwenTranscribeFromUrl } from "@/clients/qwen-asr";
 import { uploadToOssAndGetPublicUrl } from "@/server/storage";
 import { recordASRUsage, resetDailyStats } from "@/server/monitoring";
 import { setCachedAudio } from "@/server/audio-cache";
+import { detectAudioFormat, convertMp3ToM4a } from "@/server/audio-converter";
 import os from "os";
 import path from "path";
 import fs from "fs";
@@ -53,11 +54,45 @@ export async function POST(req: NextRequest) {
     const base = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
     const proxyUrl = `${base}/api/proxy-audio?url=${encodeURIComponent(sourceUrl)}`;
     const tmp = await ensureTmpDir();
-    const tmpFile = path.join(tmp, `src-${Date.now()}-${Math.random().toString(36).slice(2)}.m4a`);
+    
+    // 检测音频格式
+    const format = detectAudioFormat(sourceUrl);
+    console.log(`[音频下载] 检测到音频格式: ${format}, URL: ${sourceUrl}`);
+    
+    // 根据格式确定临时文件扩展名
+    const originalExt = format === 'mp3' ? '.mp3' : '.m4a';
+    const tmpFile = path.join(tmp, `src-${Date.now()}-${Math.random().toString(36).slice(2)}${originalExt}`);
+    
     const res = await fetch(proxyUrl);
     if (!res.ok || !res.body) throw new Error(`下载失败(${res.status})`);
     const fileStream = fs.createWriteStream(tmpFile);
     await pipeline(res.body as any, fileStream);
+    
+    // 如果是MP3格式，转换为M4A
+    if (format === 'mp3') {
+      console.log(`[音频转换] 检测到MP3格式，开始转换为M4A...`);
+      try {
+        const convertedFile = await convertMp3ToM4a(tmpFile);
+        
+        // 删除原始MP3文件
+        try {
+          await fs.promises.unlink(tmpFile);
+          console.log(`[音频转换] 已删除原始MP3文件: ${tmpFile}`);
+        } catch (e) {
+          console.warn(`[音频转换] 删除原始MP3文件失败: ${e}`);
+        }
+        
+        console.log(`[音频转换] ✅ MP3已转换为M4A: ${convertedFile}`);
+        return convertedFile;
+      } catch (convertError) {
+        console.error(`[音频转换] ❌ MP3转M4A失败:`, convertError);
+        // 转换失败时，尝试继续使用原始MP3文件（虽然可能不支持，但至少不会完全失败）
+        console.warn(`[音频转换] 警告: 将尝试使用原始MP3文件，可能不支持`);
+        return tmpFile;
+      }
+    }
+    
+    // 如果已经是M4A或未知格式，直接返回
     return tmpFile;
   }
   async function getDurationSeconds(localFile: string): Promise<number> {
