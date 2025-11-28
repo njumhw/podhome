@@ -61,13 +61,7 @@ export default function HomePage() {
   const [hotMode, setHotMode] = useState<'30d' | 'all'>('30d');
   const [hotDisplayCount, setHotDisplayCount] = useState(9); // 默认显示9个
   const [hotHasMore, setHotHasMore] = useState(false); // 是否还有更多数据
-  const [allPodcasts, setAllPodcasts] = useState<PodcastItem[]>([]);
-  const [showAllPodcasts, setShowAllPodcasts] = useState(false);
-  const [allPodcastsPage, setAllPodcastsPage] = useState(1);
-  const [selectedTopic, setSelectedTopic] = useState<string>('');
-  const [topics, setTopics] = useState<Array<{id: string, name: string, color?: string}>>([]);
-  const [allPodcastsTotal, setAllPodcastsTotal] = useState(0);
-  const [loading, setLoading] = useState({ latest: false, hot: false, allPodcasts: false });
+  const [loading, setLoading] = useState({ latest: false, hot: false });
   const [activeTab, setActiveTab] = useState<'new' | 'top' | 'liked'>('new');
   const [likedItems, setLikedItems] = useState<PodcastItem[]>([]);
   const [likedPage, setLikedPage] = useState(1);
@@ -262,22 +256,6 @@ export default function HomePage() {
         setHotDisplayCount(0);
       }
       setLoading(prev => ({ ...prev, hot: false }));
-
-      // 主题
-      if (topicsRes.status === 'fulfilled') {
-        try {
-          if (topicsRes.value.ok) {
-            const data = await topicsRes.value.json();
-            if (data.success) {
-              setTopics(data.topics);
-            }
-          }
-        } catch (error) {
-          console.error('解析主题失败:', error);
-        }
-      } else {
-        console.error('加载主题失败:', topicsRes.reason);
-      }
     };
 
     loadInitialData().catch((error) => {
@@ -562,168 +540,6 @@ export default function HomePage() {
             </div>
           )}
           
-          {/* 所有播客按钮 - 只在New tab显示，位置更靠下 */}
-          <div className="mt-12">
-            <button
-              onClick={handleShowAllPodcasts}
-              className="w-full py-3 px-4 bg-black/40 dark:bg-black/40 [data-theme='light']:bg-gray-300 backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-gray-400 hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-gray-500 hover:bg-black/60 dark:hover:bg-black/60 [data-theme='light']:hover:bg-gray-400 text-white dark:text-white [data-theme='light']:text-gray-800 rounded-2xl transition-all flex items-center justify-center gap-2 font-mono text-sm"
-            >
-              <span>{showAllPodcasts ? '收起' : '所有播客'}</span>
-              <svg 
-                className={`w-4 h-4 transition-transform ${showAllPodcasts ? 'rotate-180' : ''}`}
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {showAllPodcasts && (
-              <div className="mt-4 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm p-6">
-                <h2 className="text-2xl font-bold mb-6 text-white dark:text-white [data-theme='light']:text-foreground">所有播客</h2>
-                
-                {/* 主题筛选器 */}
-                <div className="mb-6">
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-sm font-medium text-gray-400 font-mono">按主题筛选：</span>
-                    <select
-                      value={selectedTopic}
-                      onChange={(e) => handleTopicChange(e.target.value)}
-                      className="px-3 py-1.5 text-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 rounded-lg bg-black/40 dark:bg-black/40 [data-theme='light']:bg-[#faf9f6] text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/20 dark:focus:border-white/20 [data-theme='light']:focus:border-slate-300 font-mono"
-                    >
-                      <option value="">全部主题</option>
-                      {topics.map((topic) => (
-                        <option key={topic.id} value={topic.name}>
-                          {topic.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {loading.allPodcasts ? (
-                  <div className="space-y-2">
-                    {[...Array(10)].map((_, i) => (
-                      <div key={i} className="animate-pulse h-12 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded"></div>
-                    ))}
-                  </div>
-                ) : allPodcasts.length > 0 ? (
-                  <>
-                    {/* 表格展示 */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="border-b border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300">
-                            <th className="text-left py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">标题</th>
-                            <th className="text-left py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">主题</th>
-                            <th className="text-left py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">作者</th>
-                            <th className="text-left py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">日期</th>
-                            <th className="text-center py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">点赞</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {allPodcasts.map((item) => {
-                            // 清理标题
-                            let cleanTitle = item.title.replace(/^(#?\d+\.?\s*)/, '').trim();
-                            cleanTitle = cleanTitle.replace(/\s*[-|]\s*[^-|]+$/, '').trim();
-                            
-                            // 格式化日期
-                            const dateStr = item.publishedAt 
-                              ? new Date(item.publishedAt).toLocaleDateString('zh-CN', {
-                                  year: 'numeric',
-                                  month: '2-digit',
-                                  day: '2-digit'
-                                })
-                              : item.updatedAt
-                              ? new Date(item.updatedAt).toLocaleDateString('zh-CN', {
-                                  year: 'numeric',
-                                  month: '2-digit',
-                                  day: '2-digit'
-                                })
-                              : '未知时间';
-
-                            return (
-                              <tr
-                                key={item.id}
-                                className="border-b border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-50 transition-colors cursor-pointer"
-                                onClick={() => window.location.href = `/podcast/${item.id}`}
-                              >
-                                <td className="py-3 px-4">
-                                  <Link 
-                                    href={`/podcast/${item.id}`}
-                                    className="text-white dark:text-white [data-theme='light']:text-slate-900 hover:text-[#ff9f43] dark:hover:text-[#ff9f43] [data-theme='light']:hover:text-[#ff6a00] transition-colors font-medium line-clamp-1"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {cleanTitle}
-                                  </Link>
-                                </td>
-                                <td className="py-3 px-4">
-                                  {item.topic ? (
-                                    <span className="px-2 py-0.5 rounded border border-white/20 dark:border-white/20 [data-theme='light']:border-slate-400 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-slate-100 text-white dark:text-white [data-theme='light']:text-slate-900 text-xs font-semibold">
-                                      #{item.topic}
-                                    </span>
-                                  ) : (
-                                    <span className="text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500 text-xs">-</span>
-                                  )}
-                                </td>
-                                <td className="py-3 px-4 text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 text-sm font-mono">
-                                  {item.author || '-'}
-                                </td>
-                                <td className="py-3 px-4 text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 text-sm font-mono">
-                                  {dateStr}
-                                </td>
-                                <td className="py-3 px-4 text-center">
-                                  <span className="text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 text-sm font-mono">
-                                    {item.likeCount || 0}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* 分页器 */}
-                    {allPodcastsTotal > 10 && (
-                      <div className="mt-6 flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            if (allPodcastsPage > 1) {
-                              loadAllPodcasts(allPodcastsPage - 1, selectedTopic);
-                            }
-                          }}
-                          disabled={loading.allPodcasts || allPodcastsPage === 1}
-                          className="px-4 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          上一页
-                        </button>
-                        <span className="px-4 py-2 text-sm text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 font-mono">
-                          第 {allPodcastsPage} 页 / 共 {Math.ceil(allPodcastsTotal / 10)} 页
-                        </span>
-                        <button
-                          onClick={() => {
-                            if (allPodcastsPage < Math.ceil(allPodcastsTotal / 10)) {
-                              loadAllPodcasts(allPodcastsPage + 1, selectedTopic);
-                            }
-                          }}
-                          disabled={loading.allPodcasts || allPodcastsPage >= Math.ceil(allPodcastsTotal / 10)}
-                          className="px-4 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          下一页
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center text-gray-500 dark:text-gray-500 [data-theme='light']:text-slate-500 py-12 font-mono text-sm">
-                    暂无播客
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </>
       ) : (
         <div className="text-center text-gray-500 dark:text-gray-500 [data-theme='light']:text-slate-500 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
@@ -985,37 +801,6 @@ export default function HomePage() {
   };
 
 
-  const loadAllPodcasts = async (page = 1, topic = '') => {
-    setLoading(prev => ({ ...prev, allPodcasts: true }));
-    try {
-      let url = `/api/public/list?type=latest&limit=10&page=${page}&includeSummary=true`;
-      if (topic) {
-        url += `&topic=${encodeURIComponent(topic)}`;
-      }
-      const res = await fetch(url);
-      if (res.ok) {
-        const data: ListResult = await res.json();
-        setAllPodcasts(data.items || []);
-        // 安全地访问pagination，避免undefined错误
-        if (data.pagination && typeof data.pagination.total === 'number') {
-          setAllPodcastsTotal(data.pagination.total);
-        } else {
-          console.warn('API响应缺少pagination信息:', data);
-          setAllPodcastsTotal(0);
-        }
-        setAllPodcastsPage(page);
-      } else {
-        console.error('API请求失败:', res.status, res.statusText);
-        setAllPodcasts([]);
-        setAllPodcastsTotal(0);
-      }
-    } catch (error) {
-      console.error('Failed to load all podcasts:', error);
-      setAllPodcasts([]);
-    } finally {
-      setLoading(prev => ({ ...prev, allPodcasts: false }));
-    }
-  };
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -1762,24 +1547,6 @@ export default function HomePage() {
     }, 3 * 60 * 60 * 1000); // 3小时超时，支持长时间播客处理
   };
 
-  const handleShowAllPodcasts = () => {
-    if (!showAllPodcasts) {
-      setShowAllPodcasts(true);
-      loadAllPodcasts(1);
-    } else {
-      setShowAllPodcasts(false);
-    }
-  };
-
-  const handlePageChange = (page: number) => {
-    loadAllPodcasts(page, selectedTopic);
-  };
-
-  const handleTopicChange = (topic: string) => {
-    setSelectedTopic(topic);
-    setAllPodcastsPage(1);
-    loadAllPodcasts(1, topic);
-  };
 
   return (
     <div className="min-h-screen bg-black dark:bg-black [data-theme='light']:bg-[#f5f4f1] relative">
