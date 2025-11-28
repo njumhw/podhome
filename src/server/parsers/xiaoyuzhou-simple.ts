@@ -534,8 +534,8 @@ async function fetchHtml(url: string): Promise<string> {
 			
 			// 如果遇到 429 限流，使用更长的等待时间
 			if (rateLimitWaitTime !== null) {
-				// 对于 429，等待建议的时间，但不超过 5 分钟
-				delay = Math.min(rateLimitWaitTime, 300000); // 最多等待 5 分钟
+				// 对于 429，等待建议的时间，但不超过 2 分钟（减少等待时间，避免任务卡住太久）
+				delay = Math.min(rateLimitWaitTime, 120000); // 最多等待 2 分钟
 				console.log(`[解析器] 等待 ${delay/1000} 秒后重试（429 限流恢复）...`);
 				rateLimitWaitTime = null; // 重置，下次重试使用正常延迟
 			} else {

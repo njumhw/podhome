@@ -44,7 +44,7 @@ class TaskQueue {
   private maxRetries = 3; // 最大重试次数
   private retryDelay = 5000; // 重试延迟（毫秒）
   private connectionRetryDelay = 10000; // 数据库连接重试延迟
-  private maxTaskDuration = 180 * 60 * 1000; // 最大任务运行时间：3小时
+  private maxTaskDuration = 60 * 60 * 1000; // 最大任务运行时间：1小时（降低超时时间，更快发现卡住的任务）
   private taskStartTimes = new Map<string, number>(); // 任务开始时间记录
 
   // 初始化方法
@@ -422,7 +422,11 @@ class TaskQueue {
                                        errorMessage.includes('ECONNREFUSED') ||
                                        errorMessage.includes('ETIMEDOUT') ||
                                        errorMessage.includes('ENOTFOUND') ||
-                                       errorMessage.includes('DNS');
+                                       errorMessage.includes('DNS') ||
+                                       errorMessage.includes('HTTP_429') ||
+                                       errorMessage.includes('HTTP_403') ||
+                                       errorMessage.includes('请求过于频繁') ||
+                                       errorMessage.includes('访问被禁止');
       
       if (isTemporaryNetworkError) {
         const retryCount = this.retryAttempts.get(taskRecord.id) || 0;
