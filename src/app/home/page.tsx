@@ -260,8 +260,12 @@ export default function HomePage() {
       try {
         // 使用 force=true 强制刷新缓存
         const res = await fetch('/api/public/summary?force=true', { cache: 'no-store' });
-        if (!res.ok) return;
+        if (!res.ok) {
+          console.error('加载目录摘要失败: HTTP', res.status);
+          return;
+        }
         const data = await res.json();
+        console.log('目录摘要数据:', data);
         setCatalogSummary({
           totalPodcasts: data.totalPodcasts ?? 0,
           totalMinutes: data.totalDurationMinutes ?? Math.round((data.totalDurationSeconds ?? 0) / 60),
