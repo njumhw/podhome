@@ -701,16 +701,23 @@ export default function PodcastDetailPage() {
                         下载
                       </button>
                     )}
-                    <button
-                      onClick={handleShare}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-300 rounded-lg hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 transition-colors font-mono"
-                      title="分享播客"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                      </svg>
-                      分享
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleShare}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-300 rounded-lg hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 transition-colors font-mono"
+                        title="分享播客"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                        分享
+                      </button>
+                      {shareCopied && (
+                        <span className="text-xs text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-600 font-mono">
+                          已复制链接
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
