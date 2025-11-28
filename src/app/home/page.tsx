@@ -1721,13 +1721,11 @@ export default function HomePage() {
                 );
               })}
             </div>
-            {catalogSummary && (
-              <div className="ml-auto text-xs font-mono tabular-nums tracking-wider text-zinc-500 flex items-center gap-2">
-                <span>{summaryDisplay.podcasts.toLocaleString()} PODS</span>
-                <span className="text-white/30">|</span>
-                <span>{summaryDisplay.hours.toLocaleString()} HRS</span>
-              </div>
-            )}
+            <div className="ml-auto text-xs font-mono tabular-nums tracking-wider text-zinc-500 flex items-center gap-2">
+              <span>{summaryDisplay.podcasts.toLocaleString()} PODS</span>
+              <span className="text-white/30">|</span>
+              <span>{summaryDisplay.hours.toLocaleString()} HRS</span>
+            </div>
           </div>
 
           <div className="mt-6">
