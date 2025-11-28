@@ -88,6 +88,11 @@ body > * {
   color: #0b0d16 !important;
 }
 
+/* 播客详情页作者标签在白色主题下使用深色 */
+[data-theme='light'] .tag-pill.text-white\/90 {
+  color: #0f172a !important; /* slate-900 */
+}
+
 [data-theme='light'] .text-gray-300 {
   color: #1f2937 !important;
 }
