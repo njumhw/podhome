@@ -96,7 +96,8 @@ body > * {
 [data-theme='light'] .visitor-login-btn.text-white {
   color: #ffffff !important;
 }
-[data-theme='light'] button.visitor-login-btn.text-white {
+[data-theme='light'] button.visitor-login-btn.text-white,
+[data-theme='light'] a.visitor-login-btn.text-white {
   color: #ffffff !important;
 }
 
