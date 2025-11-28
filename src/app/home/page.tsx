@@ -603,28 +603,115 @@ export default function HomePage() {
                 </div>
 
                 {loading.allPodcasts ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {[...Array(6)].map((_, i) => (
-                      <div key={i} className="animate-pulse">
-                        <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
-                      </div>
+                  <div className="space-y-2">
+                    {[...Array(10)].map((_, i) => (
+                      <div key={i} className="animate-pulse h-12 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded"></div>
                     ))}
                   </div>
                 ) : allPodcasts.length > 0 ? (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-                      {allPodcasts.map((item) => (
-                        <PodcastCard key={item.id} item={item} />
-                      ))}
+                    {/* 表格展示 */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="border-b border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300">
+                            <th className="text-left py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">标题</th>
+                            <th className="text-left py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">主题</th>
+                            <th className="text-left py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">作者</th>
+                            <th className="text-left py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">日期</th>
+                            <th className="text-center py-3 px-4 text-sm font-semibold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">点赞</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allPodcasts.map((item) => {
+                            // 清理标题
+                            let cleanTitle = item.title.replace(/^(#?\d+\.?\s*)/, '').trim();
+                            cleanTitle = cleanTitle.replace(/\s*[-|]\s*[^-|]+$/, '').trim();
+                            
+                            // 格式化日期
+                            const dateStr = item.publishedAt 
+                              ? new Date(item.publishedAt).toLocaleDateString('zh-CN', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit'
+                                })
+                              : item.updatedAt
+                              ? new Date(item.updatedAt).toLocaleDateString('zh-CN', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit'
+                                })
+                              : '未知时间';
+
+                            return (
+                              <tr
+                                key={item.id}
+                                className="border-b border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-50 transition-colors cursor-pointer"
+                                onClick={() => window.location.href = `/podcast/${item.id}`}
+                              >
+                                <td className="py-3 px-4">
+                                  <Link 
+                                    href={`/podcast/${item.id}`}
+                                    className="text-white dark:text-white [data-theme='light']:text-slate-900 hover:text-[#ff9f43] dark:hover:text-[#ff9f43] [data-theme='light']:hover:text-[#ff6a00] transition-colors font-medium line-clamp-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {cleanTitle}
+                                  </Link>
+                                </td>
+                                <td className="py-3 px-4">
+                                  {item.topic ? (
+                                    <span className="px-2 py-0.5 rounded border border-white/20 dark:border-white/20 [data-theme='light']:border-slate-400 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-slate-100 text-white dark:text-white [data-theme='light']:text-slate-900 text-xs font-semibold">
+                                      #{item.topic}
+                                    </span>
+                                  ) : (
+                                    <span className="text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500 text-xs">-</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 text-sm font-mono">
+                                  {item.author || '-'}
+                                </td>
+                                <td className="py-3 px-4 text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 text-sm font-mono">
+                                  {dateStr}
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className="text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 text-sm font-mono">
+                                    {item.likeCount || 0}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                    {allPodcastsTotal > allPodcasts.length && (
-                      <div className="mt-6 flex justify-center">
+
+                    {/* 分页器 */}
+                    {allPodcastsTotal > 10 && (
+                      <div className="mt-6 flex items-center justify-center gap-2">
                         <button
-                          onClick={() => loadAllPodcasts(allPodcastsPage + 1, selectedTopic)}
-                          disabled={loading.allPodcasts}
-                          className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => {
+                            if (allPodcastsPage > 1) {
+                              loadAllPodcasts(allPodcastsPage - 1, selectedTopic);
+                            }
+                          }}
+                          disabled={loading.allPodcasts || allPodcastsPage === 1}
+                          className="px-4 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {loading.allPodcasts ? 'Loading...' : '加载更多'}
+                          上一页
+                        </button>
+                        <span className="px-4 py-2 text-sm text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 font-mono">
+                          第 {allPodcastsPage} 页 / 共 {Math.ceil(allPodcastsTotal / 10)} 页
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (allPodcastsPage < Math.ceil(allPodcastsTotal / 10)) {
+                              loadAllPodcasts(allPodcastsPage + 1, selectedTopic);
+                            }
+                          }}
+                          disabled={loading.allPodcasts || allPodcastsPage >= Math.ceil(allPodcastsTotal / 10)}
+                          className="px-4 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          下一页
                         </button>
                       </div>
                     )}
