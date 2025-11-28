@@ -1739,7 +1739,7 @@ export default function HomePage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Paste podcast URL here..."
+                placeholder="Paste Podcast Url or Title here…"
                 className="flex-1 bg-transparent px-2 py-3 text-lg text-white dark:text-white [data-theme='light']:text-foreground placeholder-zinc-600 dark:placeholder-zinc-600 [data-theme='light']:placeholder-slate-400 outline-none font-light"
                 disabled={isSearching}
               />
