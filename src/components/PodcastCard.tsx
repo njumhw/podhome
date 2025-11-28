@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { getStyleFromTitle } from "@/utils/podcast-styles";
+import { useEffect, useState } from "react";
 
 type PodcastItem = {
 	id: string;
@@ -40,6 +43,24 @@ function getColorFromTopic(topic: string | null | undefined): string {
 export function PodcastCard({ item, rank }: PodcastCardProps) {
 	const style = getStyleFromTitle(item.title);
 	const waveformColor = getColorFromTopic(item.topic);
+	const [isLightTheme, setIsLightTheme] = useState(false);
+
+	useEffect(() => {
+		const checkTheme = () => {
+			const html = document.documentElement;
+			const theme = html.getAttribute('data-theme');
+			setIsLightTheme(theme === 'light');
+		};
+		
+		checkTheme();
+		const observer = new MutationObserver(checkTheme);
+		observer.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['data-theme']
+		});
+		
+		return () => observer.disconnect();
+	}, []);
 	
 	// 提取集数编号（如果有）
 	const episodeMatch = item.title.match(/#(\d+)/);
@@ -128,9 +149,7 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 					<span 
 						className="text-sm font-mono font-medium author-name podcast-author-name"
 						style={{
-							color: typeof window !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light' 
-								? '#020617' 
-								: 'rgb(255, 255, 255)'
+							color: isLightTheme ? '#020617' : 'rgb(255, 255, 255)'
 						}}
 					>
 						{item.author}
