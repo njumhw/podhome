@@ -636,12 +636,12 @@ export default function PodcastDetailPage() {
                   {/* 元数据标签 */}
                   <div className="flex flex-wrap items-center gap-3 font-mono text-sm">
                     {podcast.author && (
-                      <span className="tag-pill px-3 py-1.5 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 bg-white/5 dark:bg-white/5 [data-theme='light']:bg-slate-100 text-white/90 dark:text-white/90 [data-theme='light']:text-foreground">
+                      <span className="tag-pill px-3 py-1.5 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300 bg-white/5 dark:bg-white/5 [data-theme='light']:bg-slate-100 text-white/90 dark:text-white/90 [data-theme='light']:text-slate-900">
                         {podcast.author}
                       </span>
                     )}
                     {podcast.publishedAt && (
-                      <span className="text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600">
+                      <span className="text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700">
                         {new Date(podcast.publishedAt).toLocaleDateString('zh-CN', {
                           year: 'numeric',
                           month: '2-digit',
@@ -681,7 +681,7 @@ export default function PodcastDetailPage() {
                     {isAdmin && !isEditing && (
                       <button
                         onClick={handleEdit}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-300 rounded-lg hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 transition-colors font-mono"
                         title="编辑"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -693,7 +693,7 @@ export default function PodcastDetailPage() {
                     {podcast?.audioUrl && (
                       <button
                         onClick={handleDownload}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-300 rounded-lg hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 transition-colors font-mono"
                         title="下载音频"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -704,7 +704,7 @@ export default function PodcastDetailPage() {
                     )}
                     <button
                       onClick={handleShare}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-300 rounded-lg hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 transition-colors font-mono"
                       title="分享播客"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -149,7 +149,7 @@ export default function CompactAudioPlayer({ audioUrl, title = '' }: CompactAudi
           />
         </div>
         {/* 时间显示 */}
-        <div className="flex justify-between items-center mt-1.5 font-mono text-xs text-zinc-500">
+        <div className="flex justify-between items-center mt-1.5 font-mono text-xs text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-700">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>
@@ -160,7 +160,7 @@ export default function CompactAudioPlayer({ audioUrl, title = '' }: CompactAudi
         <select
           value={playbackRate}
           onChange={(e) => handlePlaybackRateChange(parseFloat(e.target.value))}
-          className="px-2 py-0.5 text-xs bg-transparent text-zinc-400 hover:text-zinc-300 focus:outline-none cursor-pointer font-mono appearance-none pr-6"
+          className="px-2 py-0.5 text-xs bg-transparent text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 hover:text-zinc-300 dark:hover:text-zinc-300 [data-theme='light']:hover:text-slate-900 focus:outline-none cursor-pointer font-mono appearance-none pr-6 select-arrow-dark"
           disabled={isLoading}
           style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
