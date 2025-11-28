@@ -89,13 +89,14 @@ body > * {
 }
 
 /* VisitorLimitModal 登录按钮在白色主题下保持白色文字 - 最高优先级，覆盖所有其他规则 */
+/* 必须放在 .text-white 规则之后，使用更具体的选择器确保优先级 */
 .visitor-login-btn {
   color: rgb(255, 255, 255) !important;
 }
-[data-theme='light'] .visitor-login-btn {
+[data-theme='light'] .visitor-login-btn.text-white {
   color: #ffffff !important;
 }
-[data-theme='light'] button.visitor-login-btn {
+[data-theme='light'] button.visitor-login-btn.text-white {
   color: #ffffff !important;
 }
 
