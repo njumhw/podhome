@@ -252,6 +252,11 @@ body > * {
   color: var(--foreground) !important;
 }
 
+/* 播客卡片作者名称在白色主题下使用深色 */
+[data-theme='light'] .font-mono.font-medium.text-white {
+  color: #020617 !important; /* slate-950 */
+}
+
 /* 白色模式下的排名数字 */
 [data-theme='light'] .ranking-number {
   color: rgba(15, 23, 42, 0.06) !important;
