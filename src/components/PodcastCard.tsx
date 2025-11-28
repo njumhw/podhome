@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { getStyleFromTitle } from "@/utils/podcast-styles";
+import { useEffect, useState } from "react";
 
 type PodcastItem = {
 	id: string;
@@ -40,6 +43,28 @@ function getColorFromTopic(topic: string | null | undefined): string {
 export function PodcastCard({ item, rank }: PodcastCardProps) {
 	const style = getStyleFromTitle(item.title);
 	const waveformColor = getColorFromTopic(item.topic);
+	const [authorColor, setAuthorColor] = useState('rgb(255, 255, 255, 0.7)');
+
+	useEffect(() => {
+		const updateColor = () => {
+			const html = document.documentElement;
+			const theme = html.getAttribute('data-theme');
+			if (theme === 'light') {
+				setAuthorColor('#334155'); // slate-700
+			} else {
+				setAuthorColor('rgba(255, 255, 255, 0.7)'); // white/70
+			}
+		};
+		
+		updateColor();
+		const observer = new MutationObserver(updateColor);
+		observer.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['data-theme', 'class']
+		});
+		
+		return () => observer.disconnect();
+	}, []);
 	
 	// 提取集数编号（如果有）
 	const episodeMatch = item.title.match(/#(\d+)/);
@@ -125,7 +150,10 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 			{/* Footer with Pulse Animation */}
 			<div className="relative z-10 mt-4 flex justify-between items-end flex-shrink-0">
 				{item.author && (
-					<span className="text-sm font-mono font-medium text-white/70 dark:text-white/70 [data-theme='light']:text-slate-700">
+					<span 
+						className="text-sm font-mono font-medium"
+						style={{ color: authorColor }}
+					>
 						{item.author}
 					</span>
 				)}
