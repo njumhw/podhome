@@ -61,8 +61,8 @@ export default function VisitorLimitModal({ isOpen, onClose, count, limit }: Vis
               router.push('/login');
               onClose();
             }}
-            className="w-full px-6 py-3 bg-zinc-800 dark:bg-zinc-800 [data-theme='light']:bg-slate-900 rounded-lg font-bold hover:bg-zinc-700 dark:hover:bg-zinc-700 [data-theme='light']:hover:bg-slate-800 transition-colors"
-            style={{ color: loginTextColor }}
+            className="w-full px-6 py-3 bg-zinc-800 dark:bg-zinc-800 [data-theme='light']:bg-slate-900 rounded-lg font-bold hover:bg-zinc-700 dark:hover:bg-zinc-700 [data-theme='light']:hover:bg-slate-800 transition-colors visitor-login-btn"
+            style={{ color: '#ffffff' }}
           >
             登录
           </button>

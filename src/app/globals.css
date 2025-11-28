@@ -89,8 +89,8 @@ body > * {
 }
 
 /* VisitorLimitModal 登录按钮在白色主题下保持白色文字 */
-[data-theme='light'] .bg-slate-900.text-white,
-[data-theme='light'] button.bg-slate-900.text-white {
+[data-theme='light'] .visitor-login-btn,
+[data-theme='light'] .visitor-login-btn * {
   color: #ffffff !important;
 }
 
