@@ -88,6 +88,12 @@ body > * {
   color: #0b0d16 !important;
 }
 
+/* VisitorLimitModal 登录按钮在白色主题下保持白色文字 */
+[data-theme='light'] .bg-slate-900.text-white,
+[data-theme='light'] button.bg-slate-900.text-white {
+  color: #ffffff !important;
+}
+
 /* 播客详情页作者标签在白色主题下使用深色 */
 [data-theme='light'] .tag-pill.text-white\/90 {
   color: #0f172a !important; /* slate-900 */
