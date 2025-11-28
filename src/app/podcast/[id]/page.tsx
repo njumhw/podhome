@@ -72,7 +72,6 @@ export default function PodcastDetailPage() {
   const [asrTab, setAsrTab] = useState<'asr' | 'outline'>('asr'); // ASR原文区域的tab：'asr' 或 'outline'
   const [copySuccess, setCopySuccess] = useState('');
   const [downloadStatus, setDownloadStatus] = useState('');
-  const [shareSuccess, setShareSuccess] = useState('');
   const [copiedText, setCopiedText] = useState(false);
   const [editData, setEditData] = useState({
     title: '',
@@ -412,8 +411,7 @@ export default function PodcastDetailPage() {
     if (navigator.clipboard && window.isSecureContext) {
       try {
         await navigator.clipboard.writeText(currentUrl);
-        setShareSuccess('链接已复制');
-        setTimeout(() => setShareSuccess(''), 1500);
+        toast.success('已复制链接', '链接已复制到剪贴板');
         return;
       } catch (err) {
         console.warn('Clipboard API 失败，尝试降级方案:', err);
@@ -436,15 +434,13 @@ export default function PodcastDetailPage() {
       document.body.removeChild(textarea);
       
       if (successful) {
-        setShareSuccess('链接已复制');
-        setTimeout(() => setShareSuccess(''), 1500);
+        toast.success('已复制链接', '链接已复制到剪贴板');
       } else {
         throw new Error('execCommand 复制失败');
       }
     } catch (err) {
       console.error('复制失败:', err);
-      setShareSuccess('复制失败，请手动复制链接');
-      setTimeout(() => setShareSuccess(''), 3000);
+      toast.error('复制失败', '请手动复制链接');
     }
   };
 
@@ -1175,11 +1171,6 @@ export default function PodcastDetailPage() {
         </div>
       )}
 
-      {shareSuccess && (
-        <div className="fixed top-4 right-4 bg-gray-800 text-white px-3 py-1.5 rounded-md shadow-lg z-50 transition-opacity duration-300 text-xs">
-          {shareSuccess}
-        </div>
-      )}
 
       {/* 全屏播客总结模态框 */}
       {showFullscreenReport && (
