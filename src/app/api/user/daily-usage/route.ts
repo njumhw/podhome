@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/server/auth';
 import { db } from '@/server/db';
+import { getUserDailyLimit } from '@/server/user-limits';
 
 export async function GET(req: NextRequest) {
   try {
@@ -25,20 +26,13 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // 确定用户额度
-    let limit = 0;
-    if (user.role === 'ADMIN') {
-      limit = Infinity; // 管理员无限制
-    } else if (user.role === 'USER') {
-      limit = 2; // 普通用户每天2个
-    } else {
-      limit = 0; // 其他角色无额度
-    }
+    // 使用统一的权限检查函数获取用户额度
+    const limit = getUserDailyLimit(user.role);
 
     return NextResponse.json({
       success: true,
       used,
-      limit: limit === Infinity ? -1 : limit // -1 表示无限制
+      limit: limit === -1 ? -1 : limit // -1 表示无限制（VIP和管理员）
     });
 
   } catch (error) {
