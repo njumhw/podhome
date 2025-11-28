@@ -253,7 +253,8 @@ body > * {
 }
 
 /* 播客卡片作者名称在白色主题下使用深色 */
-[data-theme='light'] .font-mono.font-medium.text-white {
+[data-theme='light'] .author-name,
+[data-theme='light'] .font-mono.font-medium.text-white.author-name {
   color: #020617 !important; /* slate-950 */
 }
 
