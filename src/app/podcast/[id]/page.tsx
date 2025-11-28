@@ -92,8 +92,10 @@ export default function PodcastDetailPage() {
 
   useEffect(() => {
     if (id) {
-      loadPodcast();
-      checkUser();
+      // 先检查用户状态，再加载播客（确保 user 状态正确）
+      checkUser().then(() => {
+        loadPodcast();
+      });
     }
   }, [id]);
 
@@ -122,10 +124,14 @@ export default function PodcastDetailPage() {
       setPodcast(data);
       
       // 检查是否受限
-      const isLimited = data.isLimited || data.visitorLimitExceeded;
+      // 注意：只有真正的 Visitor（未登录用户）才会受限
+      // 已登录用户（包括 READER, PODCASTER, PODCASTER_VIP, ADMIN）都不应该被限制
+      // 如果用户已登录，即使 API 返回 isLimited，也应该忽略（可能是 API 端的 bug）
+      const isLimited = !user && (data.isLimited || data.visitorLimitExceeded);
       setIsContentLimited(isLimited);
       
-      if (data.visitorInfo) {
+      // 只有 Visitor 才显示 visitorInfo
+      if (!user && data.visitorInfo) {
         const info = {
           count: data.visitorInfo.used ?? 0,
           limit: data.visitorInfo.total ?? 3,
@@ -140,8 +146,10 @@ export default function PodcastDetailPage() {
           setShowVisitorLimitModal(false);
         }
       } else {
+        // 已登录用户不应该有 visitorInfo
         setVisitorLimitInfo(null);
         setShowVisitorLimitModal(false);
+        setIsContentLimited(false); // 确保已登录用户不受限
       }
       
       // 记录访问日志

@@ -35,18 +35,32 @@ export async function GET(request: NextRequest) {
     let user = null;
     try {
       user = await getSessionUser();
+      if (user) {
+        console.log(`[api/public/podcast] 用户已登录: id=${user.id}, role=${user.role}, email=${user.email}`);
+      }
     } catch (error) {
-      console.warn('[VisitorLimit] getSessionUser failed, fallback to visitor mode:', error);
+      // 只有真正的认证错误才认为是 Visitor
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn(`[api/public/podcast] getSessionUser failed (用户未登录或认证失败): ${errorMsg}`);
+      // 不设置 user，继续作为 Visitor 处理
     }
 
     let visitorUsage = null;
     let visitorLimitExceeded = false;
+    // 只有真正的 Visitor（未登录用户）才检查限制
+    // 已登录用户（包括 READER, PODCASTER, PODCASTER_VIP, ADMIN）都不应该被限制
     if (!user) {
+      console.log(`[api/public/podcast] 检测到 Visitor 访问，检查访问限制: ip=${clientIp}`);
       visitorUsage = await getVisitorUsage(clientIp, userAgent);
       if (!visitorUsage.allowed) {
+        console.log(`[api/public/podcast] Visitor 访问限制已用完: count=${visitorUsage.count}, limit=${visitorUsage.limit}`);
         // 不再直接返回403，而是标记为受限，继续查询播客信息
         visitorLimitExceeded = true;
+      } else {
+        console.log(`[api/public/podcast] Visitor 访问允许: count=${visitorUsage.count}, limit=${visitorUsage.limit}`);
       }
+    } else {
+      console.log(`[api/public/podcast] 已登录用户访问，跳过 Visitor 限制检查: role=${user.role}`);
     }
     const url = searchParams.get('url');
     
@@ -229,10 +243,14 @@ export async function GET(request: NextRequest) {
     }
 
     // 如果是 Visitor 且权限已用完，只返回前10行内容
+    // 注意：只有真正的 Visitor（未登录用户）才会被限制
+    // 已登录用户（包括 READER, PODCASTER, PODCASTER_VIP, ADMIN）都不应该被限制
     let summaryToReturn = podcast.summary;
     let transcriptToReturn = podcast.originalTranscript || podcast.transcript;
     
-    if (visitorLimitExceeded) {
+    // 只有 Visitor 且权限已用完时才限制内容
+    if (!user && visitorLimitExceeded) {
+      console.log(`[api/public/podcast] Visitor 权限已用完，返回受限内容`);
       // 截取摘要的前10行
       if (summaryToReturn) {
         const summaryLines = summaryToReturn.split('\n');
@@ -246,6 +264,8 @@ export async function GET(request: NextRequest) {
         const previewLines = transcriptLines.slice(0, 10);
         transcriptToReturn = previewLines.join('\n');
       }
+    } else if (user) {
+      console.log(`[api/public/podcast] 已登录用户访问，返回完整内容: role=${user.role}`);
     }
 
     // 如果是 Visitor，返回剩余次数信息
@@ -260,13 +280,13 @@ export async function GET(request: NextRequest) {
       topic: podcast.topic,
       script: null, // 清洗稿已移除，始终为null
       originalTranscript: transcriptToReturn, // ASR原文（如果权限受限，只返回前10行）
-      reportOutline: visitorLimitExceeded ? null : ((podcast as any).reportOutline || null), // 报告大纲（权限受限时不返回）
+      reportOutline: (!user && visitorLimitExceeded) ? null : ((podcast as any).reportOutline || null), // 报告大纲（只有 Visitor 权限受限时不返回）
       report: summaryToReturn,
       updatedAt: podcast.updatedAt,
       likeCount,
-      // 标记是否受限
-      isLimited: visitorLimitExceeded,
-      visitorLimitExceeded: visitorLimitExceeded
+      // 标记是否受限（只有 Visitor 且权限已用完时才为 true）
+      isLimited: !user && visitorLimitExceeded,
+      visitorLimitExceeded: !user && visitorLimitExceeded
     };
 
     // 返回访客信息（包括权限用完的情况）
