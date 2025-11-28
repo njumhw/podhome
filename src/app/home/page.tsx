@@ -665,8 +665,8 @@ export default function HomePage() {
             onClick={() => handleHotModeToggle('30d')}
             className={`px-3 py-1 rounded-md text-xs font-mono transition-all ${
               hotMode === '30d'
-                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-white'
-                : 'bg-transparent border border-white/10 text-white/70 hover:border-white/30'
+                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-white dark:text-white [data-theme="light"]:text-slate-900'
+                : 'bg-transparent border border-white/10 dark:border-white/10 [data-theme="light"]:border-slate-300 text-white/70 dark:text-white/70 [data-theme="light"]:text-slate-900 hover:border-white/30 dark:hover:border-white/30 [data-theme="light"]:hover:border-slate-400'
             }`}
           >
             近30天
@@ -675,8 +675,8 @@ export default function HomePage() {
             onClick={() => handleHotModeToggle('all')}
             className={`px-3 py-1 rounded-md text-xs font-mono transition-all ${
               hotMode === 'all'
-                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-white'
-                : 'bg-transparent border border-white/10 text-white/70 hover:border-white/30'
+                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-white dark:text-white [data-theme="light"]:text-slate-900'
+                : 'bg-transparent border border-white/10 dark:border-white/10 [data-theme="light"]:border-slate-300 text-white/70 dark:text-white/70 [data-theme="light"]:text-slate-900 hover:border-white/30 dark:hover:border-white/30 [data-theme="light"]:hover:border-slate-400'
             }`}
           >
             全量Top 10
