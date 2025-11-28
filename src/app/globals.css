@@ -88,8 +88,13 @@ body > * {
   color: #0b0d16 !important;
 }
 
-/* VisitorLimitModal 登录按钮在白色主题下保持白色文字 */
-[data-theme='light'] .visitor-login-btn,
+/* VisitorLimitModal 登录按钮在白色主题下保持白色文字 - 最高优先级 */
+[data-theme='light'] .visitor-login-btn {
+  color: #ffffff !important;
+}
+[data-theme='light'] button.visitor-login-btn {
+  color: #ffffff !important;
+}
 [data-theme='light'] .visitor-login-btn * {
   color: #ffffff !important;
 }
