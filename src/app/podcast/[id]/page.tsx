@@ -848,7 +848,7 @@ export default function PodcastDetailPage() {
             )}
 
             {!isEditing && (
-              <div className="mt-6 flex flex-wrap items-center gap-3 justify-between border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg px-4 py-3 bg-black/30 dark:bg-black/30 [data-theme='light']:bg-slate-100/70">
+              <div className="mt-6 flex flex-wrap items-center gap-3 justify-between border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg px-4 py-3 bg-black/30 dark:bg-black/30 [data-theme='light']:bg-slate-50/50">
                 <div className="text-sm text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600 font-mono">
                   值得一读？快点赞并分享给你的小伙伴们吧
                 </div>
