@@ -292,8 +292,22 @@ enum UserRole {
    - **建议**: 如果需要更严格的权限控制，可以在点赞/评论 API 中添加角色检查
 
 2. **收藏夹（已点赞）权限**
-   - 前端实现：只有登录用户才能看到 "Liked" 标签页
-   - 后端实现：`src/app/api/podcast/liked/route.ts` 需要登录
+   - **前端实现**: 
+     - `src/app/home/page.tsx` - `tabOptions` 中 `liked` 标签页有 `requiresAuth: true`
+     - 标签页按钮会根据 `user` 状态禁用
+   - **后端实现**: 
+     - `src/app/api/podcast/liked/route.ts` - 使用 `requireUser()` 必须登录
+   - **验证代码**:
+     ```typescript
+     // home/page.tsx
+     { id: 'liked', label: 'Liked', icon: '❤', requiresAuth: true }
+     
+     // api/podcast/liked/route.ts
+     export async function GET(req: Request) {
+       const user = await requireUser(); // 必须登录
+       // ...
+     }
+     ```
    - **状态**: ✅ 正确实现
 
 3. **上传权限检查**
