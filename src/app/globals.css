@@ -253,13 +253,19 @@ body > * {
 }
 
 /* 播客卡片作者名称颜色 - 深色主题使用白色，白色主题使用深色 */
+/* 必须放在其他样式之后，确保优先级最高 */
 .podcast-author-name {
   color: rgb(255, 255, 255) !important; /* 默认白色（深色主题） */
 }
 
+/* 使用更具体的选择器，确保覆盖所有可能的父元素样式 */
 [data-theme='light'] .podcast-author-name,
 [data-theme='light'] span.podcast-author-name,
-[data-theme='light'] .author-name.podcast-author-name {
+[data-theme='light'] .author-name.podcast-author-name,
+[data-theme='light'] .bg-zinc-900\/40 .podcast-author-name,
+[data-theme='light'] .bg-zinc-900\/60 .podcast-author-name,
+[data-theme='light'] .bg-card-surface .podcast-author-name,
+[data-theme='light'] [class*="bg-"] .podcast-author-name {
   color: #020617 !important; /* slate-950 - 白色主题使用深色 */
 }
 
