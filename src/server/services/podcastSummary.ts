@@ -62,14 +62,41 @@ async function generateSummary(): Promise<PodcastSummary> {
 export async function getPodcastSummary(force = false): Promise<PodcastSummary> {
 	const now = Date.now();
 	if (!force && cache && cache.expiresAt > now) {
+		console.log('[getPodcastSummary] 使用缓存数据');
 		return cache.summary;
 	}
 
-	const summary = await generateSummary();
-	cache = {
-		summary,
-		expiresAt: now + SUMMARY_TTL_MS,
-	};
-	return summary;
+	try {
+		console.log('[getPodcastSummary] 开始生成摘要...');
+		const summary = await generateSummary();
+		cache = {
+			summary,
+			expiresAt: now + SUMMARY_TTL_MS,
+		};
+		console.log(`[getPodcastSummary] 摘要生成成功: ${summary.totalPodcasts} 个播客`);
+		return summary;
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		console.error('[getPodcastSummary] 生成摘要失败:', errorMessage);
+		
+		// 如果有缓存，返回缓存数据
+		if (cache) {
+			console.log('[getPodcastSummary] 返回过期缓存数据');
+			return cache.summary;
+		}
+		
+		// 如果没有缓存，返回默认值
+		console.log('[getPodcastSummary] 返回默认值');
+		return {
+			totalPodcasts: 0,
+			readyPodcasts: 0,
+			processingPodcasts: 0,
+			failedPodcasts: 0,
+			totalProcessingDurationMs: 0,
+			totalDurationSeconds: 0,
+			totalTasks: 0,
+			refreshedAt: new Date().toISOString(),
+		};
+	}
 }
 

@@ -37,6 +37,8 @@ type PodcastDetail = {
   // report字段已删除，只使用summary
   updatedAt: string;
   likeCount?: number;
+  isLimited?: boolean; // 是否受限（访客权限用完）
+  visitorLimitExceeded?: boolean; // 访客权限是否已用完
 };
 
 type Comment = {
@@ -86,6 +88,7 @@ export default function PodcastDetailPage() {
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [showVisitorLimitModal, setShowVisitorLimitModal] = useState(false);
   const [visitorLimitInfo, setVisitorLimitInfo] = useState<{ count: number; limit: number } | null>(null);
+  const [isContentLimited, setIsContentLimited] = useState(false); // 内容是否受限
 
   useEffect(() => {
     if (id) {
@@ -107,14 +110,7 @@ export default function PodcastDetailPage() {
       // 添加时间戳防止缓存
       const res = await fetch(`/api/public/podcast?id=${id}&t=${Date.now()}`);
       if (!res.ok) {
-        if (res.status === 403) {
-          // Visitor 限制
-          const errorData = await res.json();
-          setVisitorLimitInfo({ count: errorData.count || 3, limit: errorData.limit || 3 });
-          setShowVisitorLimitModal(true);
-          setError('今日查看次数已用完');
-          return;
-        } else if (res.status === 404) {
+        if (res.status === 404) {
           throw new Error('播客不存在');
         } else if (res.status === 503) {
           throw new Error('数据库连接问题，请稍后重试');
@@ -124,14 +120,21 @@ export default function PodcastDetailPage() {
       }
       const data = await res.json();
       setPodcast(data);
-
+      
+      // 检查是否受限
+      const isLimited = data.isLimited || data.visitorLimitExceeded;
+      setIsContentLimited(isLimited);
+      
       if (data.visitorInfo) {
         const info = {
           count: data.visitorInfo.used ?? 0,
           limit: data.visitorInfo.total ?? 3,
         };
         setVisitorLimitInfo(info);
-        if (info.count >= info.limit) {
+        // 如果内容受限，不显示模态框（使用遮罩代替）
+        if (isLimited) {
+          setShowVisitorLimitModal(false);
+        } else if (info.count >= info.limit) {
           setShowVisitorLimitModal(true);
         } else {
           setShowVisitorLimitModal(false);
@@ -156,7 +159,16 @@ export default function PodcastDetailPage() {
       }
     } catch (error) {
       console.error('Failed to load podcast:', error);
-      setError('加载播客失败');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // 根据错误类型设置更具体的错误信息
+      if (errorMessage.includes('数据库连接') || errorMessage.includes('数据库查询失败')) {
+        setError('数据库连接问题，请稍后重试');
+      } else if (errorMessage.includes('播客不存在')) {
+        setError('播客不存在');
+      } else {
+        setError(`加载播客失败: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -778,12 +790,44 @@ export default function PodcastDetailPage() {
                 />
               </div>
             ) : (
-              <div className="prose prose-invert dark:prose-invert [data-theme='light']:prose prose-lg max-w-none">
+              <div className="prose prose-invert dark:prose-invert [data-theme='light']:prose prose-lg max-w-none relative">
                 <SummaryDisplay 
                   summary={podcast.summary}
                   report={podcast.summary}
                   fallbackText="暂无播客总结"
                 />
+                {/* 内容受限遮罩 */}
+                {isContentLimited && (
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/60 to-black/90 backdrop-blur-sm flex items-end justify-center pb-8 pointer-events-auto">
+                    <div className="bg-zinc-900/95 dark:bg-zinc-900/95 [data-theme='light']:bg-white/95 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
+                      <div className="text-center mb-4">
+                        <div className="text-3xl mb-3">🔒</div>
+                        <h3 className="text-lg font-bold text-white dark:text-white [data-theme='light']:text-foreground mb-2">
+                          今日查看次数已用完
+                        </h3>
+                        <p className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 mb-4">
+                          您今天已经查看了 {visitorLimitInfo?.count || 3} 个播客详情。
+                          <br />
+                          注册登录后可无限浏览所有播客！
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <Link
+                          href="/register"
+                          className="block w-full px-6 py-3 bg-white text-black rounded-lg font-bold hover:bg-zinc-200 transition-colors text-center"
+                        >
+                          立即注册
+                        </Link>
+                        <Link
+                          href="/login"
+                          className="block w-full px-6 py-3 bg-zinc-800 text-white border border-white/10 rounded-lg font-bold hover:bg-zinc-700 transition-colors text-center"
+                        >
+                          登录
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -909,7 +953,7 @@ export default function PodcastDetailPage() {
                 {asrTab === 'asr' ? (
                   showASR && podcast.originalTranscript ? (
                     <div 
-                      className="p-6 font-mono text-sm overflow-y-auto"
+                      className="p-6 font-mono text-sm overflow-y-auto relative"
                       style={{ 
                         height: '400px', 
                         wordWrap: 'break-word', 
@@ -925,6 +969,38 @@ export default function PodcastDetailPage() {
                     >
                       <span className="text-zinc-500">$ </span>
                       {podcast.originalTranscript}
+                      {/* 内容受限遮罩 */}
+                      {isContentLimited && (
+                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/60 to-black/90 backdrop-blur-sm flex items-end justify-center pb-8 pointer-events-auto">
+                          <div className="bg-zinc-900/95 dark:bg-zinc-900/95 [data-theme='light']:bg-white/95 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
+                            <div className="text-center mb-4">
+                              <div className="text-3xl mb-3">🔒</div>
+                              <h3 className="text-lg font-bold text-white dark:text-white [data-theme='light']:text-foreground mb-2">
+                                今日查看次数已用完
+                              </h3>
+                              <p className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 mb-4">
+                                您今天已经查看了 {visitorLimitInfo?.count || 3} 个播客详情。
+                                <br />
+                                注册登录后可无限浏览所有播客！
+                              </p>
+                            </div>
+                            <div className="space-y-3">
+                              <Link
+                                href="/register"
+                                className="block w-full px-6 py-3 bg-white text-black rounded-lg font-bold hover:bg-zinc-200 transition-colors text-center"
+                              >
+                                立即注册
+                              </Link>
+                              <Link
+                                href="/login"
+                                className="block w-full px-6 py-3 bg-zinc-800 text-white border border-white/10 rounded-lg font-bold hover:bg-zinc-700 transition-colors text-center"
+                              >
+                                登录
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="p-6 text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500 text-xs font-mono text-center bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-50">

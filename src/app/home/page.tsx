@@ -7,6 +7,7 @@ import { useUser } from '@/hooks/useUser';
 import UpgradeModal from '@/components/UpgradeModal';
 import { PodcastCard } from '@/components/PodcastCard';
 import MinimalLikeButton from '@/components/MinimalLikeButton';
+import { AnimatedDotGrid } from '@/components/AnimatedDotGrid';
 
 type PodcastItem = {
   id: string;
@@ -1683,8 +1684,17 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-black dark:bg-black [data-theme='light']:bg-background">
-      <main className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-black dark:bg-black [data-theme='light']:bg-[#f5f4f1] relative">
+      {/* 动态点阵网格背景 - 根据主题显示不同颜色的点阵 */}
+      <AnimatedDotGrid 
+        dotSize={1.5}
+        spacing={24}
+        activeDotRatio={0.08}
+        minCycleDuration={3000}
+        maxCycleDuration={8000}
+      />
+      {/* 主要内容区域 */}
+      <main className="container mx-auto px-4 py-8 relative z-10">
         {/* Hero Section - 搜索区域 */}
         <div className="relative w-full mt-16 px-6 overflow-visible mb-10">
           {/* === Aurora Glow Backgrounds === */}

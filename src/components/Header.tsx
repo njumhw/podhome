@@ -102,7 +102,7 @@ export function Header() {
 
 	return (
 		<>
-			<header className="header-shell w-full sticky top-0 z-10 backdrop-blur-sm">
+			<header className="header-shell w-full sticky top-0 z-[100] backdrop-blur-sm relative">
 				<div className="mx-auto max-w-7xl px-6 py-3 flex items-center justify-between gap-4">
 					<Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
 						<h1 className="text-xl font-bold tracking-tight flex items-center gap-1.5">

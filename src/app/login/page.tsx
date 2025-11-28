@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useUser } from "@/hooks/useUser";
 
 function LoginForm() {
 	const [formData, setFormData] = useState({
@@ -14,6 +15,7 @@ function LoginForm() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const message = searchParams.get("message");
+	const { checkUser } = useUser();
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -34,8 +36,30 @@ function LoginForm() {
 				throw new Error(data.error || "Login failed");
 			}
 
-			// 登录成功，刷新页面并跳转到首页
-			window.location.href = "/";
+			// 登录成功，先等待确保 cookie 已设置
+			await new Promise(resolve => setTimeout(resolve, 200));
+			
+			// 验证登录是否成功（通过检查用户状态）
+			try {
+				const verifyRes = await fetch("/api/auth/me");
+				const verifyData = await verifyRes.json();
+				
+				if (verifyData.user) {
+					// 用户状态验证成功，刷新用户状态并跳转
+					await checkUser();
+					
+					// 使用 Next.js 路由跳转
+					router.push("/");
+					router.refresh();
+				} else {
+					// 如果验证失败，使用完全刷新作为后备方案
+					window.location.href = "/";
+				}
+			} catch (verifyError) {
+				// 验证失败，使用完全刷新作为后备方案
+				console.warn("登录验证失败，使用完全刷新:", verifyError);
+				window.location.href = "/";
+			}
 		} catch (err: any) {
 			setError(err.message);
 		} finally {

@@ -23,6 +23,10 @@ function getUserAgent(req: NextRequest): string {
 }
 
 export async function GET(request: NextRequest) {
+  // 提前获取 id，以便在 catch 块中使用
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+  
   try {
     const clientIp = getClientIp(request);
     const userAgent = getUserAgent(request);
@@ -36,22 +40,14 @@ export async function GET(request: NextRequest) {
     }
 
     let visitorUsage = null;
+    let visitorLimitExceeded = false;
     if (!user) {
       visitorUsage = await getVisitorUsage(clientIp, userAgent);
       if (!visitorUsage.allowed) {
-        return NextResponse.json(
-          {
-            error: 'VISITOR_LIMIT_EXCEEDED',
-            message: '今日查看次数已用完，请注册登录后无限浏览',
-            count: visitorUsage.count,
-            limit: visitorUsage.limit,
-          },
-          { status: 403 }
-        );
+        // 不再直接返回403，而是标记为受限，继续查询播客信息
+        visitorLimitExceeded = true;
       }
     }
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
     const url = searchParams.get('url');
     
     if (!id && !url) {
@@ -76,6 +72,7 @@ export async function GET(request: NextRequest) {
     // 注意：reportOutline字段可能还不存在（如果迁移未执行），使用findMany+select来避免字段不存在错误
     let podcast: any = null;
     try {
+      console.log(`[api/public/podcast] 查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
       podcast = await prisma.podcast.findFirst({
         where: whereClause,
         select: {
@@ -93,32 +90,51 @@ export async function GET(request: NextRequest) {
           updatedAt: true
         }
       });
+      console.log(`[api/public/podcast] Podcast表查询结果: ${podcast ? '找到' : '未找到'}`);
     } catch (error: any) {
       // 如果reportOutline字段不存在，尝试不查询该字段
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[api/public/podcast] Podcast表查询错误:`, errorMessage);
+      
       if (errorMessage.includes('reportOutline') || errorMessage.includes('Unknown column')) {
         console.warn('reportOutline字段不存在，使用兼容查询');
-        podcast = await prisma.podcast.findFirst({
-          where: whereClause,
-          select: {
-            id: true,
-            title: true,
-            showAuthor: true,
-            publishedAt: true,
-            audioUrl: true,
-            sourceUrl: true,
-            summary: true,
-            topic: { select: { name: true } },
-            transcript: true,
-            originalTranscript: true,
-            updatedAt: true
+        try {
+          podcast = await prisma.podcast.findFirst({
+            where: whereClause,
+            select: {
+              id: true,
+              title: true,
+              showAuthor: true,
+              publishedAt: true,
+              audioUrl: true,
+              sourceUrl: true,
+              summary: true,
+              topic: { select: { name: true } },
+              transcript: true,
+              originalTranscript: true,
+              updatedAt: true
+            }
+          });
+          // 手动设置reportOutline为null
+          if (podcast) {
+            podcast.reportOutline = null;
           }
-        });
-        // 手动设置reportOutline为null
-        if (podcast) {
-          podcast.reportOutline = null;
+        } catch (retryError: any) {
+          console.error(`[api/public/podcast] 兼容查询也失败:`, retryError);
+          throw retryError; // 重新抛出错误
         }
       } else {
+        // 检查是否是数据库连接错误
+        if (errorMessage.includes('Can\'t reach database server') || 
+            errorMessage.includes('connection pool') ||
+            errorMessage.includes('P1001') ||
+            errorMessage.includes('P1017')) {
+          console.error(`[api/public/podcast] 数据库连接错误:`, errorMessage);
+          return NextResponse.json(
+            { error: '数据库连接问题，请稍后重试' },
+            { status: 503 }
+          );
+        }
         throw error; // 其他错误继续抛出
       }
     }
@@ -126,62 +142,111 @@ export async function GET(request: NextRequest) {
     let resolvedFromAudioCache = false;
     // 如果在Podcast表没找到，查AudioCache表
     if (!podcast) {
-      const audioCache = await prisma.audioCache.findFirst({
-        where: whereClause,
-        select: {
-          id: true,
-          title: true,
-          author: true,
-          audioUrl: true,
-          summary: true,
-          transcript: true,
-          script: true,
-          // report字段已删除
-          publishedAt: true,
-          metadata: true,
-          updatedAt: true,
-          topic: { select: { id: true, name: true, color: true } }
-        }
-      });
+      console.log(`[api/public/podcast] Podcast表未找到，尝试查询AudioCache表`);
+      try {
+        const audioCache = await prisma.audioCache.findFirst({
+          where: whereClause,
+          select: {
+            id: true,
+            title: true,
+            author: true,
+            audioUrl: true,
+            summary: true,
+            transcript: true,
+            script: true,
+            // report字段已删除
+            publishedAt: true,
+            metadata: true,
+            updatedAt: true,
+            topic: { select: { id: true, name: true, color: true } }
+          }
+        });
 
-      if (audioCache) {
-        resolvedFromAudioCache = true;
-        podcast = {
-          id: audioCache.id,
-          title: audioCache.title || '未知标题',
-          showAuthor: audioCache.author || '未知作者',
-          publishedAt: audioCache.publishedAt || (audioCache.metadata as { publishedAt?: string })?.publishedAt ? new Date((audioCache.metadata as { publishedAt?: string }).publishedAt!) : null,
-          audioUrl: audioCache.audioUrl,
-          sourceUrl: audioCache.audioUrl,
-          summary: audioCache.summary,
-          topic: audioCache.topic,
-          transcript: null, // 清洗稿已移除
-          originalTranscript: audioCache.transcript,  // ASR原文
-          reportOutline: null, // AudioCache没有reportOutline字段
-          updatedAt: audioCache.updatedAt
-        };
+        if (audioCache) {
+          console.log(`[api/public/podcast] AudioCache表找到播客: ${audioCache.id}`);
+          resolvedFromAudioCache = true;
+          podcast = {
+            id: audioCache.id,
+            title: audioCache.title || '未知标题',
+            showAuthor: audioCache.author || '未知作者',
+            publishedAt: audioCache.publishedAt || (audioCache.metadata as { publishedAt?: string })?.publishedAt ? new Date((audioCache.metadata as { publishedAt?: string }).publishedAt!) : null,
+            audioUrl: audioCache.audioUrl,
+            sourceUrl: audioCache.audioUrl,
+            summary: audioCache.summary,
+            topic: audioCache.topic,
+            transcript: null, // 清洗稿已移除
+            originalTranscript: audioCache.transcript,  // ASR原文
+            reportOutline: null, // AudioCache没有reportOutline字段
+            updatedAt: audioCache.updatedAt
+          };
+        } else {
+          console.log(`[api/public/podcast] AudioCache表也未找到播客`);
+        }
+      } catch (audioCacheError: any) {
+        const errorMessage = audioCacheError instanceof Error ? audioCacheError.message : String(audioCacheError);
+        console.error(`[api/public/podcast] AudioCache表查询错误:`, errorMessage);
+        
+        // 检查是否是数据库连接错误
+        if (errorMessage.includes('Can\'t reach database server') || 
+            errorMessage.includes('connection pool') ||
+            errorMessage.includes('P1001') ||
+            errorMessage.includes('P1017')) {
+          return NextResponse.json(
+            { error: '数据库连接问题，请稍后重试' },
+            { status: 503 }
+          );
+        }
+        // 其他错误继续抛出，会被外层catch捕获
+        throw audioCacheError;
       }
     }
 
     if (!podcast) {
+      console.log(`[api/public/podcast] 播客不存在: id=${id}`);
       return NextResponse.json(
-        { error: '播客不存在' },
+        { error: '播客不存在', id: id },
         { status: 404 }
       );
     }
+    
+    console.log(`[api/public/podcast] 成功找到播客: id=${podcast.id}, title=${podcast.title}`);
 
     // 获取点赞数
     const likeCount = await prisma.podcastLike.count({
       where: { podcastId: podcast.id }
     });
 
-    await recordVisitorAccess({
-      podcastId: resolvedFromAudioCache ? null : podcast.id,
-      audioCacheId: resolvedFromAudioCache ? podcast.id : null,
-      userId: user?.id ?? null,
-      userIp: user ? null : clientIp,
-      userAgent: user ? null : userAgent,
-    });
+    // 只有在权限未用完时才记录访问（避免重复计数）
+    // 如果权限已用完，说明之前已经记录过了，不再重复记录
+    if (!visitorLimitExceeded) {
+      await recordVisitorAccess({
+        podcastId: resolvedFromAudioCache ? null : podcast.id,
+        audioCacheId: resolvedFromAudioCache ? podcast.id : null,
+        userId: user?.id ?? null,
+        userIp: user ? null : clientIp,
+        userAgent: user ? null : userAgent,
+      });
+    }
+
+    // 如果是 Visitor 且权限已用完，只返回前10行内容
+    let summaryToReturn = podcast.summary;
+    let transcriptToReturn = podcast.originalTranscript || podcast.transcript;
+    
+    if (visitorLimitExceeded) {
+      // 截取摘要的前10行
+      if (summaryToReturn) {
+        const summaryLines = summaryToReturn.split('\n');
+        const previewLines = summaryLines.slice(0, 10);
+        summaryToReturn = previewLines.join('\n');
+      }
+      
+      // 截取转录稿的前10行
+      if (transcriptToReturn) {
+        const transcriptLines = transcriptToReturn.split('\n');
+        const previewLines = transcriptLines.slice(0, 10);
+        transcriptToReturn = previewLines.join('\n');
+      }
+    }
 
     // 如果是 Visitor，返回剩余次数信息
     const responseData: any = {
@@ -191,18 +256,33 @@ export async function GET(request: NextRequest) {
       publishedAt: podcast.publishedAt,
       audioUrl: podcast.audioUrl,
       originalUrl: podcast.sourceUrl,
-      summary: podcast.summary,
+      summary: summaryToReturn,
       topic: podcast.topic,
       script: null, // 清洗稿已移除，始终为null
-      originalTranscript: podcast.originalTranscript || podcast.transcript, // ASR原文（优先使用originalTranscript，fallback到transcript以兼容旧数据）
-      reportOutline: (podcast as any).reportOutline || null, // 报告大纲
-      report: podcast.summary,
+      originalTranscript: transcriptToReturn, // ASR原文（如果权限受限，只返回前10行）
+      reportOutline: visitorLimitExceeded ? null : ((podcast as any).reportOutline || null), // 报告大纲（权限受限时不返回）
+      report: summaryToReturn,
       updatedAt: podcast.updatedAt,
-      likeCount
+      likeCount,
+      // 标记是否受限
+      isLimited: visitorLimitExceeded,
+      visitorLimitExceeded: visitorLimitExceeded
     };
 
-    if (!user && visitorUsage) {
-      responseData.visitorInfo = buildVisitorInfo(visitorUsage);
+    // 返回访客信息（包括权限用完的情况）
+    if (!user) {
+      if (visitorLimitExceeded && visitorUsage) {
+        // 权限已用完，返回受限信息
+        responseData.visitorInfo = {
+          used: visitorUsage.count,
+          total: visitorUsage.limit,
+          remaining: 0,
+          limitExceeded: true
+        };
+      } else if (visitorUsage) {
+        // 权限未用完，返回正常信息
+        responseData.visitorInfo = buildVisitorInfo(visitorUsage);
+      }
     }
 
     const response = NextResponse.json(responseData);
@@ -212,19 +292,49 @@ export async function GET(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('Podcast fetch error:', error);
+    console.error('[api/public/podcast] 错误详情:', error);
     
     // 检查是否是数据库连接问题
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as any)?.code;
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    
+    console.error(`[api/public/podcast] 错误类型: ${errorName}, 错误代码: ${errorCode}, 错误信息: ${errorMessage}`);
+    
+    // 数据库连接相关错误
     if (errorMessage.includes('Can\'t reach database server') || 
-        errorMessage.includes('connection pool')) {
+        errorMessage.includes('connection pool') ||
+        errorMessage.includes('P1001') || // Prisma 连接错误
+        errorMessage.includes('P1017') || // Prisma 服务器关闭连接
+        errorMessage.includes('P1002') || // Prisma 连接超时
+        errorCode === 'P1001' ||
+        errorCode === 'P1017' ||
+        errorCode === 'P1002') {
+      console.error('[api/public/podcast] 数据库连接问题，返回503');
       return NextResponse.json(
-        { error: '数据库连接问题，请稍后重试' },
+        { error: '数据库连接问题，请稍后重试', id: id || null },
         { status: 503 } // Service Unavailable
       );
     }
     
-    const debugPayload = process.env.NODE_ENV !== 'production' ? { details: errorMessage } : {};
+    // Prisma 查询错误
+    if (errorName === 'PrismaClientKnownRequestError' ||
+        errorName === 'PrismaClientInitializationError' ||
+        errorName === 'PrismaClientRustPanicError') {
+      console.error('[api/public/podcast] Prisma 错误，返回503');
+      return NextResponse.json(
+        { error: '数据库查询失败，请稍后重试', id: id || null },
+        { status: 503 }
+      );
+    }
+    
+    const debugPayload = process.env.NODE_ENV !== 'production' ? { 
+      details: errorMessage,
+      errorCode,
+      errorName,
+      id: id || null
+    } : { id: id || null };
+    
     return NextResponse.json(
       { error: '获取播客详情失败', ...debugPayload },
       { status: 500 }

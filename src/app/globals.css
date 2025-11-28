@@ -19,7 +19,7 @@
   --text-muted: #4b5563;
   --card-surface: #faf9f6;
   --card-border: rgba(15, 23, 42, 0.08);
-  --header-bg: rgba(250, 249, 246, 0.95);
+  --header-bg: rgba(250, 249, 246, 1); /* 白色主题下完全不透明 */
   --divider-color: rgba(15, 23, 42, 0.08);
   --outline-color: rgba(15, 23, 42, 0.25);
 }
@@ -63,6 +63,11 @@ body > * {
   z-index: 1;
 }
 
+/* Header 需要更高的 z-index，覆盖上面的规则 */
+.header-shell {
+  z-index: 100 !important;
+}
+
 .header-shell {
   background-color: var(--header-bg);
   border-bottom: 1px solid var(--divider-color);
@@ -95,6 +100,94 @@ body > * {
 [data-theme='light'] .text-zinc-500,
 [data-theme='light'] .text-gray-500 {
   color: #6b7280 !important;
+}
+
+/* AboutModal 白色主题 - 强制覆盖所有样式 */
+[data-theme='light'] .about-modal {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important; /* slate-300 */
+}
+
+/* 覆盖所有文字颜色 */
+[data-theme='light'] .about-modal,
+[data-theme='light'] .about-modal * {
+  color: inherit;
+}
+
+[data-theme='light'] .about-modal h3,
+[data-theme='light'] .about-modal h3 span {
+  color: #0f172a !important; /* slate-900 */
+}
+
+[data-theme='light'] .about-modal .about-modal-content {
+  color: #1e293b !important; /* slate-800 */
+}
+
+[data-theme='light'] .about-modal .about-modal-text {
+  color: #334155 !important; /* slate-700 */
+}
+
+[data-theme='light'] .about-modal .about-modal-emphasis {
+  color: #0f172a !important; /* slate-900 */
+  font-weight: 600 !important;
+}
+
+[data-theme='light'] .about-modal .about-modal-small {
+  color: #475569 !important; /* slate-600 */
+}
+
+/* 覆盖所有按钮文字 */
+[data-theme='light'] .about-modal button {
+  color: #0f172a !important; /* slate-900 */
+}
+
+/* 覆盖表格文字 */
+[data-theme='light'] .about-modal table th {
+  color: #0f172a !important; /* slate-900 */
+}
+
+[data-theme='light'] .about-modal table td {
+  color: #1e293b !important; /* slate-800 */
+}
+
+/* 覆盖所有 p, span 等文字元素 */
+[data-theme='light'] .about-modal p,
+[data-theme='light'] .about-modal span {
+  color: inherit;
+}
+
+/* 覆盖白色文字变体 */
+[data-theme='light'] .about-modal .text-white,
+[data-theme='light'] .about-modal .text-white\/90,
+[data-theme='light'] .about-modal .text-white\/80,
+[data-theme='light'] .about-modal .text-white\/70,
+[data-theme='light'] .about-modal .text-white\/60,
+[data-theme='light'] .about-modal .text-white\/50,
+[data-theme='light'] .about-modal .text-white\/40 {
+  color: #1e293b !important; /* slate-800 */
+}
+
+/* 覆盖背景色 */
+[data-theme='light'] .about-modal .bg-black\/40 {
+  background-color: #f1f5f9 !important; /* slate-50 */
+}
+
+/* 深色主题保持原样 */
+.about-modal-content {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.about-modal-text {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.about-modal-emphasis {
+  color: rgba(255, 255, 255, 1);
+  font-weight: 600;
+}
+
+.about-modal-small {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 [data-theme='light'] .border-white\/5,
