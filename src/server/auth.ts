@@ -37,11 +37,32 @@ async function isHttps(): Promise<boolean> {
 	try {
 		const headersList = await headers();
 		const forwardedProto = headersList.get("x-forwarded-proto");
-		const protocol = forwardedProto || process.env.NEXT_PUBLIC_BASE_URL?.startsWith("https") ? "https" : "http";
-		return protocol === "https";
+		
+		// 优先检查 X-Forwarded-Proto 头（反向代理设置）
+		if (forwardedProto) {
+			return forwardedProto.toLowerCase() === "https";
+		}
+		
+		// 如果没有 X-Forwarded-Proto，检查环境变量
+		const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+		if (baseUrl) {
+			return baseUrl.toLowerCase().startsWith("https://");
+		}
+		
+		// 如果设置了 USE_HTTPS 环境变量
+		if (process.env.USE_HTTPS === "true") {
+			return true;
+		}
+		
+		// 默认返回 false（使用 HTTP）
+		return false;
 	} catch {
 		// 如果无法获取 headers，根据环境变量判断
-		return process.env.USE_HTTPS === "true" || process.env.NEXT_PUBLIC_BASE_URL?.startsWith("https") || false;
+		const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+		if (baseUrl) {
+			return baseUrl.toLowerCase().startsWith("https://");
+		}
+		return process.env.USE_HTTPS === "true" || false;
 	}
 }
 
