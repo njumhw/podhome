@@ -208,7 +208,9 @@ export default function PodcastDetailPage() {
 
   const checkUser = async () => {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await fetch('/api/auth/me', {
+        credentials: "include", // 确保发送 Cookie
+      });
       if (res.ok) {
         const userData = await res.json();
         setUser(userData.user);

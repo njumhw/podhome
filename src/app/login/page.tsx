@@ -28,6 +28,7 @@ function LoginForm() {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(formData),
+				credentials: "include", // 确保发送 Cookie
 			});
 
 			const data = await res.json();
@@ -37,22 +38,27 @@ function LoginForm() {
 			}
 
 			// 登录成功，先等待确保 cookie 已设置
-			await new Promise(resolve => setTimeout(resolve, 200));
+			await new Promise(resolve => setTimeout(resolve, 300));
 			
 			// 验证登录是否成功（通过检查用户状态）
 			try {
-				const verifyRes = await fetch("/api/auth/me");
+				const verifyRes = await fetch("/api/auth/me", {
+					credentials: "include", // 确保发送 Cookie
+				});
 				const verifyData = await verifyRes.json();
 				
 				if (verifyData.user) {
-					// 用户状态验证成功，刷新用户状态并跳转
+					// 用户状态验证成功，刷新用户状态
 					await checkUser();
 					
-					// 使用 Next.js 路由跳转
-					router.push("/");
-					router.refresh();
+					// 等待状态更新完成
+					await new Promise(resolve => setTimeout(resolve, 100));
+					
+					// 使用完全刷新确保所有状态都正确加载
+					window.location.href = "/";
 				} else {
 					// 如果验证失败，使用完全刷新作为后备方案
+					console.warn("登录验证失败，用户数据为空");
 					window.location.href = "/";
 				}
 			} catch (verifyError) {

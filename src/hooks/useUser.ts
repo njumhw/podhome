@@ -41,7 +41,9 @@ export function useUser() {
 
   const checkUser = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me");
+      const res = await fetch("/api/auth/me", {
+        credentials: "include", // 确保发送 Cookie
+      });
       const data = await res.json();
       
       if (data.user) {
@@ -49,7 +51,9 @@ export function useUser() {
         
         // 获取用户使用量
         try {
-          const usageRes = await fetch("/api/user/daily-usage");
+          const usageRes = await fetch("/api/user/daily-usage", {
+            credentials: "include", // 确保发送 Cookie
+          });
           const usageData = await usageRes.json();
           if (usageData.success) {
             updateDailyUsage({ used: usageData.used, limit: usageData.limit });
@@ -62,6 +66,7 @@ export function useUser() {
         updateDailyUsage({ used: 0, limit: 0 });
       }
     } catch (error) {
+      console.error('Failed to check user:', error);
       updateUser(null);
       updateDailyUsage({ used: 0, limit: 0 });
     } finally {

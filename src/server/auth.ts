@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import crypto from "crypto";
 import { db } from "@/server/db";
 import { getEnv } from "@/utils/env";
@@ -31,15 +32,31 @@ function decode(token: string, secret: string): SessionPayload | null {
 	}
 }
 
+// 检查是否使用 HTTPS
+async function isHttps(): Promise<boolean> {
+	try {
+		const headersList = await headers();
+		const forwardedProto = headersList.get("x-forwarded-proto");
+		const protocol = forwardedProto || process.env.NEXT_PUBLIC_BASE_URL?.startsWith("https") ? "https" : "http";
+		return protocol === "https";
+	} catch {
+		// 如果无法获取 headers，根据环境变量判断
+		return process.env.USE_HTTPS === "true" || process.env.NEXT_PUBLIC_BASE_URL?.startsWith("https") || false;
+	}
+}
+
 export async function setSession(userId: string) {
 	const secret = getEnv().AUTH_SECRET;
 	const token = encode({ userId, issuedAt: Date.now() }, secret);
 	const c = await cookies();
-	// 生产环境使用 HTTPS，设置 secure: true；开发环境允许 HTTP
 	const isProduction = process.env.NODE_ENV === 'production';
+	const useHttps = await isHttps();
+	
+	// 只有在生产环境且使用 HTTPS 时才设置 secure
+	// 开发环境或 HTTP 环境不设置 secure，允许 Cookie 正常工作
 	c.set(SESSION_COOKIE, token, {
 		httpOnly: true,
-		secure: isProduction, // 生产环境使用 HTTPS，开发环境允许 HTTP
+		secure: isProduction && useHttps,
 		sameSite: "lax",
 		path: "/",
 		maxAge: Math.floor(SESSION_TTL_MS / 1000),
@@ -48,7 +65,16 @@ export async function setSession(userId: string) {
 
 export async function clearSession() {
 	const c = await cookies();
-	c.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+	const isProduction = process.env.NODE_ENV === 'production';
+	const useHttps = await isHttps();
+	
+	c.set(SESSION_COOKIE, "", { 
+		path: "/", 
+		maxAge: 0,
+		httpOnly: true,
+		secure: isProduction && useHttps,
+		sameSite: "lax",
+	});
 }
 
 export async function getSessionUser() {

@@ -70,7 +70,10 @@ export function Header() {
 	}, [user]);
 
 	const handleLogout = async () => {
-		await fetch("/api/auth/logout", { method: "POST" });
+		await fetch("/api/auth/logout", { 
+			method: "POST",
+			credentials: "include", // 确保发送 Cookie
+		});
 		updateUser(null);
 		removeAdminFooterLink();
 		window.location.reload();

@@ -41,6 +41,7 @@ export default function RegisterPage() {
 					username: formData.username,
 					password: formData.password,
 				}),
+				credentials: "include", // 确保发送 Cookie
 			});
 
 			const data = await res.json();

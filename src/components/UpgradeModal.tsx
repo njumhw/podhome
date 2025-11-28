@@ -30,6 +30,7 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inviteCode: inviteCode.trim() }),
+        credentials: "include", // 确保发送 Cookie
       });
 
       const data = await res.json();
