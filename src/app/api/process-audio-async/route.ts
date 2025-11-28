@@ -5,6 +5,7 @@ import { jsonError } from "@/utils/http";
 import { getSessionUser } from "@/server/auth";
 import { db } from "@/server/db";
 import { taskQueue } from "@/server/task-queue";
+import { checkUserUploadLimit } from "@/server/user-limits";
 
 const bodySchema = z.object({
   url: z.string().url(),
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     const { url } = parsed.data;
     console.log(`[process-audio-async] 收到处理请求: ${url}, 耗时: ${Date.now() - startTime}ms`);
     
-    // 检查用户认证和额度
+    // 检查用户认证
     let user = null;
     
     try {
@@ -47,54 +48,21 @@ export async function POST(req: NextRequest) {
       console.error('Auth check failed:', error);
     }
     
-    // 检查用户额度
-    const today = new Date().toISOString().split('T')[0];
-    let dailyUsage = 0;
-    
-    if (user) {
-      try {
-        const usage = await db.podcast.count({
-          where: {
-            createdById: user.id,
-            createdAt: {
-              gte: new Date(today + 'T00:00:00.000Z'),
-              lt: new Date(today + 'T23:59:59.999Z')
-            }
-          }
-        });
-        dailyUsage = usage;
-      } catch (dbError) {
-        const dbErrorMsg = dbError instanceof Error ? dbError.message : String(dbError);
-        console.error('[process-audio-async] 数据库查询失败:', dbErrorMsg);
-        // 如果是数据库错误，直接抛出，会被 catch 块捕获并返回 503
-        throw new Error(`数据库查询失败: ${dbErrorMsg}`);
-      }
+    // 必须登录才能处理播客
+    if (!user) {
+      return jsonError("请先登录后再处理播客", 401);
     }
     
-    // 确定用户额度
-    let quota = 0;
-    if (user) {
-      if (user.role === 'ADMIN') {
-        quota = Infinity;
-      } else if (user.role === 'USER') {
-        quota = 2;
-      } else {
-        quota = 0;
-      }
-    } else {
-      // 允许无认证用户处理，用于测试
-      quota = 1;
+    // 使用统一的权限检查函数（支持所有角色：PODCASTER, PODCASTER_VIP, ADMIN等）
+    const limitCheck = await checkUserUploadLimit(user.id, user.role);
+    
+    if (!limitCheck.allowed) {
+      return jsonError(limitCheck.reason || "无权限处理播客", 403);
     }
     
-    // 检查是否超出额度
-    if (dailyUsage >= quota) {
-      if (!user) {
-        return jsonError("请先登录后再处理播客", 401);
-      } else if (user.role === 'USER') {
-        return jsonError("今日处理额度已用完，请明天再试", 429);
-      } else {
-        return jsonError("无权限处理播客", 403);
-      }
+    // 如果有限制且已超过，返回429
+    if (limitCheck.limit > 0 && limitCheck.currentCount >= limitCheck.limit) {
+      return jsonError(limitCheck.reason || "今日处理额度已用完，请明天再试", 429);
     }
     
     console.log(`开始异步处理播客链接: ${url}`);
