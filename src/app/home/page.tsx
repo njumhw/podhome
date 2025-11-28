@@ -459,6 +459,10 @@ export default function HomePage() {
         } else {
           toast.error('加载点赞播客失败');
         }
+        // 修复：确保在错误时也设置空数组，避免显示空卡片
+        if (page === 1) {
+          setLikedItems([]);
+        }
         setLikedHasMore(false);
         return;
       }
@@ -466,12 +470,18 @@ export default function HomePage() {
       const normalized = (data.items ?? []).map((item: any, index: number) =>
         normalizeLikedItem(item, offset + index)
       );
+      // 修复：确保即使返回空数组也正确设置状态
       setLikedItems((prev) => page === 1 ? normalized : [...prev, ...normalized]);
       setLikedHasMore(data.pagination?.hasNext ?? false);
       setLikedPage(page);
     } catch (error) {
       console.error('加载点赞播客失败:', error);
       toast.error('加载点赞播客失败');
+      // 修复：确保在错误时也设置空数组，避免显示空卡片
+      if (page === 1) {
+        setLikedItems([]);
+      }
+      setLikedHasMore(false);
     } finally {
       setLikedLoading(false);
     }
@@ -732,7 +742,7 @@ export default function HomePage() {
   const renderLikedSection = () => {
     if (!user) {
       return (
-        <div className="text-center text-gray-500 dark:text-gray-400 [data-theme='light']:text-slate-600 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
+        <div className="text-center text-gray-500 dark:text-gray-400 [data-theme='light']:text-slate-700 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-white/50">
           登录后可以查看你点赞过的播客
         </div>
       );
@@ -743,17 +753,18 @@ export default function HomePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="animate-pulse">
-              <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
+              <div className="h-48 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-white/80 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg"></div>
             </div>
           ))}
         </div>
       );
     }
 
+    // 修复：确保在没有点赞数据时显示空状态，而不是空卡片
     if (!likedLoading && likedItems.length === 0) {
       return (
-        <div className="text-center text-gray-500 dark:text-gray-400 [data-theme='light']:text-slate-600 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-slate-50">
-          暂无点赞的播客，去探索并点赞喜欢的节目吧
+        <div className="text-center text-gray-500 dark:text-gray-400 [data-theme='light']:text-slate-700 py-12 font-mono text-sm border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-zinc-900/20 dark:bg-zinc-900/20 [data-theme='light']:bg-white/50">
+          暂无点赞播客，快去点赞吧～
         </div>
       );
     }
@@ -769,8 +780,8 @@ export default function HomePage() {
               d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
             />
           </svg>
-          <h2 className="text-xl font-bold text-white dark:text-white [data-theme='light']:text-foreground font-mono">Liked</h2>
-          <div className="flex-1 h-px bg-gradient-to-r from-white/20 to-transparent"></div>
+          <h2 className="text-xl font-bold text-white dark:text-white [data-theme='light']:text-slate-900 font-mono">Liked</h2>
+          <div className="flex-1 h-px bg-gradient-to-r from-white/20 dark:from-white/20 [data-theme='light']:from-slate-300 to-transparent"></div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
@@ -806,7 +817,7 @@ export default function HomePage() {
           </div>
         )}
         {likedDisplayCount >= MAX_DISPLAY_COUNT && (
-          <div className="mt-4 text-center text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-500 text-sm font-mono">
+          <div className="mt-4 text-center text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 text-sm font-mono">
             已显示最多 {MAX_DISPLAY_COUNT} 个播客
           </div>
         )}
