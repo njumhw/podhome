@@ -836,7 +836,7 @@ export default function PodcastDetailPage() {
                         </Link>
                         <Link
                           href="/login"
-                          className="block w-full px-6 py-3 bg-zinc-800 text-white border border-white/10 rounded-lg font-bold hover:bg-zinc-700 transition-colors text-center"
+                          className="visitor-login-btn block w-full px-6 py-3 bg-zinc-800 dark:bg-zinc-800 [data-theme='light']:bg-slate-900 text-white dark:text-white border border-white/10 rounded-lg font-bold hover:bg-zinc-700 dark:hover:bg-zinc-700 [data-theme='light']:hover:bg-slate-800 transition-colors text-center"
                         >
                           登录
                         </Link>
