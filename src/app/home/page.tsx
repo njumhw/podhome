@@ -79,17 +79,6 @@ export default function HomePage() {
   ];
 
   // 加载主题列表
-  const loadTopics = async () => {
-    try {
-      const response = await fetch('/api/public/topics');
-      const data = await response.json();
-      if (data.success) {
-        setTopics(data.topics);
-      }
-    } catch (error) {
-      console.error('加载主题失败:', error);
-    }
-  };
 
   const fetchWithTimeout = async (url: string, timeout = 30000): Promise<Response> => {
     const controller = new AbortController();
