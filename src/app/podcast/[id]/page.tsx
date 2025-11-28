@@ -73,6 +73,7 @@ export default function PodcastDetailPage() {
   const [copySuccess, setCopySuccess] = useState('');
   const [downloadStatus, setDownloadStatus] = useState('');
   const [copiedText, setCopiedText] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const [editData, setEditData] = useState({
     title: '',
     author: '',
@@ -411,7 +412,8 @@ export default function PodcastDetailPage() {
     if (navigator.clipboard && window.isSecureContext) {
       try {
         await navigator.clipboard.writeText(currentUrl);
-        toast.success('已复制链接', '链接已复制到剪贴板');
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
         return;
       } catch (err) {
         console.warn('Clipboard API 失败，尝试降级方案:', err);
@@ -434,7 +436,8 @@ export default function PodcastDetailPage() {
       document.body.removeChild(textarea);
       
       if (successful) {
-        toast.success('已复制链接', '链接已复制到剪贴板');
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
       } else {
         throw new Error('execCommand 复制失败');
       }
