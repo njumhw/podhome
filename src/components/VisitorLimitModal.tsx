@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 interface VisitorLimitModalProps {
   isOpen: boolean;
@@ -11,6 +12,24 @@ interface VisitorLimitModalProps {
 
 export default function VisitorLimitModal({ isOpen, onClose, count, limit }: VisitorLimitModalProps) {
   const router = useRouter();
+  const [loginTextColor, setLoginTextColor] = useState('rgb(255, 255, 255)');
+
+  useEffect(() => {
+    const updateColor = () => {
+      const html = document.documentElement;
+      const theme = html.getAttribute('data-theme');
+      setLoginTextColor(theme === 'light' ? '#ffffff' : 'rgb(255, 255, 255)');
+    };
+    
+    updateColor();
+    const observer = new MutationObserver(updateColor);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   if (!isOpen) return null;
 
@@ -42,7 +61,8 @@ export default function VisitorLimitModal({ isOpen, onClose, count, limit }: Vis
               router.push('/login');
               onClose();
             }}
-            className="w-full px-6 py-3 bg-zinc-800 dark:bg-zinc-800 [data-theme='light']:bg-slate-900 text-white dark:text-white [data-theme='light']:!text-white rounded-lg font-bold hover:bg-zinc-700 dark:hover:bg-zinc-700 [data-theme='light']:hover:bg-slate-800 transition-colors"
+            className="w-full px-6 py-3 bg-zinc-800 dark:bg-zinc-800 [data-theme='light']:bg-slate-900 rounded-lg font-bold hover:bg-zinc-700 dark:hover:bg-zinc-700 [data-theme='light']:hover:bg-slate-800 transition-colors"
+            style={{ color: loginTextColor }}
           >
             登录
           </button>
