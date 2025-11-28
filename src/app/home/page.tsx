@@ -177,10 +177,9 @@ export default function HomePage() {
 
       setLoading(prev => ({ ...prev, latest: true, hot: true }));
 
-      const [latestRes, hotRes, topicsRes] = await Promise.allSettled([
+      const [latestRes, hotRes] = await Promise.allSettled([
         fetchWithTimeout(`/api/public/list?type=latest&limit=${LATEST_INITIAL_LIMIT}`),
-        fetchWithTimeout(`/api/public/list?type=hot&limit=15&_t=${timestamp}`),
-        fetchWithTimeout('/api/public/topics')
+        fetchWithTimeout(`/api/public/list?type=hot&limit=15&_t=${timestamp}`)
       ]);
 
       // 最新
