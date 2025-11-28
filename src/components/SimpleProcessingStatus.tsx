@@ -97,11 +97,13 @@ export default function SimpleProcessingStatus({
         const elapsed = Date.now() - item.startTime;
         const elapsedMinutes = elapsed / (1000 * 60);
         
-        // 如果任务运行超过10分钟，或者进度达到95%，强制检查任务状态
-        const shouldCheckStatus = elapsedMinutes > 10 || item.progress >= 95;
+        // 改进：更频繁地检查任务状态
+        // 如果任务运行超过5分钟，或者进度达到95%，或者每30秒检查一次（通过轮询）
+        const shouldCheckStatus = elapsedMinutes > 5 || item.progress >= 95;
         
         if (shouldCheckStatus) {
           try {
+            // 先通过taskId检查任务状态
             const res = await fetch(`/api/task-status?taskId=${item.taskId}`);
             if (res.ok) {
               const taskStatus = await res.json();
@@ -153,9 +155,70 @@ export default function SimpleProcessingStatus({
                 localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
                 window.dispatchEvent(new Event('storage'));
               }
+            } else if (res.status === 404 && item.url) {
+              // 如果taskId找不到，尝试通过URL查找已完成的播客
+              // 这可能是因为任务已完成但状态未更新，或者播客已经通过其他方式处理完成
+              console.log('🔍 TaskId未找到，尝试通过URL查找播客:', item.url);
+              try {
+                const searchRes = await fetch(`/api/public/search?q=${encodeURIComponent(item.url)}`);
+                if (searchRes.ok) {
+                  const searchData = await searchRes.json();
+                  if (searchData.results && searchData.results.length > 0) {
+                    const podcast = searchData.results[0];
+                    console.log('✅ 发现播客已成功保存:', podcast.id);
+                    
+                    // 更新处理状态为完成
+                    const updatedItem = {
+                      ...item,
+                      status: 'completed',
+                      progress: 100,
+                      title: podcast.title,
+                      completedAt: Date.now()
+                    };
+                    
+                    const updatedItems = processingItems.map((storedItem: any) => 
+                      storedItem.id === item.id ? updatedItem : storedItem
+                    );
+                    localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+                    window.dispatchEvent(new Event('storage'));
+                  }
+                }
+              } catch (searchError) {
+                console.warn('通过URL搜索播客失败:', searchError);
+              }
             }
           } catch (error) {
             console.error('检查任务状态失败:', error);
+            // 如果taskId检查失败，也尝试通过URL查找
+            if (item.url) {
+              try {
+                const searchRes = await fetch(`/api/public/search?q=${encodeURIComponent(item.url)}`);
+                if (searchRes.ok) {
+                  const searchData = await searchRes.json();
+                  if (searchData.results && searchData.results.length > 0) {
+                    const podcast = searchData.results[0];
+                    console.log('✅ 通过URL发现播客已成功保存:', podcast.id);
+                    
+                    // 更新处理状态为完成
+                    const updatedItem = {
+                      ...item,
+                      status: 'completed',
+                      progress: 100,
+                      title: podcast.title,
+                      completedAt: Date.now()
+                    };
+                    
+                    const updatedItems = processingItems.map((storedItem: any) => 
+                      storedItem.id === item.id ? updatedItem : storedItem
+                    );
+                    localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+                    window.dispatchEvent(new Event('storage'));
+                  }
+                }
+              } catch (searchError) {
+                // 忽略搜索错误
+              }
+            }
           }
         }
       }
@@ -173,7 +236,7 @@ export default function SimpleProcessingStatus({
           return item;
         });
       });
-    }, 10000); // 每10秒检查一次任务状态
+    }, 5000); // 每5秒检查一次任务状态，更频繁地检查完成状态
 
     return () => clearInterval(interval);
   }, [isVisible]);

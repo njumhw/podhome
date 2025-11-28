@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
     // 查询用户今日的使用量（通过Podcast表）
+    // 注意：计算所有今天创建的播客，包括处理中的，因为用户已经占用了额度
     const used = await db.podcast.count({
       where: {
         createdById: user.id,
@@ -28,6 +29,11 @@ export async function GET(req: NextRequest) {
 
     // 使用统一的权限检查函数获取用户额度
     const limit = getUserDailyLimit(user.role);
+
+    // 添加调试日志（仅在开发环境）
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[daily-usage] User ${user.id} (${user.role}): used=${used}, limit=${limit}`);
+    }
 
     return NextResponse.json({
       success: true,

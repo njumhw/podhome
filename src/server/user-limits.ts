@@ -59,6 +59,11 @@ export async function getUserTodayUploadCount(userId: string): Promise<number> {
 		}
 	});
 	
+	// 添加调试日志（仅在开发环境）
+	if (process.env.NODE_ENV === 'development') {
+		console.log(`[getUserTodayUploadCount] User ${userId}: count=${count} (from ${today.toISOString()} to ${tomorrow.toISOString()})`);
+	}
+	
 	return count;
 }
 
