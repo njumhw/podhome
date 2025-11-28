@@ -636,7 +636,7 @@ export default function PodcastDetailPage() {
                   {/* 元数据标签 */}
                   <div className="flex flex-wrap items-center gap-3 font-mono text-sm">
                     {podcast.author && (
-                      <span className="tag-pill px-3 py-1.5 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300 bg-white/5 dark:bg-white/5 [data-theme='light']:bg-slate-100 text-white/90 dark:text-white/90 [data-theme='light']:text-slate-900">
+                      <span className="tag-pill px-3 py-1.5 rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300 bg-white/5 dark:bg-white/5 [data-theme='light']:bg-slate-100 text-white/90 dark:text-white/90 [data-theme='light']:!text-slate-900">
                         {podcast.author}
                       </span>
                     )}
