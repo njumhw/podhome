@@ -258,7 +258,8 @@ export default function HomePage() {
   useEffect(() => {
     const loadSummary = async () => {
       try {
-        const res = await fetch('/api/public/summary', { cache: 'no-store' });
+        // 使用 force=true 强制刷新缓存
+        const res = await fetch('/api/public/summary?force=true', { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
         setCatalogSummary({

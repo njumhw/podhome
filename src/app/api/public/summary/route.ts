@@ -1,10 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getPodcastSummary } from "@/server/services/podcastSummary";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
 	try {
-		console.log("[api/public/summary] 开始获取摘要数据...");
-		const summary = await getPodcastSummary();
+		const { searchParams } = new URL(request.url);
+		const force = searchParams.get('force') === 'true';
+		
+		console.log(`[api/public/summary] 开始获取摘要数据... (force=${force})`);
+		const summary = await getPodcastSummary(force);
 		const totalDurationMinutes = Math.round(
 			(summary.totalDurationSeconds ?? 0) / 60
 		);
