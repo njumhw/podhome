@@ -252,9 +252,8 @@ body > * {
   color: var(--foreground) !important;
 }
 
-/* 播客卡片作者名称在白色主题下使用深色 */
-[data-theme='light'] .author-name,
-[data-theme='light'] .font-mono.font-medium.text-white.author-name {
+/* 播客卡片作者名称在白色主题下使用深色 - 确保覆盖所有可能的样式 */
+[data-theme='light'] .author-name {
   color: #020617 !important; /* slate-950 */
 }
 

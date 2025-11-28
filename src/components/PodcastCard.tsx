@@ -125,7 +125,7 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 			{/* Footer with Pulse Animation */}
 			<div className="relative z-10 mt-4 flex justify-between items-end flex-shrink-0">
 				{item.author && (
-					<span className="text-sm text-white dark:text-white [data-theme='light']:text-[#020617] font-mono font-medium author-name">
+					<span className="text-sm dark:text-white [data-theme='light']:text-slate-950 font-mono font-medium author-name">
 						{item.author}
 					</span>
 				)}
