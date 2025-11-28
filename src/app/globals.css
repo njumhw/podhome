@@ -252,9 +252,13 @@ body > * {
   color: var(--foreground) !important;
 }
 
-/* 播客卡片作者名称在白色主题下使用深色 - 确保覆盖所有可能的样式 */
-[data-theme='light'] .author-name {
-  color: #020617 !important; /* slate-950 */
+/* 播客卡片作者名称颜色 - 深色主题使用白色，白色主题使用深色 */
+.podcast-author-name {
+  color: rgb(255, 255, 255); /* 默认白色（深色主题） */
+}
+
+[data-theme='light'] .podcast-author-name {
+  color: #020617 !important; /* slate-950 - 白色主题使用深色 */
 }
 
 /* 白色模式下的排名数字 */
