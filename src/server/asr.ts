@@ -50,11 +50,14 @@ export function validateAudioForASR(segment: AudioSegment): { valid: boolean; is
 /**
  * 调用阿里云ASR进行语音转文字
  * 按照正确的流程：先按120秒切割音频，再分别转写每个片段
+ * @param audioUrl 音频URL
+ * @param language 语言代码，默认为 "auto"（自动检测），支持 "zh"（中文）、"en"（英文）
  */
-export async function transcribeWithAliyunASR(audioUrl: string): Promise<ASRResult> {
+export async function transcribeWithAliyunASR(audioUrl: string, language: string = "auto"): Promise<ASRResult> {
     try {
         // 使用分段转写：按120秒切割音频，分别转写每个片段
-        const result = await transcribeAudioWithSegmentation(audioUrl, "zh");
+        // 使用 "auto" 自动检测语言，支持中文和英文播客
+        const result = await transcribeAudioWithSegmentation(audioUrl, language);
         
         const transcript = result.transcript;
         const segments = result.segments; // 73个ASR片段（对于146分钟音频）

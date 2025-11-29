@@ -1,257 +1,149 @@
-# 📝 Git提交指南
+# Git 提交指南
 
-## 📊 当前状态
+## ✅ 已完成的准备工作
 
-- **已修改但未提交**: 31个文件
-- **未跟踪的新文件**: 51个文件
-- **Git远程仓库**: `https://github.com/njumhw/podhome.git`
+### 1. 更新记录文件
+- ✅ 创建了 `CHANGELOG.md`，记录了 v0.1.1 版本的更新内容
 
----
+### 2. 版本号更新
+- ✅ 更新了 `package.json` 中的版本号：`0.1.0` → `0.1.1`
 
-## ✅ 需要提交的重要文件
+### 3. 代码修改文件
+以下文件已修改，需要提交：
 
-### 1. 核心代码修改（31个已修改文件）
+#### 核心代码修改
+- `src/server/asr.ts` - ASR 转写支持多语言（自动检测）
+- `src/clients/report-generator.ts` - 报告生成支持多语言输入
 
-这些文件包含了所有重要的功能改进和bug修复：
+#### 新增文件
+- `CHANGELOG.md` - 更新日志
+- `ENGLISH_PODCAST_SUPPORT_ANALYSIS.md` - 英文播客支持分析文档
+- `MULTILANG_SUPPORT_CHANGES.md` - 多语言支持修改总结
+- `update-report-prompt-multilang.js` - 数据库提示词更新脚本
+- `GIT_COMMIT_GUIDE.md` - 本文件
 
-**配置文件**:
-- `env.example` - 环境变量示例更新
-- `prisma/schema.prisma` - 数据库schema更新
-
-**源代码文件** (src/):
-- API路由文件（`src/app/api/`）
-- 前端页面（`src/app/home/page.tsx`, `src/app/podcast/[id]/page.tsx`等）
-- 服务器端逻辑（`src/server/audio-processor.ts`, `src/server/task-queue.ts`等）
-- 客户端逻辑（`src/clients/report-generator.ts`等）
-- 组件文件（`src/components/`）
-
-### 2. 新增的重要文件
-
-**核心功能文件**:
-- `src/server/parsers/xiaoyuzhou-simple.ts` - 简化版解析器（关键修复）
-- `src/server/asr-segmented.ts` - 分段ASR处理
-- `src/server/db-retry.ts` - 数据库重试机制
-- `src/utils/error-analyzer.ts` - 错误分析工具
-- `src/components/AudioPlayer.tsx` - 音频播放器组件
-- `src/components/LikeButton.tsx` - 点赞按钮组件
-- `src/server/asr-config.ts` - ASR配置
-- `src/app/api/podcast/like/` - 点赞API
-
-**文档文件**:
-- `UPDATE_REPORT.md` - 更新报告（重要）
-- `DEPLOYMENT_CHECKLIST.md` - 部署检查清单
-- `DEPLOYMENT_READINESS_REPORT.md` - 部署就绪性报告
-
-**脚本文件**:
-- `scripts/` 目录下的所有脚本（用于数据维护和清理）
+#### 版本更新
+- `package.json` - 版本号更新至 0.1.1
 
 ---
 
-## ⚠️ 不需要提交的文件（可选）
+## 📋 手动提交步骤
 
-这些文件通常是临时文件或测试文件，可以选择不提交：
+如果自动提交失败，请按照以下步骤手动提交：
 
-**测试和分析脚本**:
-- `test-*.js`, `test-*.ts` - 测试文件
-- `analyze-*.js` - 分析脚本
-- `check-*.js` - 检查脚本
-- `diagnose-*.js` - 诊断脚本
-- `update-report-prompt*.js` - 临时脚本
-
-**临时文档**:
-- `cleaning-*.md` - 清洗问题分析文档（可选）
-- `OPTIMIZATION_ANALYSIS.md` - 优化分析（可选）
-- `PROCESSING_ANALYSIS.md` - 处理分析（可选）
-
-**其他**:
-- `cookies.txt` - 不应提交（可能包含敏感信息）
-- `prisma/migrations/` - 如果使用 `db push` 则不需要
-
----
-
-## 🚀 提交步骤
-
-### 方法1: 提交所有重要文件（推荐）
-
+### 1. 检查 Git 状态
 ```bash
-cd /Users/maoweihao/cursor/Ear/podroom
-
-# 1. 添加所有已修改的文件
-git add env.example
-git add prisma/schema.prisma
-git add src/
-
-# 2. 添加重要的新文件
-git add src/server/parsers/xiaoyuzhou-simple.ts
-git add src/server/asr-segmented.ts
-git add src/server/db-retry.ts
-git add src/utils/error-analyzer.ts
-git add src/components/AudioPlayer.tsx
-git add src/components/LikeButton.tsx
-git add src/server/asr-config.ts
-git add src/app/api/podcast/like/
-
-# 3. 添加重要的文档
-git add UPDATE_REPORT.md
-git add DEPLOYMENT_CHECKLIST.md
-git add DEPLOYMENT_READINESS_REPORT.md
-
-# 4. 添加脚本文件
-git add scripts/
-
-# 5. 检查暂存区
-git status
-
-# 6. 提交
-git commit -m "feat: 修复动态导入问题并优化错误处理
-
-- 修复audio-processor.ts中的动态导入问题（改为静态导入）
-- 增强错误处理和日志记录
-- 优化前端用户体验（简化处理状态UI，改进轮询机制）
-- 增强播客元数据提取（作者、发布时间）
-- 优化报告生成（添加原话摘录功能）
-- 改进任务队列系统（详细日志、智能重试）
-- 更新用户每日上传限制（从5个改为2个）
-- 添加UPDATE_REPORT.md更新报告"
-
-# 7. 推送到GitHub
-git push origin main
-```
-
-### 方法2: 分步提交（更细致）
-
-```bash
-# 第一步：提交核心修复
-git add src/server/audio-processor.ts
-git add src/server/parsers/xiaoyuzhou-simple.ts
-git commit -m "fix: 修复动态导入问题，解决fetch failed错误"
-
-# 第二步：提交错误处理改进
-git add src/server/task-queue.ts
-git add src/utils/error-analyzer.ts
-git add src/server/db-retry.ts
-git commit -m "feat: 增强错误处理和日志记录"
-
-# 第三步：提交前端优化
-git add src/app/home/page.tsx
-git add src/components/SimpleProcessingStatus.tsx
-git commit -m "feat: 优化前端用户体验和轮询机制"
-
-# 第四步：提交其他改进
-git add .
-git commit -m "feat: 其他功能改进和优化"
-
-# 推送到GitHub
-git push origin main
-```
-
----
-
-## 🔍 提交前检查
-
-### 1. 检查暂存区
-```bash
+cd /Users/maoweihao/cursor/Ear
 git status
 ```
 
-### 2. 查看将要提交的更改
+### 2. 添加所有修改的文件
 ```bash
-git diff --cached --stat
+# 添加 podroom 目录下的所有修改
+git add podroom/
+
+# 或者单独添加文件
+git add podroom/CHANGELOG.md
+git add podroom/package.json
+git add podroom/src/server/asr.ts
+git add podroom/src/clients/report-generator.ts
+git add podroom/update-report-prompt-multilang.js
+git add podroom/ENGLISH_PODCAST_SUPPORT_ANALYSIS.md
+git add podroom/MULTILANG_SUPPORT_CHANGES.md
 ```
 
-### 3. 确认没有敏感信息
+### 3. 提交更改
 ```bash
-# 检查是否有.env文件被意外添加
-git diff --cached --name-only | grep -E "\.env"
+git commit -m "feat(podroom): 添加多语言支持 - 支持英文播客处理并生成中文报告
+
+- ASR转写支持自动语言检测（中文/英文）
+- 报告生成支持跨语言处理（英文输入→中文输出）
+- 更新提示词以支持多语言理解
+- 添加相关文档和更新脚本
+- 版本更新至 0.1.1"
 ```
 
----
-
-## 📋 提交后验证
-
-### 1. 检查远程仓库
+### 4. 推送到 GitHub
 ```bash
-git log origin/main -5
-```
+# 检查远程仓库
+git remote -v
 
-### 2. 确认推送成功
-```bash
-git status
-# 应该显示 "Your branch is up to date with 'origin/main'"
-```
-
-### 3. 在GitHub上验证
-- 访问 `https://github.com/njumhw/podhome`
-- 检查最新提交
-- 确认所有文件都已更新
-
----
-
-## ⚠️ 注意事项
-
-### 1. 不要提交敏感信息
-- `.env` 文件（已在.gitignore中）
-- `cookies.txt`（可能包含敏感信息）
-- API密钥或密码
-
-### 2. 不要提交临时文件
-- `*.tsbuildinfo`
-- `node_modules/`
-- `.next/`
-
-### 3. 提交前确认
-- 代码可以正常构建（`npm run build`）
-- 没有TypeScript错误
-- 没有明显的bug
-
----
-
-## 🎯 快速提交命令
-
-如果您想快速提交所有重要更改，可以使用以下命令：
-
-```bash
-cd /Users/maoweihao/cursor/Ear/podroom
-
-# 添加所有已修改的文件和新文件（排除测试文件）
-git add env.example prisma/schema.prisma src/ scripts/
-git add UPDATE_REPORT.md DEPLOYMENT_CHECKLIST.md DEPLOYMENT_READINESS_REPORT.md
-
-# 提交
-git commit -m "feat: 修复动态导入问题并优化错误处理
-
-主要改进:
-- 修复audio-processor.ts中的动态导入问题
-- 增强错误处理和日志记录
-- 优化前端用户体验
-- 增强播客元数据提取
-- 优化报告生成
-- 改进任务队列系统
-- 更新用户每日上传限制
-
-详见 UPDATE_REPORT.md"
-
-# 推送到GitHub
+# 推送到远程（根据你的分支名称选择）
 git push origin main
+# 或
+git push origin master
+# 或
+git push
+```
+
+---
+
+## 📝 提交信息模板
+
+如果使用其他提交信息，可以参考以下格式：
+
+```
+feat(podroom): 添加多语言支持
+
+主要变更：
+- ASR转写支持自动语言检测（中文/英文）
+- 报告生成支持跨语言处理（英文输入→中文输出）
+- 更新提示词以支持多语言理解
+
+技术细节：
+- 修改 src/server/asr.ts：语言参数从硬编码改为可配置
+- 修改 src/clients/report-generator.ts：添加多语言支持说明
+- 新增文档和更新脚本
+
+版本：0.1.0 → 0.1.1
+```
+
+---
+
+## 🔍 验证提交
+
+提交后，可以通过以下命令验证：
+
+```bash
+# 查看最近的提交
+git log --oneline -5
+
+# 查看提交的详细信息
+git show HEAD
+
+# 查看文件变更
+git diff HEAD~1 HEAD --stat
+```
+
+---
+
+## 📦 版本标签（可选）
+
+如果需要创建版本标签：
+
+```bash
+# 创建标签
+git tag -a v0.1.1 -m "版本 0.1.1: 添加多语言支持"
+
+# 推送标签到远程
+git push origin v0.1.1
 ```
 
 ---
 
 ## ✅ 完成检查清单
 
-提交后，请确认：
-
-- [ ] 所有重要代码文件已提交
-- [ ] 重要文档已提交（UPDATE_REPORT.md等）
-- [ ] 没有提交敏感信息（.env等）
-- [ ] 提交信息清晰明确
-- [ ] 代码已推送到GitHub
-- [ ] 在GitHub上验证了最新提交
+- [ ] 所有修改的文件已添加到暂存区
+- [ ] 提交信息已填写
+- [ ] 代码已提交到本地仓库
+- [ ] 代码已推送到远程仓库（GitHub）
+- [ ] 版本号已更新（package.json）
+- [ ] 更新日志已创建（CHANGELOG.md）
 
 ---
 
-**最后更新**: 2025-11-15
-
-
-
-
+**注意**：如果遇到 Git 相关问题，请检查：
+1. Git 仓库是否已初始化（`.git` 目录是否存在）
+2. 远程仓库是否已配置（`git remote -v`）
+3. 是否有推送权限
+4. 网络连接是否正常
