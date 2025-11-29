@@ -12,7 +12,7 @@ export function ThemeToggle() {
 	return (
 		<button
 			onClick={toggleTheme}
-			className="theme-toggle-btn inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-mono transition-all hover:shadow-[0_8px_15px_-10px_rgba(255,140,50,0.55)]"
+			className="theme-toggle-btn inline-flex items-center justify-center rounded-full p-1.5 transition-all hover:shadow-[0_8px_15px_-10px_rgba(255,140,50,0.55)]"
 			aria-label="Toggle theme"
 		>
 			<span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10">
@@ -26,7 +26,6 @@ export function ThemeToggle() {
 					</svg>
 				)}
 			</span>
-			<span>{isDark ? "Dark" : "Light"} mode</span>
 		</button>
 	);
 }

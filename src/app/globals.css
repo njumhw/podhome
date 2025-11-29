@@ -427,6 +427,50 @@ body > * {
   animation: float-up 0.6s ease-out forwards;
 }
 
+/* UserStatusBadge 动画 */
+@keyframes breathing {
+  0%, 100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.95;
+    filter: brightness(1.1);
+  }
+}
+
+@keyframes scanline {
+  0% {
+    background-position: -200% 0, 0 0;
+  }
+  100% {
+    background-position: 200% 0, 0 0;
+  }
+}
+
+@keyframes glitch {
+  0%, 100% {
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+  20% {
+    transform: translate(-1px, 1px);
+    filter: hue-rotate(5deg);
+  }
+  40% {
+    transform: translate(1px, -1px);
+    filter: hue-rotate(-5deg);
+  }
+  60% {
+    transform: translate(-1px, -1px);
+    filter: hue-rotate(3deg);
+  }
+  80% {
+    transform: translate(1px, 1px);
+    filter: hue-rotate(-3deg);
+  }
+}
+
 /* 音频播放器进度条样式 - 扁平化设计 */
 input[type="range"].slider {
   -webkit-appearance: none;

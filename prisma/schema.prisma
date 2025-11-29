@@ -288,7 +288,7 @@ model PodcastLike {
 
 enum UserRole {
   READER          // 读者：无需邀请码注册，可浏览、点赞、评论，不能上传
-  PODCASTER       // 播客创作者：通过邀请码升级，每日可上传 2 次
+  PODCASTER       // 播客创作者：通过邀请码升级，每日可上传 1 次
   PODCASTER_VIP   // VIP 播客创作者：管理员授权，无限制上传
   ADMIN           // 管理员：所有权限 + 后台管理
   USER            // 旧角色（已废弃，保留用于兼容）

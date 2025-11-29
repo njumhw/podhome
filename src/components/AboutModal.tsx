@@ -6,13 +6,28 @@ import { createPortal } from "react-dom";
 interface AboutModalProps {
   isVisible: boolean;
   onClose: () => void;
+  initialTab?: 'about' | 'permissions';
 }
 
 type TabType = 'about' | 'permissions';
 
-export function AboutModal({ isVisible, onClose }: AboutModalProps) {
+export function AboutModal({ isVisible, onClose, initialTab = 'about' }: AboutModalProps) {
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('about');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  // 当弹窗打开或initialTab变化时，更新activeTab
+  useEffect(() => {
+    if (isVisible) {
+      setActiveTab(initialTab);
+    }
+  }, [isVisible, initialTab]);
+
+  // 当弹窗关闭时，重置为默认标签页（可选，保持当前标签页也可以）
+  // useEffect(() => {
+  //   if (!isVisible) {
+  //     setActiveTab('about');
+  //   }
+  // }, [isVisible]);
 
   useEffect(() => {
     setMounted(true);
@@ -183,7 +198,7 @@ export function AboutModal({ isVisible, onClose }: AboutModalProps) {
                       <td className="py-3 px-4 text-white/80 dark:text-white/80 [data-theme='light']:text-slate-800">上传播客</td>
                       <td className="py-3 px-4 text-center text-white/40 dark:text-white/40 [data-theme='light']:text-slate-500">/</td>
                       <td className="py-3 px-4 text-center text-white/40 dark:text-white/40 [data-theme='light']:text-slate-500">/</td>
-                      <td className="py-3 px-4 text-center text-white/60 dark:text-white/60 [data-theme='light']:text-slate-700">2次/天</td>
+                              <td className="py-3 px-4 text-center text-white/60 dark:text-white/60 [data-theme='light']:text-slate-700">1次/天</td>
                     </tr>
                   </tbody>
                 </table>

@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
 	return Response.json({
 		ok: true,
-		message: "升级成功！您现在可以上传播客了（每日 2 次）",
+		message: "升级成功！您现在可以上传播客了（每日 1 次）",
 	});
 }
 

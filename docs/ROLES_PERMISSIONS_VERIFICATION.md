@@ -7,7 +7,7 @@
 ```prisma
 enum UserRole {
   READER          // 读者：无需邀请码注册，可浏览、点赞、评论，不能上传
-  PODCASTER       // 播客创作者：通过邀请码升级，每日可上传 2 次
+  PODCASTER       // 播客创作者：通过邀请码升级，每日可上传 1 次
   PODCASTER_VIP   // VIP 播客创作者：管理员授权，无限制上传
   ADMIN           // 管理员：所有权限 + 后台管理
   USER            // 旧角色（已废弃，保留用于兼容）
@@ -24,7 +24,7 @@ enum UserRole {
 | **点赞播客** | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **收藏夹（已点赞）** | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **评论播客** | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **上传播客** | ❌ | ❌ | ✅ 2次/天 | ✅ 无限制 | ✅ 无限制 |
+| **上传播客** | ❌ | ❌ | ✅ 1次/天 | ✅ 无限制 | ✅ 无限制 |
 | **后台管理** | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ---
@@ -170,14 +170,14 @@ enum UserRole {
 #### ✅ 所有 Reader 权限
 - **状态**: ✅ 继承 Reader 的所有权限
 
-#### ✅ 上传播客 - 2次/天
+#### ✅ 上传播客 - 1次/天
 - **实现位置**: `src/server/user-limits.ts`
 - **验证代码**:
   ```typescript
   export function getUserDailyLimit(role: UserRole | null): number {
     switch (role) {
       case UserRole.PODCASTER:
-        return 2; // Podcaster 每日 2 次
+        return 1; // Podcaster 每日 1 次
       // ...
     }
   }
@@ -198,7 +198,7 @@ enum UserRole {
   }
   ```
 - **验证**: 
-  - ✅ 每日限制为 2 次
+  - ✅ 每日限制为 1 次
   - ✅ 通过 `getUserTodayUploadCount` 计算当天上传次数
   - ✅ 超过限制时返回错误
 - **状态**: ✅ 正确实现
@@ -270,7 +270,7 @@ enum UserRole {
    - 不能上传
 
 3. **Podcaster 上传限制** - ✅ 正确实现
-   - 每日 2 次限制
+   - 每日 1 次限制
    - 通过 `getUserTodayUploadCount` 计算
    - 超过限制时正确返回错误
 

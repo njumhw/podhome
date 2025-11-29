@@ -29,13 +29,13 @@ export function getUserDailyLimit(role: UserRole | null): number {
 		case UserRole.READER:
 			return 0; // Reader 不能上传
 		case UserRole.PODCASTER:
-			return 2; // Podcaster 每日 2 次
+			return 1; // Podcaster 每日 1 次
 		case UserRole.PODCASTER_VIP:
 			return -1; // VIP 无限制
 		case UserRole.ADMIN:
 			return -1; // 管理员无限制
 		case UserRole.USER:
-			return 2; // 旧角色，兼容处理
+			return 1; // 旧角色，兼容处理
 		default:
 			return 0;
 	}
