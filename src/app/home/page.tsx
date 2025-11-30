@@ -561,8 +561,8 @@ export default function HomePage() {
             onClick={() => handleHotModeToggle('30d')}
             className={`px-3 py-1 rounded-md text-xs font-mono transition-all ${
               hotMode === '30d'
-                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-white dark:text-white [data-theme="light"]:text-slate-900'
-                : 'bg-transparent border border-white/10 dark:border-white/10 [data-theme="light"]:border-slate-300 text-white/70 dark:text-white/70 [data-theme="light"]:text-slate-900 hover:border-white/30 dark:hover:border-white/30 [data-theme="light"]:hover:border-slate-400'
+                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-slate-900 dark:text-white [data-theme="light"]:!text-slate-900'
+                : 'bg-transparent border border-white/10 dark:border-white/10 [data-theme="light"]:border-slate-300 text-slate-900 dark:text-white/70 [data-theme="light"]:!text-slate-900 hover:border-white/30 dark:hover:border-white/30 [data-theme="light"]:hover:border-slate-400'
             }`}
           >
             近30天
@@ -571,8 +571,8 @@ export default function HomePage() {
             onClick={() => handleHotModeToggle('all')}
             className={`px-3 py-1 rounded-md text-xs font-mono transition-all ${
               hotMode === 'all'
-                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-white dark:text-white [data-theme="light"]:text-slate-900'
-                : 'bg-transparent border border-white/10 dark:border-white/10 [data-theme="light"]:border-slate-300 text-white/70 dark:text-white/70 [data-theme="light"]:text-slate-900 hover:border-white/30 dark:hover:border-white/30 [data-theme="light"]:hover:border-slate-400'
+                ? 'bg-[#ff9f43]/30 border border-[#ff9f43]/50 text-slate-900 dark:text-white [data-theme="light"]:!text-slate-900'
+                : 'bg-transparent border border-white/10 dark:border-white/10 [data-theme="light"]:border-slate-300 text-slate-900 dark:text-white/70 [data-theme="light"]:!text-slate-900 hover:border-white/30 dark:hover:border-white/30 [data-theme="light"]:hover:border-slate-400'
             }`}
           >
             全量Top 10
@@ -580,15 +580,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {loading.hot ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(9)].map((_, i) => (
-            <div key={i} className="animate-pulse">
-              <div className="h-48 bg-zinc-900/40 border border-white/5 rounded-lg"></div>
-            </div>
-          ))}
-        </div>
-      ) : hot.length > 0 ? (
+      {hot.length > 0 ? (
         <>
           {hotMode === 'all' && (
             <div className="mb-4 text-sm font-mono text-white/70 dark:text-white/70 [data-theme='light']:text-slate-600">
@@ -599,6 +591,16 @@ export default function HomePage() {
             {hot.slice(0, hotDisplayCount).map((item, index) => (
               <PodcastCard key={item.id} item={item} rank={index + 1} />
             ))}
+            {/* 加载更多时显示加载占位符 */}
+            {loading.hot && hotDisplayCount < MAX_DISPLAY_COUNT && (
+              <>
+                {[...Array(Math.min(6, MAX_DISPLAY_COUNT - hotDisplayCount))].map((_, i) => (
+                  <div key={`loading-${i}`} className="animate-pulse">
+                    <div className="h-48 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-white/80 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg"></div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
           {hotMode === '30d' && ((hotDisplayCount < hot.length || hotHasMore) || hotDisplayCount > 9) && (
             <div className="mt-6 flex justify-center gap-3">
@@ -771,10 +773,22 @@ export default function HomePage() {
         setLoading(prev => ({ ...prev, hot: true }));
         const res = await fetch(`/api/public/list?type=hot&limit=${loadCount}&_t=${Date.now()}`);
         const data: ListResult = await res.json();
-        setHot(data.items || []);
+        const newItems = data.items || [];
+        
+        // 保留已有数据，只更新为新数据（避免已显示的播客消失）
+        // 如果新数据长度足够，直接使用新数据；否则合并数据
+        if (newItems.length >= nextCount) {
+          setHot(newItems);
+        } else {
+          // 如果新数据不够，保留已有数据，只追加新数据
+          const existingIds = new Set(hot.map(item => item.id));
+          const additionalItems = newItems.filter(item => !existingIds.has(item.id));
+          setHot([...hot, ...additionalItems]);
+        }
+        
         setHotDisplayCount(nextCount);
         // 更新是否有更多数据（如果已达到上限，则不再显示More按钮）
-        setHotHasMore(nextCount < MAX_DISPLAY_COUNT && (data.pagination?.hasNext || (data.items?.length || 0) >= loadCount));
+        setHotHasMore(nextCount < MAX_DISPLAY_COUNT && (data.pagination?.hasNext || (newItems.length || 0) >= loadCount));
       } catch (error) {
         console.error('Failed to load more hot:', error);
         // 即使加载失败，也尝试显示更多（如果已有数据）
@@ -785,6 +799,7 @@ export default function HomePage() {
         setLoading(prev => ({ ...prev, hot: false }));
       }
     } else {
+      // 如果已有足够数据，直接增加显示数量，不重新加载
       setHotDisplayCount(nextCount);
       // 如果已达到上限，隐藏More按钮
       if (nextCount >= MAX_DISPLAY_COUNT) {

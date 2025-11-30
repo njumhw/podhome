@@ -12,16 +12,16 @@ export function ThemeToggle() {
 	return (
 		<button
 			onClick={toggleTheme}
-			className="theme-toggle-btn inline-flex items-center justify-center rounded-full p-1.5 transition-all hover:shadow-[0_8px_15px_-10px_rgba(255,140,50,0.55)]"
+			className="theme-toggle-btn inline-flex items-center justify-center rounded-lg p-2 transition-all hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 border border-transparent hover:border-white/10 dark:hover:border-white/10 [data-theme='light']:hover:border-slate-300 cursor-pointer hover:shadow-[0_8px_15px_-10px_rgba(255,140,50,0.55)]"
 			aria-label="Toggle theme"
 		>
-			<span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10">
+			<span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 dark:bg-white/10 [data-theme='light']:bg-slate-200">
 				{isDark ? (
-					<svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+					<svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-white dark:text-white [data-theme='light']:text-slate-700" fill="none" stroke="currentColor" strokeWidth="2">
 						<path d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364-6.364-1.414 1.414M7.05 16.95l-1.414 1.414m12.728 0-1.414-1.414M7.05 7.05 5.636 5.636" />
 					</svg>
 				) : (
-					<svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+					<svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-white dark:text-white [data-theme='light']:text-slate-700" fill="none" stroke="currentColor" strokeWidth="2">
 						<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 1 0 9.79 9.79Z" />
 					</svg>
 				)}

@@ -7,37 +7,39 @@ interface UserStatusBadgeProps {
 	onClick?: () => void;
 }
 
-const roleConfig: Record<UserRole, { label: string; color: string; borderColor: string }> = {
+const roleConfig: Record<UserRole, { 
+	label: string;
+}> = {
 	visitor: {
 		label: 'VISITOR',
-		color: 'text-cyan-400',
-		borderColor: 'border-cyan-400/40',
 	},
 	reader: {
 		label: 'READER',
-		color: 'text-emerald-400',
-		borderColor: 'border-emerald-400/40',
 	},
 	podcaster: {
 		label: 'PODCASTER',
-		color: 'text-fuchsia-500',
-		borderColor: 'border-fuchsia-500/40',
 	},
 	vip: {
 		label: 'VIP',
-		color: 'text-amber-400',
-		borderColor: 'border-amber-400/40',
 	},
 	admin: {
 		label: 'ADMIN',
-		color: 'text-rose-500',
-		borderColor: 'border-rose-500/40',
 	},
 };
 
 export function UserStatusBadge({ role, onClick }: UserStatusBadgeProps) {
 	const config = roleConfig[role];
 	
+	// 统一的样式，所有角色都一样 - 仅文字，无边框，橙色
+	const baseClassName = `
+		inline-flex items-center justify-center
+		font-mono text-xs font-semibold uppercase tracking-wider
+		text-orange-400 dark:text-orange-400 [data-theme='light']:text-orange-600
+		transition-colors duration-200
+		hover:text-orange-300 dark:hover:text-orange-300 [data-theme='light']:hover:text-orange-700
+		cursor-pointer
+	`;
+
 	// 如果角色不在配置中，使用 visitor 作为默认值
 	if (!config) {
 		console.warn(`Unknown role: ${role}, using visitor config`);
@@ -45,18 +47,7 @@ export function UserStatusBadge({ role, onClick }: UserStatusBadgeProps) {
 		return (
 			<button
 				onClick={onClick}
-				className={`
-					inline-flex items-center justify-center
-					px-3 py-1.5
-					bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-100
-					border ${defaultConfig.borderColor}
-					rounded
-					font-mono text-xs font-semibold uppercase tracking-wider
-					${defaultConfig.color}
-					transition-colors duration-200
-					hover:bg-black/50 dark:hover:bg-black/50 [data-theme='light']:hover:bg-slate-200
-					cursor-pointer
-				`}
+				className={baseClassName}
 				aria-label={`查看${defaultConfig.label}权限说明`}
 			>
 				{defaultConfig.label}
@@ -67,18 +58,7 @@ export function UserStatusBadge({ role, onClick }: UserStatusBadgeProps) {
 	return (
 		<button
 			onClick={onClick}
-			className={`
-				inline-flex items-center justify-center
-				px-3 py-1.5
-				bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-100
-				border ${config.borderColor}
-				rounded
-				font-mono text-xs font-semibold uppercase tracking-wider
-				${config.color}
-				transition-colors duration-200
-				hover:bg-black/50 dark:hover:bg-black/50 [data-theme='light']:hover:bg-slate-200
-				cursor-pointer
-			`}
+			className={baseClassName}
 			aria-label={`查看${config.label}权限说明`}
 		>
 			{config.label}

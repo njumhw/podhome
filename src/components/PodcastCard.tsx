@@ -205,7 +205,7 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 			{isHotRank ? (
 				// 前三个使用渐变边框包装，但卡片背景保持不变
 				<div 
-					className="h-full rounded-lg p-[2px] transition-all duration-300 hover:-translate-y-1"
+					className="h-full rounded-lg p-[2px] transition-all duration-300"
 					style={{
 						background: getHotGradient(rank!),
 					}}
@@ -226,7 +226,6 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 							relative border border-white/5 dark:border-white/5 [data-theme='light']:border-card-border
 							bg-[#0f0f0f] dark:bg-[#0f0f0f] [data-theme='light']:bg-card-surface
 							p-6 transition-all duration-300
-							hover:-translate-y-1
 							hover:border-white/10 dark:hover:border-white/10 [data-theme='light']:hover:border-slate-300
 							hover:bg-[#151515] dark:hover:bg-[#151515] [data-theme='light']:hover:bg-slate-50
 							${style.border}

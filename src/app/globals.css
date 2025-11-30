@@ -88,6 +88,11 @@ body > * {
   color: #0b0d16 !important;
 }
 
+/* Hot 模式按钮在白色主题下强制使用黑色文字 */
+[data-theme='light'] button.text-slate-900 {
+  color: #0f172a !important; /* slate-900 */
+}
+
 /* VisitorLimitModal 登录按钮在白色主题下保持白色文字 - 最高优先级，覆盖所有其他规则 */
 /* 必须放在 .text-white 规则之后，使用更具体的选择器确保优先级 */
 .visitor-login-btn {
@@ -99,6 +104,23 @@ body > * {
 [data-theme='light'] button.visitor-login-btn.text-white,
 [data-theme='light'] a.visitor-login-btn.text-white {
   color: #ffffff !important;
+}
+
+/* VisitorLimitModal 在白色主题下的文字颜色强制设置 */
+[data-theme='light'] .visitor-limit-modal .visitor-limit-title {
+  color: #0f172a !important; /* slate-900 */
+}
+
+[data-theme='light'] .visitor-limit-modal .visitor-limit-text {
+  color: #1e293b !important; /* slate-800 */
+}
+
+[data-theme='light'] .visitor-limit-modal .visitor-limit-cancel {
+  color: #475569 !important; /* slate-600 */
+}
+
+[data-theme='light'] .visitor-limit-modal .visitor-limit-cancel:hover {
+  color: #0f172a !important; /* slate-900 */
 }
 
 /* 播客详情页作者标签在白色主题下使用深色 */

@@ -138,107 +138,92 @@ export function Header() {
 					{isLoading ? (
 						<div className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 font-mono">加载中...</div>
 					) : (
-						<div className="flex items-center gap-4">
-							{/* 用户状态徽章 - 所有用户都显示 */}
-							{user ? (
-								(() => {
-									// 将数据库角色映射到组件角色
-									let badgeRole: 'visitor' | 'reader' | 'podcaster' | 'vip' | 'admin' = 'visitor';
-									if (user.role === 'ADMIN') badgeRole = 'admin';
-									else if (user.role === 'PODCASTER_VIP') badgeRole = 'vip';
-									else if (user.role === 'PODCASTER' || user.role === 'USER') badgeRole = 'podcaster'; // USER 已迁移为 PODCASTER
-									else if (user.role === 'READER') badgeRole = 'reader';
-									else if (user.role === 'GUEST') badgeRole = 'visitor'; // GUEST 视为 visitor
-									// 其他未知角色默认为 visitor
-									
-									return (
-										<UserStatusBadge 
-											role={badgeRole} 
-											onClick={() => {
-												setAboutModalInitialTab('permissions');
-												setShowAboutModal(true);
-											}}
-										/>
-									);
-								})()
-							) : (
-								<UserStatusBadge 
-									role="visitor" 
-									onClick={() => {
-										setAboutModalInitialTab('permissions');
-										setShowAboutModal(true);
-									}}
-								/>
-							)}
-							
-							{/* 用户信息区域 - 仅登录用户显示 */}
-							{user && (
-								<div className="flex items-center gap-2">
-								{/* 今日额度显示 */}
-								{dailyUsage.limit > 0 && (
-									<div className="text-xs text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 px-2 py-1 rounded font-mono">
-										今日额度：{dailyUsage.used}/{dailyUsage.limit}
-									</div>
+						<div className="flex items-center gap-3">
+							{/* 用户信息组合框 */}
+							<div className="flex items-center gap-2">
+								{/* 用户状态徽章 */}
+								{user ? (
+									(() => {
+										let badgeRole: 'visitor' | 'reader' | 'podcaster' | 'vip' | 'admin' = 'visitor';
+										if (user.role === 'ADMIN') badgeRole = 'admin';
+										else if (user.role === 'PODCASTER_VIP') badgeRole = 'vip';
+										else if (user.role === 'PODCASTER' || user.role === 'USER') badgeRole = 'podcaster';
+										else if (user.role === 'READER') badgeRole = 'reader';
+										
+										return (
+											<UserStatusBadge 
+												role={badgeRole} 
+												onClick={() => {
+													setAboutModalInitialTab('permissions');
+													setShowAboutModal(true);
+												}} 
+											/>
+										);
+									})()
+								) : (
+									<UserStatusBadge 
+										role="visitor" 
+										onClick={() => {
+											setAboutModalInitialTab('permissions');
+											setShowAboutModal(true);
+										}} 
+									/>
 								)}
-								{dailyUsage.limit === -1 && (
-									<div className="text-xs text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 px-2 py-1 rounded font-mono">
-										今日额度：{dailyUsage.used}/∞
-									</div>
+								
+								{/* 竖线分隔 */}
+								{user && (
+									<div className="w-px h-4 bg-white/20 dark:bg-white/20 [data-theme='light']:bg-slate-300"></div>
 								)}
-									{/* 用户名 */}
-									<span className="text-sm text-white dark:text-white [data-theme='light']:text-foreground font-medium">
+								
+								{/* 用户名 - 仅登录用户显示 */}
+								{user && (
+									<span className="text-sm text-orange-400 dark:text-orange-400 [data-theme='light']:text-orange-600 font-medium">
 										{user.username}
 									</span>
+								)}
+							</div>
+							
+							{/* 今日额度 - 仅登录用户显示 */}
+							{user && (dailyUsage.limit > 0 || dailyUsage.limit === -1) && (
+								<div className="text-xs text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-slate-100 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 px-2 py-1 rounded font-mono">
+									{dailyUsage.used}{dailyUsage.limit === -1 ? '/∞' : `/${dailyUsage.limit}`}
 								</div>
 							)}
 							
-							{/* 分隔线 - 仅登录用户显示 */}
-							{user && (
-								<div className="w-px h-4 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-slate-200"></div>
-							)}
+							{/* 操作按钮 */}
+							<button
+								onClick={() => {
+									setAboutModalInitialTab('about');
+									setShowAboutModal(true);
+								}}
+								className="px-3 py-1.5 text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-700 bg-transparent hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 border border-transparent hover:border-white/10 dark:hover:border-white/10 [data-theme='light']:hover:border-slate-300 rounded-lg transition-all font-mono cursor-pointer hover:text-white dark:hover:text-white [data-theme='light']:hover:text-slate-900"
+							>
+								About
+							</button>
 							
-							{/* 导航链接 */}
-							<div className="flex items-center gap-3">
-								{/* 关于我们按钮 */}
+							{user ? (
 								<button
-									onClick={() => {
-										setAboutModalInitialTab('about');
-										setShowAboutModal(true);
-									}}
-									className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
+									onClick={handleLogout}
+									className="px-3 py-1.5 text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-700 bg-transparent hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 border border-transparent hover:border-white/10 dark:hover:border-white/10 [data-theme='light']:hover:border-slate-300 rounded-lg transition-all font-mono cursor-pointer hover:text-white dark:hover:text-white [data-theme='light']:hover:text-slate-900"
 								>
-									{user ? '关于我们' : 'About Us'}
+									Exit
 								</button>
-								
-								{user ? (
-									/* 退出按钮 - 仅登录用户 */
-									<button
-										onClick={handleLogout}
-										className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
+							) : (
+								<>
+									<a
+										href="/login"
+										className="px-3 py-1.5 text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-700 bg-transparent hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 border border-transparent hover:border-white/10 dark:hover:border-white/10 [data-theme='light']:hover:border-slate-300 rounded-lg transition-all font-mono cursor-pointer hover:text-white dark:hover:text-white [data-theme='light']:hover:text-slate-900"
 									>
-										退出
-									</button>
-								) : (
-									/* Login & Register - 仅访客显示 */
-									<>
-										{/* Separator */}
-										<div className="w-px h-4 bg-white/10 dark:bg-white/10 [data-theme='light']:bg-slate-200"></div>
-										
-										<a
-											href="/login"
-											className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
-										>
-											Login
-										</a>
-										<a
-											href="/register"
-											className="text-sm px-3 py-1 rounded-lg bg-blue-500/20 dark:bg-blue-500/20 [data-theme='light']:bg-blue-500 text-blue-400 dark:text-blue-400 [data-theme='light']:text-white border border-blue-500/50 dark:border-blue-500/50 [data-theme='light']:border-blue-600 hover:bg-blue-500/30 dark:hover:bg-blue-500/30 [data-theme='light']:hover:bg-blue-600 transition-colors font-mono"
-										>
-											Register
-										</a>
-									</>
-								)}
-							</div>
+										Login
+									</a>
+									<a
+										href="/register"
+										className="px-3 py-1.5 text-sm text-blue-400 dark:text-blue-400 [data-theme='light']:text-blue-600 bg-blue-500/10 dark:bg-blue-500/10 [data-theme='light']:bg-blue-50 border border-blue-500/30 dark:border-blue-500/30 [data-theme='light']:border-blue-200 rounded-lg hover:bg-blue-500/20 dark:hover:bg-blue-500/20 [data-theme='light']:hover:bg-blue-100 transition-all font-mono cursor-pointer"
+									>
+										Register
+									</a>
+								</>
+							)}
 						</div>
 					)}
 						{/* 主题切换按钮 - 放在最右边 */}
