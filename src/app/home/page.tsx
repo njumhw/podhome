@@ -1646,6 +1646,8 @@ export default function HomePage() {
                     <Link
                       key={item.id}
                       href={`/podcast/${item.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="block p-4 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm rounded-lg border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 transition-all"
                     >
                       <h4 className="font-semibold text-white dark:text-white [data-theme='light']:text-foreground text-sm mb-2">{item.title}</h4>

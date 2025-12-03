@@ -38,8 +38,8 @@ export default function VisitorLimitModal({ isOpen, onClose, count, limit }: Vis
       <div className="visitor-limit-modal bg-zinc-900 dark:bg-zinc-900 [data-theme='light']:bg-white border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300 rounded-2xl p-6 max-w-md w-full shadow-2xl">
         <div className="text-center mb-6">
           <div className="text-4xl mb-4">⚠️</div>
-          <h2 className="visitor-limit-title text-2xl font-bold text-white dark:text-white [data-theme='light']:text-slate-900 mb-2">今日查看次数已用完</h2>
-          <p className="visitor-limit-text text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-700 text-sm">
+          <h2 className="visitor-limit-title text-2xl font-bold text-white dark:text-white mb-2">今日查看次数已用完</h2>
+          <p className="visitor-limit-text text-gray-400 dark:text-gray-400 text-sm">
             您今天已经查看了 {count} 个播客详情。
             <br />
             注册登录后可无限浏览所有播客！

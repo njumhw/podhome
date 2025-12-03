@@ -34,7 +34,8 @@ function LoginForm() {
 			const data = await res.json();
 
 			if (!res.ok) {
-				throw new Error(data.error || "Login failed");
+				// 使用后端返回的精准错误信息
+				throw new Error(data.error || "登录失败，请重试");
 			}
 
 			// 登录成功，先等待确保 cookie 已设置

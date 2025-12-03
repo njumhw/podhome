@@ -89,12 +89,21 @@ export default function PodcastDetailPage() {
   const [showVisitorLimitModal, setShowVisitorLimitModal] = useState(false);
   const [visitorLimitInfo, setVisitorLimitInfo] = useState<{ count: number; limit: number } | null>(null);
   const [isContentLimited, setIsContentLimited] = useState(false); // 内容是否受限
+  
+  // 共享的点赞状态，用于同步两个点赞按钮
+  const [sharedLikeState, setSharedLikeState] = useState<{ liked: boolean; likeCount: number } | null>(null);
 
   useEffect(() => {
     if (id) {
       // 先检查用户状态，再加载播客（确保 user 状态正确）
-      checkUser().then(() => {
-        loadPodcast();
+      checkUser().then((userData) => {
+        // 确保用户状态已设置后再加载播客
+        if (userData) {
+          setUser(userData);
+          setIsAdmin(userData?.role === 'ADMIN');
+        }
+        // 传递用户信息给 loadPodcast
+        loadPodcast(userData);
       });
     }
   }, [id]);
@@ -107,7 +116,7 @@ export default function PodcastDetailPage() {
   }, [podcast?.id]);
 
 
-  const loadPodcast = async () => {
+  const loadPodcast = async (currentUser?: any) => {
     try {
       // 添加时间戳防止缓存
       const res = await fetch(`/api/public/podcast?id=${id}&t=${Date.now()}`);
@@ -122,6 +131,30 @@ export default function PodcastDetailPage() {
       }
       const data = await res.json();
       setPodcast(data);
+      
+      // 初始化共享点赞状态（从播客数据获取初始值）
+      // 使用传入的 currentUser 参数，如果没有则使用 user 状态
+      const userToCheck = currentUser !== undefined ? currentUser : user;
+      setSharedLikeState({
+        liked: false, // 将在下面从API获取实际状态
+        likeCount: data.likeCount || 0,
+      });
+      
+      // 获取实际的点赞状态（如果用户已登录）
+      if (userToCheck) {
+        try {
+          const likeResponse = await fetch(`/api/podcast/like?podcastId=${id}`);
+          if (likeResponse.ok) {
+            const likeData = await likeResponse.json();
+            setSharedLikeState({
+              liked: likeData.liked,
+              likeCount: likeData.likeCount,
+            });
+          }
+        } catch (error) {
+          console.error('获取点赞状态失败:', error);
+        }
+      }
       
       // 检查是否受限
       // 注意：只有真正的 Visitor（未登录用户）才会受限
@@ -221,15 +254,18 @@ export default function PodcastDetailPage() {
       });
       if (res.ok) {
         const userData = await res.json();
-        setUser(userData.user);
+        const user = userData.user;
+        setUser(user);
         // 只有明确是 ADMIN 角色的用户才设置为管理员
-        setIsAdmin(userData.user?.role === 'ADMIN');
+        setIsAdmin(user?.role === 'ADMIN');
         setShowVisitorLimitModal(false);
+        return user; // 返回用户数据
       } else {
         // 如果请求失败，确保 isAdmin 为 false
         setIsAdmin(false);
         setUser(null);
         setShowVisitorLimitModal(false);
+        return null;
       }
     } catch (error) {
       console.error('Failed to check user:', error);
@@ -237,6 +273,7 @@ export default function PodcastDetailPage() {
       setIsAdmin(false);
       setUser(null);
       setShowVisitorLimitModal(false);
+      return null;
     }
   };
 
@@ -766,6 +803,13 @@ export default function PodcastDetailPage() {
                 <MinimalLikeButton 
                   podcastId={podcast.id} 
                   initialLikeCount={podcast.likeCount || 0}
+                  initialLiked={sharedLikeState?.liked}
+                  externalLiked={sharedLikeState?.liked}
+                  externalLikeCount={sharedLikeState?.likeCount}
+                  disableInitialFetch={!!user} // 如果用户已登录，禁用初始获取（已在页面加载时获取）
+                  onStatusChange={(liked, likeCount) => {
+                    setSharedLikeState({ liked, likeCount });
+                  }}
                 />
               </div>
               
@@ -856,6 +900,13 @@ export default function PodcastDetailPage() {
                   <MinimalLikeButton 
                     podcastId={podcast.id} 
                     initialLikeCount={podcast.likeCount || 0}
+                    initialLiked={sharedLikeState?.liked}
+                    externalLiked={sharedLikeState?.liked}
+                    externalLikeCount={sharedLikeState?.likeCount}
+                    disableInitialFetch={!!user} // 如果用户已登录，禁用初始获取（已在页面加载时获取）
+                    onStatusChange={(liked, likeCount) => {
+                      setSharedLikeState({ liked, likeCount });
+                    }}
                   />
                   <div className="flex items-center gap-2">
                     <button

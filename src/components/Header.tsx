@@ -6,6 +6,7 @@ import SimpleProcessingStatus from "./SimpleProcessingStatus";
 import { AboutModal } from "./AboutModal";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserStatusBadge } from "./UserStatusBadge";
+import UpgradeModal from "./UpgradeModal";
 import { useUser } from "@/hooks/useUser";
 
 export function Header() {
@@ -13,6 +14,7 @@ export function Header() {
 	const [showProcessingStatus, setShowProcessingStatus] = useState(false);
 	const [showAboutModal, setShowAboutModal] = useState(false);
 	const [aboutModalInitialTab, setAboutModalInitialTab] = useState<'about' | 'permissions'>('about');
+	const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 	const [processingCount, setProcessingCount] = useState(0);
 
 	useEffect(() => {
@@ -151,13 +153,25 @@ export function Header() {
 										else if (user.role === 'READER') badgeRole = 'reader';
 										
 										return (
-											<UserStatusBadge 
-												role={badgeRole} 
-												onClick={() => {
-													setAboutModalInitialTab('permissions');
-													setShowAboutModal(true);
-												}} 
-											/>
+											<div className="flex items-center gap-2">
+												<UserStatusBadge 
+													role={badgeRole} 
+													onClick={() => {
+														setAboutModalInitialTab('permissions');
+														setShowAboutModal(true);
+													}} 
+												/>
+												{/* Reader用户显示升级按钮 */}
+												{badgeRole === 'reader' && (
+													<button
+														onClick={() => setShowUpgradeModal(true)}
+														className="px-2 py-1 text-xs text-blue-400 dark:text-blue-400 [data-theme='light']:text-blue-600 bg-blue-500/10 dark:bg-blue-500/10 [data-theme='light']:bg-blue-50 border border-blue-500/30 dark:border-blue-500/30 [data-theme='light']:border-blue-200 rounded hover:bg-blue-500/20 dark:hover:bg-blue-500/20 [data-theme='light']:hover:bg-blue-100 transition-all font-mono cursor-pointer"
+														title="升级为Podcaster"
+													>
+														升级
+													</button>
+												)}
+											</div>
 										);
 									})()
 								) : (
@@ -267,6 +281,11 @@ export function Header() {
 				isVisible={showAboutModal} 
 				onClose={() => setShowAboutModal(false)}
 				initialTab={aboutModalInitialTab}
+			/>
+			
+			<UpgradeModal 
+				isOpen={showUpgradeModal}
+				onClose={() => setShowUpgradeModal(false)}
 			/>
 		</>
 	);

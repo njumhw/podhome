@@ -393,7 +393,7 @@ export default function SimpleProcessingStatus({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-white/10">
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white font-sans">Processing Status</h2>
-            <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1 font-sans">Up to 2 podcasts can be processed per day</p>
+            <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1 font-sans">Up to 1 podcast can be processed per day</p>
           </div>
           <button
             onClick={onClose}

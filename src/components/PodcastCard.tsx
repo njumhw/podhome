@@ -200,6 +200,8 @@ export function PodcastCard({ item, rank }: PodcastCardProps) {
 	return (
 		<Link 
 			href={`/podcast/${item.id}`} 
+			target="_blank"
+			rel="noopener noreferrer"
 			className="block group h-full"
 		>
 			{isHotRank ? (

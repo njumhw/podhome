@@ -11,6 +11,9 @@ interface MinimalLikeButtonProps {
   disableInitialFetch?: boolean;
   onStatusChange?: (liked: boolean, likeCount: number) => void;
   onRequireLogin?: () => void;
+  // 外部状态同步：当这些值变化时，会更新内部状态
+  externalLiked?: boolean;
+  externalLikeCount?: number;
 }
 
 export default function MinimalLikeButton({ 
@@ -21,11 +24,23 @@ export default function MinimalLikeButton({
   disableInitialFetch = false,
   onStatusChange,
   onRequireLogin,
+  externalLiked,
+  externalLikeCount,
 }: MinimalLikeButtonProps) {
   const [likeCount, setLikeCount] = useState(initialLikeCount);
   const [liked, setLiked] = useState(initialLiked);
   const [loading, setLoading] = useState(false);
   const { success, error } = useToast();
+
+  // 同步外部状态：当 externalLiked 或 externalLikeCount 变化时，更新内部状态
+  useEffect(() => {
+    if (externalLiked !== undefined) {
+      setLiked(externalLiked);
+    }
+    if (externalLikeCount !== undefined) {
+      setLikeCount(externalLikeCount);
+    }
+  }, [externalLiked, externalLikeCount]);
 
   // 获取点赞状态
   useEffect(() => {

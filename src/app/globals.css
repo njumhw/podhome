@@ -106,20 +106,79 @@ body > * {
   color: #ffffff !important;
 }
 
-/* VisitorLimitModal 在白色主题下的文字颜色强制设置 */
-[data-theme='light'] .visitor-limit-modal .visitor-limit-title {
+/* VisitorLimitModal 在白色主题下的文字颜色强制设置 - 最高优先级 */
+[data-theme='light'] .visitor-limit-modal {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important; /* slate-300 */
+}
+
+/* 标题文字 - 覆盖全局 .text-white 规则 */
+[data-theme='light'] .visitor-limit-modal .visitor-limit-title,
+[data-theme='light'] .visitor-limit-modal h2.visitor-limit-title,
+[data-theme='light'] .visitor-limit-modal h2.text-white.visitor-limit-title,
+[data-theme='light'] .visitor-limit-modal .text-white.visitor-limit-title {
   color: #0f172a !important; /* slate-900 */
 }
 
-[data-theme='light'] .visitor-limit-modal .visitor-limit-text {
+/* 描述文字 - 覆盖全局 .text-gray-400 规则 */
+[data-theme='light'] .visitor-limit-modal .visitor-limit-text,
+[data-theme='light'] .visitor-limit-modal p.visitor-limit-text,
+[data-theme='light'] .visitor-limit-modal p.text-gray-400.visitor-limit-text,
+[data-theme='light'] .visitor-limit-modal .text-gray-400.visitor-limit-text {
   color: #1e293b !important; /* slate-800 */
 }
 
-[data-theme='light'] .visitor-limit-modal .visitor-limit-cancel {
+/* 取消按钮文字 */
+[data-theme='light'] .visitor-limit-modal .visitor-limit-cancel,
+[data-theme='light'] .visitor-limit-modal button.visitor-limit-cancel,
+[data-theme='light'] .visitor-limit-modal button.text-gray-400.visitor-limit-cancel {
   color: #475569 !important; /* slate-600 */
 }
 
-[data-theme='light'] .visitor-limit-modal .visitor-limit-cancel:hover {
+[data-theme='light'] .visitor-limit-modal .visitor-limit-cancel:hover,
+[data-theme='light'] .visitor-limit-modal button.visitor-limit-cancel:hover {
+  color: #0f172a !important; /* slate-900 */
+}
+
+/* UpgradeModal 在白色主题下的文字颜色强制设置 - 最高优先级 */
+[data-theme='light'] .upgrade-modal {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important; /* slate-300 */
+}
+
+/* 标题文字 - 覆盖全局 .text-white 规则 */
+[data-theme='light'] .upgrade-modal .upgrade-modal-title,
+[data-theme='light'] .upgrade-modal h2.upgrade-modal-title,
+[data-theme='light'] .upgrade-modal h2.text-white.upgrade-modal-title,
+[data-theme='light'] .upgrade-modal .text-white.upgrade-modal-title {
+  color: #0f172a !important; /* slate-900 */
+}
+
+/* 描述文字 - 覆盖全局 .text-gray-400 规则 */
+[data-theme='light'] .upgrade-modal .upgrade-modal-text,
+[data-theme='light'] .upgrade-modal p.upgrade-modal-text,
+[data-theme='light'] .upgrade-modal p.text-gray-400.upgrade-modal-text,
+[data-theme='light'] .upgrade-modal .text-gray-400.upgrade-modal-text,
+[data-theme='light'] .upgrade-modal .text-gray-200 {
+  color: #1e293b !important; /* slate-800 */
+}
+
+/* 标签文字 */
+[data-theme='light'] .upgrade-modal .upgrade-modal-label,
+[data-theme='light'] .upgrade-modal label.upgrade-modal-label,
+[data-theme='light'] .upgrade-modal label.text-gray-300.upgrade-modal-label {
+  color: #334155 !important; /* slate-700 */
+}
+
+/* 取消按钮文字 */
+[data-theme='light'] .upgrade-modal .upgrade-modal-cancel,
+[data-theme='light'] .upgrade-modal button.upgrade-modal-cancel,
+[data-theme='light'] .upgrade-modal button.text-gray-400.upgrade-modal-cancel {
+  color: #475569 !important; /* slate-600 */
+}
+
+[data-theme='light'] .upgrade-modal .upgrade-modal-cancel:hover,
+[data-theme='light'] .upgrade-modal button.upgrade-modal-cancel:hover {
   color: #0f172a !important; /* slate-900 */
 }
 

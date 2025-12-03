@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 		const parsed = bodySchema.safeParse(json);
 		if (!parsed.success) {
 			console.log("❌ 请求数据验证失败:", parsed.error);
-			return Response.json({ error: "Bad Request" }, { status: 400 });
+			return Response.json({ error: "请求数据格式错误，请检查输入" }, { status: 400 });
 		}
 
 		const { identifier, password } = parsed.data;
@@ -39,17 +39,17 @@ export async function POST(req: NextRequest) {
 		
 		if (!user) {
 			console.log("❌ 用户不存在");
-			return Response.json({ error: "Invalid credentials" }, { status: 401 });
+			return Response.json({ error: "该账户不存在，请检查邮箱或用户名" }, { status: 401 });
 		}
 		
 		if (user.isBanned) {
 			console.log("❌ 用户被封禁");
-			return Response.json({ error: "Account banned" }, { status: 403 });
+			return Response.json({ error: "账户已被封禁，请联系管理员" }, { status: 403 });
 		}
 		
 		if (!verifyPassword(password, user.passwordHash)) {
 			console.log("❌ 密码错误");
-			return Response.json({ error: "Invalid credentials" }, { status: 401 });
+			return Response.json({ error: "密码错误，请重试" }, { status: 401 });
 		}
 
 		console.log("✅ 用户验证成功，设置会话");
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 	} catch (error) {
 		console.error("❌ 登录 API 错误:", error);
 		return Response.json({ 
-			error: "Internal Server Error", 
+			error: "服务器内部错误，请稍后重试", 
 			details: String(error) 
 		}, { status: 500 });
 	}
