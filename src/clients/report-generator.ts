@@ -453,20 +453,39 @@ ${primarySource}
     console.error('   输入长度:', transcript.length, '字符');
     console.error('   大纲状态:', outline ? `已生成(${outline.length}字符)` : '未生成');
     
-    // 如果报告生成失败，但大纲已生成，可以返回大纲
-    if (outline && outline.trim().length > 0) {
-      console.warn('⚠️ 报告生成失败，但大纲已生成，返回大纲作为部分结果');
-      return {
-        summary: '', // 报告为空
-        outline, // 返回大纲
-        processingTime: Date.now() - startTime,
-        estimatedTokens: Math.ceil((transcript.length + outline.length) / 2)
-      };
+    // 如果报告生成失败，尝试回退到单轮生成模式（即使大纲已生成）
+    // 这样可以确保至少生成一份报告，而不是返回空字符串
+    console.log('⚠️ 报告生成失败，回退到单轮生成模式（尝试基于ASR原文直接生成报告）...');
+    try {
+      const fallbackResult = await generateReportWholeFallback(input, systemPrompt);
+      // 如果回退成功，保留大纲信息（如果存在）
+      if (outline && outline.trim().length > 0) {
+        return {
+          summary: fallbackResult.summary,
+          outline, // 保留大纲
+          processingTime: fallbackResult.processingTime,
+          estimatedTokens: fallbackResult.estimatedTokens
+        };
+      }
+      return fallbackResult;
+    } catch (fallbackError) {
+      const fallbackErrorMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+      console.error('❌ 单轮生成也失败:', fallbackErrorMessage);
+      
+      // 如果单轮生成也失败，但大纲已生成，至少返回大纲
+      if (outline && outline.trim().length > 0) {
+        console.warn('⚠️ 所有报告生成方式都失败，但大纲已生成，返回大纲作为部分结果');
+        return {
+          summary: '', // 报告为空
+          outline, // 返回大纲
+          processingTime: Date.now() - startTime,
+          estimatedTokens: Math.ceil((transcript.length + outline.length) / 2)
+        };
+      }
+      
+      // 如果连大纲都没有，抛出错误
+      throw fallbackError;
     }
-    
-    // 如果大纲和报告都失败，回退到单轮生成
-    console.log('回退到单轮生成模式...');
-    return await generateReportWholeFallback(input, systemPrompt);
   }
 }
 

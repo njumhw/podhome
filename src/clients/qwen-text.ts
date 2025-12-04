@@ -59,12 +59,20 @@ export async function qwenChat(messages: ChatMessage[], options?: { model?: stri
 			
 			const content: string = data?.choices?.[0]?.message?.content ?? "";
 			
-			// 如果content为空，记录详细信息以便调试
+			// 如果content为空，记录详细信息并抛出错误
 			if (!content || content.trim().length === 0) {
 				console.error('❌ API返回空内容！');
 				console.error('完整响应:', JSON.stringify(data, null, 2).substring(0, 1000));
 				console.error('choices[0]:', JSON.stringify(data.choices[0], null, 2));
-				// 不抛出错误，让调用方处理（因为某些情况下空内容可能是合法的）
+				
+				// 检查是否有finish_reason，可能提供失败原因
+				const finishReason = data?.choices?.[0]?.finish_reason;
+				if (finishReason && finishReason !== 'stop') {
+					throw new Error(`API返回空内容，finish_reason: ${finishReason}。可能原因：内容审核、长度限制或其他API限制`);
+				}
+				
+				// 抛出错误，让调用方能够正确处理（重试或回退）
+				throw new Error('API返回空内容：可能是内容审核、API限流或其他限制导致');
 			}
 			
 			return typeof content === "string" ? content : "";
