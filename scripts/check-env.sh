@@ -93,3 +93,4 @@ echo "AUTH_SECRET=你的密钥"
 echo "DATABASE_URL=你的数据库连接字符串"
 echo ""
 
+

@@ -20,7 +20,7 @@ export interface ReportGenerationOutput {
  * 第一轮：生成详细大纲/框架
  * 第二轮：基于框架+原始ASR生成完整报告
  */
-export async function generateReportWhole(input: ReportGenerationInput): Promise<ReportGenerationOutput> {
+export async function generateReportWhole(input: ReportGenerationInput, fromChunked: boolean = false): Promise<ReportGenerationOutput> {
   const { transcript, originalTranscript, title, segments } = input;
   const startTime = Date.now();
   
@@ -33,7 +33,11 @@ export async function generateReportWhole(input: ReportGenerationInput): Promise
   const maxInputTokens = 900000; // 安全边界（1M限制，留100K余量）
   
   // 如果输入超过限制，直接使用分块处理
+  // 但如果是从分块处理调用的，避免递归，直接抛出错误
   if (totalInputTokens > maxInputTokens) {
+    if (fromChunked) {
+      throw new Error(`输入长度超限 (${totalInputTokens.toLocaleString()} tokens > ${maxInputTokens.toLocaleString()} tokens)，且已从分块处理调用，避免递归`);
+    }
     console.warn(`⚠️ 输入长度超限 (${totalInputTokens.toLocaleString()} tokens > ${maxInputTokens.toLocaleString()} tokens)，自动切换到分块处理模式`);
     console.log(`   ASR原文: ${transcriptLength.toLocaleString()} 字符`);
     console.log(`   估算总输入: ${totalInputTokens.toLocaleString()} tokens`);
@@ -70,7 +74,7 @@ export async function generateReportWhole(input: ReportGenerationInput): Promise
 - 引用逻辑：禁止同义重复，引用应作为证据或保留独特表达，而不是重复AI已总结的内容
 - 去重检查：确保每句话都提供新的信息增量，避免"车轱辘话"或"同义反复"`;
     }
-    return await generateReportWholeFallback(input, fallbackSystemPrompt);
+    return await generateReportWholeFallback(input, fallbackSystemPrompt, fromChunked);
   }
   
   console.log(`开始两轮生成访谈报告，文本长度: ${transcript.length} 字符，段落数: ${segmentCount}`);
@@ -319,7 +323,7 @@ ${primarySource}
     console.error('═══════════════════════════════════════════════════════════');
     // 如果大纲生成失败，回退到单轮生成
     console.log('⚠️ 大纲生成失败，回退到单轮生成模式（不会生成大纲）...');
-    return await generateReportWholeFallback(input, systemPrompt);
+    return await generateReportWholeFallback(input, systemPrompt, fromChunked);
   }
   
   // ========== 第二轮：基于大纲+原始ASR生成完整报告 ==========
@@ -457,7 +461,7 @@ ${primarySource}
     // 这样可以确保至少生成一份报告，而不是返回空字符串
     console.log('⚠️ 报告生成失败，回退到单轮生成模式（尝试基于ASR原文直接生成报告）...');
     try {
-      const fallbackResult = await generateReportWholeFallback(input, systemPrompt);
+      const fallbackResult = await generateReportWholeFallback(input, systemPrompt, fromChunked);
       // 如果回退成功，保留大纲信息（如果存在）
       if (outline && outline.trim().length > 0) {
         return {
@@ -496,7 +500,8 @@ ${primarySource}
  */
 async function generateReportWholeFallback(
   input: ReportGenerationInput,
-  systemPrompt: string
+  systemPrompt: string,
+  fromChunked: boolean = false
 ): Promise<ReportGenerationOutput> {
   const { transcript, title } = input;
   const startTime = Date.now();
@@ -585,8 +590,12 @@ ${transcript}
     console.error('   错误类型:', error instanceof Error ? error.constructor.name : typeof error);
     
     // 如果遇到内容审核错误（或其他可能的API限制错误），切换到分块处理模式
-    // 注意：API可能返回误导性的错误信息，所以我们也检查其他可能的错误
+    // 但如果是从分块处理调用的，避免递归，直接抛出错误
     if (/内容审核|inappropriate content|输入|input|limit|限制/i.test(errorMessage)) {
+      if (fromChunked) {
+        console.warn('⚠️ 检测到API限制错误，但已从分块处理调用，避免递归，直接抛出错误');
+        throw error;
+      }
       console.warn('⚠️ 检测到可能的API限制错误，切换到分块处理模式...');
       console.log('   分块处理可以避免一次性发送大量内容，降低API限制触发概率');
       return await generateReportChunked(input);
@@ -600,7 +609,7 @@ ${transcript}
  * 分块报告生成（备用方案）
  * 当整体生成失败时，使用此方法分块处理
  */
-async function generateReportChunked(input: ReportGenerationInput): Promise<ReportGenerationOutput> {
+export async function generateReportChunked(input: ReportGenerationInput): Promise<ReportGenerationOutput> {
   const { transcript, originalTranscript, title, segments } = input;
   const startTime = Date.now();
   
@@ -608,11 +617,13 @@ async function generateReportChunked(input: ReportGenerationInput): Promise<Repo
   
   // 优先使用ASR分段（按时间分割的73段），保持语义边界
   let chunks: string[] = [];
+  let originalSegments: string[] | undefined = undefined; // 保存原始ASR分段，用于后续合并
   
   if (segments && segments.length > 0) {
     // 使用ASR原有的分段（73段，每段120秒）
     console.log(`✅ 使用ASR原有分段: ${segments.length} 段（保持语义边界）`);
-    chunks = segments.filter(seg => seg && seg.trim());
+    originalSegments = segments.filter(seg => seg && seg.trim());
+    chunks = [...originalSegments]; // 复制一份用于处理
     
     // 如果ASR段数过多（>100），可以合并相邻段以减少API调用
     // 但保持段的完整性，不破坏语义边界
@@ -629,6 +640,8 @@ async function generateReportChunked(input: ReportGenerationInput): Promise<Repo
       }
       chunks = mergedChunks;
       console.log(`合并后: ${chunks.length} 个块`);
+      // 注意：如果合并了，originalSegments 不再对应 chunks，无法使用优化策略
+      originalSegments = undefined;
     }
   } else {
     // 降级策略：如果没有segments，按固定字符数切割（原有逻辑）
@@ -656,26 +669,62 @@ async function generateReportChunked(input: ReportGenerationInput): Promise<Repo
 要求：保留核心观点、逻辑清晰、客观表达、使用Markdown格式。`;
   }
   
-  // 分别处理每个块
+  // 分别处理每个块，记录成功和失败的块索引
   const reportChunks: string[] = [];
+  const successfulChunkIndices: number[] = []; // 记录成功块的索引
+  
+  console.log(`开始逐个处理 ${chunks.length} 个块，这可能需要较长时间...`);
+  
   for (let i = 0; i < chunks.length; i++) {
+    const chunkStartTime = Date.now();
     try {
-      const chunkResult = await qwenChat([
+      // 改进分块处理的提示词，要求详细展开
+      const chunkPrompt = `请基于以下播客内容片段生成详细的报告摘要：
+
+${chunks[i]}
+
+**要求（重要！）：**
+1. **详细展开**：不要只列出观点标题，要深入展开每个观点，提供完整的逻辑链条、论证过程、支撑论据和具体案例
+2. **保留所有关键信息**：包括所有主要观点、次要观点、相关论据、具体案例、数据、引用和细节
+3. **充分展开**：对于每个主要观点，至少提供2-3个详细论据或案例支撑
+4. **使用长句子和连贯段落**：避免散点式罗列，使用完整的长句子进行深入阐述
+5. **目标长度**：每个块的摘要应该充分展开，不要过度压缩，目标长度应达到输入内容的20-30%
+6. **Markdown格式**：使用标题、段落、粗体等Markdown格式组织内容
+
+请生成一份详细、连贯、专业的报告摘要。`;
+      
+      // 添加超时机制，每个块最多处理5分钟
+      const chunkTimeout = 5 * 60 * 1000; // 5分钟
+      const chunkPromise = qwenChat([
         { role: "system", content: systemPrompt },
-        { role: "user", content: `请基于以下播客内容片段生成报告摘要：\n\n${chunks[i]}` }
-      ], { maxTokens: 2500, temperature: 0.1 });
+        { role: "user", content: chunkPrompt }
+      ], { maxTokens: 10000, temperature: 0.1 });
+      
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('块处理超时（超过5分钟）')), chunkTimeout);
+      });
+      
+      const chunkResult = await Promise.race([chunkPromise, timeoutPromise]);
       
       if (chunkResult && chunkResult.trim()) {
         reportChunks.push(chunkResult.trim());
-        console.log(`块 ${i + 1}/${chunks.length} 处理成功`);
+        successfulChunkIndices.push(i);
+        const chunkDuration = Date.now() - chunkStartTime;
+        const progress = ((i + 1) / chunks.length * 100).toFixed(1);
+        console.log(`✅ 块 ${i + 1}/${chunks.length} (${progress}%) 处理成功，长度: ${chunkResult.length} 字符，耗时: ${(chunkDuration / 1000).toFixed(1)}秒`);
       }
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const chunkDuration = Date.now() - chunkStartTime;
+      const progress = ((i + 1) / chunks.length * 100).toFixed(1);
+      
       // 如果某个块也遇到内容审核错误，记录但继续处理其他块
       if (/内容审核|inappropriate content/i.test(errorMessage)) {
-        console.warn(`块 ${i + 1}/${chunks.length} 遇到内容审核错误，跳过该块`);
+        console.warn(`⚠️ 块 ${i + 1}/${chunks.length} (${progress}%) 遇到内容审核错误，跳过该块，耗时: ${(chunkDuration / 1000).toFixed(1)}秒`);
+      } else if (/超时|timeout/i.test(errorMessage)) {
+        console.warn(`⚠️ 块 ${i + 1}/${chunks.length} (${progress}%) 处理超时，跳过该块，耗时: ${(chunkDuration / 1000).toFixed(1)}秒`);
       } else {
-        console.warn(`块 ${i + 1}/${chunks.length} 处理失败，跳过:`, errorMessage);
+        console.warn(`⚠️ 块 ${i + 1}/${chunks.length} (${progress}%) 处理失败，跳过: ${errorMessage}，耗时: ${(chunkDuration / 1000).toFixed(1)}秒`);
       }
     }
   }
@@ -685,6 +734,63 @@ async function generateReportChunked(input: ReportGenerationInput): Promise<Repo
     throw new Error('所有分块处理均失败，无法生成报告');
   }
   
+  const successRate = successfulChunkIndices.length / chunks.length;
+  console.log(`分块处理完成: ${successfulChunkIndices.length}/${chunks.length} 成功，成功率: ${(successRate * 100).toFixed(1)}%`);
+  
+  // 优化策略：如果成功率足够高（>80%）且有原始ASR分段，尝试合并成功的ASR片段走整体处理
+  const MIN_SUCCESS_RATE = 0.8; // 最低成功率阈值
+  if (successRate >= MIN_SUCCESS_RATE && originalSegments && originalSegments.length > 0) {
+    console.log(`✅ 成功率 ${(successRate * 100).toFixed(1)}% 达到阈值 ${(MIN_SUCCESS_RATE * 100)}%，尝试合并成功的ASR片段走整体处理...`);
+    
+    // 合并成功的ASR片段
+    const successfulSegments = successfulChunkIndices
+      .map(idx => originalSegments![idx])
+      .filter(seg => seg && seg.trim());
+    
+    const mergedTranscript = successfulSegments.join('\n\n');
+    
+    // 检查合并后的长度是否在限制内
+    const mergedLength = mergedTranscript.length;
+    const estimatedTokens = mergedLength; // 中文约1字符=1token
+    const promptTokens = 10000;
+    const totalInputTokens = estimatedTokens + promptTokens;
+    const maxInputTokens = 900000;
+    
+    if (totalInputTokens <= maxInputTokens) {
+      console.log(`合并后的ASR片段长度: ${mergedLength.toLocaleString()} 字符，估算Token: ${totalInputTokens.toLocaleString()}，在限制内`);
+      console.log(`尝试使用整体处理逻辑（单轮或两轮生成）...`);
+      
+      try {
+        // 使用合并后的ASR片段走整体处理逻辑
+        // 传递 fromChunked=true 标志，避免递归调用 generateReportChunked
+        const wholeResult = await generateReportWhole({
+          transcript: mergedTranscript,
+          originalTranscript: mergedTranscript,
+          segments: successfulSegments, // 传递成功的片段
+          title
+        }, true); // 标记为从分块处理调用，避免递归
+        
+        console.log(`✅ 整体处理成功！使用合并后的ASR片段生成报告`);
+        return wholeResult;
+      } catch (error: any) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`⚠️ 整体处理失败，回退到分块处理+整合逻辑:`, errorMessage);
+        // 继续执行下面的分块处理+整合逻辑
+      }
+    } else {
+      console.log(`⚠️ 合并后的ASR片段长度超限 (${totalInputTokens.toLocaleString()} tokens > ${maxInputTokens.toLocaleString()} tokens)，使用分块处理+整合逻辑`);
+    }
+  } else {
+    if (successRate < MIN_SUCCESS_RATE) {
+      console.log(`⚠️ 成功率 ${(successRate * 100).toFixed(1)}% 低于阈值 ${(MIN_SUCCESS_RATE * 100)}%，使用分块处理+整合逻辑`);
+    } else if (!originalSegments || originalSegments.length === 0) {
+      console.log(`⚠️ 无原始ASR分段，无法使用优化策略，使用分块处理+整合逻辑`);
+    }
+  }
+  
+  // 回退到原来的分块处理+整合逻辑
+  console.log(`使用分块处理+整合逻辑生成最终报告...`);
+  
   // 合并所有块的结果
   const combinedReport = reportChunks.join('\n\n');
   
@@ -692,11 +798,25 @@ async function generateReportChunked(input: ReportGenerationInput): Promise<Repo
   let finalSummary = combinedReport;
   if (reportChunks.length > 1) {
     try {
-      const finalPrompt = `请将以下多个报告片段整合成一份完整、连贯的播客总结报告：
-      
+      const finalPrompt = `请将以下多个报告片段整合成一份完整、连贯、详尽的播客总结报告：
+
 ${combinedReport}
 
-要求：保持逻辑连贯、删除重复内容、使用Markdown格式。`;
+**整合要求（重要！）：**
+1. **充分展开而非压缩**：不要为了简洁而删除重要信息，要充分展开每个部分，提供详细的论据、案例和数据
+2. **保持逻辑连贯**：确保各片段之间的逻辑连接顺畅，使用过渡词和连接词
+3. **删除重复内容**：识别并删除重复的观点和表述，但不要过度压缩
+4. **详细展开**：对于每个主要观点，要提供完整的逻辑链条、论证过程、支撑论据和具体案例
+5. **目标长度**：充分利用32K token输出上限，生成尽可能详尽、全面的报告。目标长度应达到原始播客内容的20-30%
+6. **使用长句子和连贯段落**：避免散点式罗列，使用完整的长句子进行深入阐述
+7. **Markdown格式**：使用标题、段落、粗体等Markdown格式组织内容
+
+**重要提醒**：
+- 整合的目标是生成一份详尽、全面的报告，而不是压缩摘要
+- 要充分展开每个部分，不要因为担心过长而压缩内容
+- 在32K token限制内，尽可能生成最详尽的报告
+
+请生成一份完整、连贯、专业、详尽且全面的报告。`;
       
       finalSummary = await qwenChat([
         { role: "system", content: systemPrompt },

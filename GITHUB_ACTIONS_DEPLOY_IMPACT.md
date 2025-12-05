@@ -142,3 +142,4 @@ chmod +x scripts/deploy.sh
 
 **GitHub Actions 的部署失败不会影响你手动部署到阿里云**。代码已经成功推送到 GitHub，你可以随时在服务器上手动拉取并部署。
 
+

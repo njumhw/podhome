@@ -93,3 +93,4 @@ pm2 save
 2. **如果应用未运行**：使用 `pm2 start ecosystem.config.js --env production` 启动
 3. **如果端口被占用**：先执行 `kill -9 $(lsof -ti:3005)` 再重启
 
+

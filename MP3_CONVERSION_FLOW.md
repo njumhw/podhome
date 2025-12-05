@@ -177,3 +177,4 @@ const tmpFile = path.join(tmp, `src-${timestamp}-${random}${originalExt}`);
 - ✅ 自动检测格式，无需手动配置
 - ✅ 转换失败时提供详细错误信息
 
+

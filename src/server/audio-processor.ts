@@ -13,6 +13,11 @@ import { analyzeError, logErrorAnalysis, createErrorContext } from "@/utils/erro
 // 更新任务指标的函数
 async function updateTaskMetrics(taskId: string, metrics: any) {
   try {
+    // 如果 taskId 以 test_ 开头，说明是测试调用，跳过数据库更新
+    if (taskId && taskId.startsWith('test_')) {
+      console.log(`[测试模式] 跳过任务指标更新: ${taskId}`);
+      return;
+    }
     await db.taskQueue.update({
       where: { id: taskId },
       data: {
@@ -23,7 +28,8 @@ async function updateTaskMetrics(taskId: string, metrics: any) {
       }
     });
   } catch (error) {
-    console.error('更新任务指标失败:', error);
+    // 如果任务不存在，只记录警告，不中断处理
+    console.warn('更新任务指标失败（可能是测试调用或任务不存在）:', error);
   }
 }
 
