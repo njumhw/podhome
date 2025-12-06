@@ -67,10 +67,12 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
   const apiKey = (env.QWEN_API_KEY as string) || ""; // user provided
   if (!apiKey) throw new Error("Missing QWEN_API_KEY in env");
 
-  // DashScope qwen3-asr-flash HTTP API with async header
+  // DashScope ASR HTTP API with async header
+  // 支持通过环境变量 QWEN_ASR_MODEL 选择模型，默认为 fun-asr
+  const asrModel = process.env.QWEN_ASR_MODEL || "fun-asr";
   const submitEndpoint = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription";
   const payload: any = {
-    model: "qwen3-asr-flash",
+    model: asrModel,
     input: {
       file_urls: [audioUrl],
     },

@@ -6,7 +6,8 @@ import { processAudioInternal } from '../src/server/audio-processor';
  */
 async function testPodcastProcessing() {
   try {
-    const url = 'https://www.xiaoyuzhoufm.com/episode/69319f5c3fec3166cf4c87e5';
+    // 从命令行参数获取URL，如果没有则使用默认值
+    const url = process.argv[2] || 'https://www.xiaoyuzhoufm.com/episode/692cd86fe4244f7e3d3ad135';
     
     console.log('═══════════════════════════════════════════════════════════');
     console.log('🧪 测试播客处理');

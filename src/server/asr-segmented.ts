@@ -452,10 +452,9 @@ export async function transcribeAudioWithSegmentation(
   
   // Step 3: 切割并上传到OSS
   const uploaded: { index: number; url: string }[] = [];
-  // 并发数：提升到5以平衡速度和稳定性
-  // OSS上传现在有重试机制（最多3次），可以适当提高并发数
-  // ASR转写使用5（通义千问API通常支持，需要监控是否有QPS限制）
-  const maxConcurrent = 5; // 提升到5，平衡效率和稳定性，提升处理速度
+  // 并发数：fun-asr模型支持5个并发，qwen3-asr-flash可能有限制
+  // 如果使用fun-asr模型，可以保持5个并发以提升处理速度
+  const maxConcurrent = 5; // fun-asr模型支持5个并发
   
   async function runPool<T>(items: any[], worker: (it: any) => Promise<T>, n: number): Promise<T[]> {
     const ret: T[] = new Array(items.length) as any;

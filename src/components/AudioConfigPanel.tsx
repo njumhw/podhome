@@ -6,7 +6,7 @@ export function AudioConfigPanel() {
 	const [config, setConfig] = useState({
 		segmentDuration: 170,
 		enableAutoSegment: true,
-		maxConcurrentSegments: 5,
+		maxConcurrentSegments: 5, // fun-asr模型支持5个并发
 	});
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -117,7 +117,7 @@ export function AudioConfigPanel() {
 								min="1"
 								max="20"
 								value={config.maxConcurrentSegments}
-								onChange={(e) => setConfig({...config, maxConcurrentSegments: parseInt(e.target.value) || 5})}
+								onChange={(e) => setConfig({...config, maxConcurrentSegments: parseInt(e.target.value) || 5})} // fun-asr模型支持5个并发
 								className="w-24 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
 							/>
 							<div className="text-sm text-gray-500">

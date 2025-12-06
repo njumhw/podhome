@@ -130,7 +130,7 @@ export async function transcribeMultipleSegments(segments: AudioSegment[]): Prom
 	const results: ASRResult[] = [];
 	
 	// 并发处理，但限制并发数
-	const CONCURRENT_LIMIT = 5;
+	const CONCURRENT_LIMIT = 5; // fun-asr模型支持5个并发
 	
 	for (let i = 0; i < segments.length; i += CONCURRENT_LIMIT) {
 		const batch = segments.slice(i, i + CONCURRENT_LIMIT);

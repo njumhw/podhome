@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const { audioUrl, segmentDuration, language } = parsed.data;
 
   // concurrency from config or default 5 (平衡速度和稳定性)
-  const maxConcurrent = parseInt(await getConfig(CONFIG_KEYS.AUDIO_MAX_CONCURRENT, "5") || "5"); // 提升到5，平衡速度和稳定性
+    const maxConcurrent = parseInt(await getConfig(CONFIG_KEYS.AUDIO_MAX_CONCURRENT, "5") || "5"); // fun-asr模型支持5个并发
 
   // Helpers for local download & cutting
   function getFfmpegPath(): string {

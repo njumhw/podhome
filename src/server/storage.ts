@@ -101,6 +101,7 @@ function getOssClient(): OSS | null {
       region: region,
       bucket: OSS_BUCKET,
       timeout: 60000,
+      secure: true, // 强制使用HTTPS
     });
     
     console.log('✅ OSS客户端创建成功');
@@ -167,9 +168,38 @@ export async function uploadToOssAndGetPublicUrl(
       });
       console.log(`✅ OSS上传成功: ${path} (${(file.length / 1024).toFixed(2)} KB)`, result.res?.status || 'OK');
       
-      // Public URL on OSS
-      const url = `https://${OSS_BUCKET}.oss-${OSS_REGION}.aliyuncs.com/${encodeURI(path)}`;
-      return url;
+      // 尝试将文件设置为公共读，这样ASR API可以直接访问
+      try {
+        await client.putACL(path, 'public-read');
+        console.log(`✅ OSS文件ACL设置为公共读: ${path}`);
+      } catch (aclError) {
+        console.warn(`⚠️ 设置OSS文件ACL失败（可能bucket已设置为公共读）: ${aclError}`);
+      }
+      
+      // 使用公共URL（如果bucket是公共读）或签名URL（如果bucket是私有的）
+      // 优先使用公共URL，因为ASR API可能无法访问签名URL
+      const publicUrl = `https://${OSS_BUCKET}.oss-${OSS_REGION}.aliyuncs.com/${encodeURI(path)}`;
+      
+      // 验证公共URL是否可访问（如果不可访问，使用签名URL）
+      try {
+        const testRes = await fetch(publicUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+        if (testRes.ok) {
+          console.log(`✅ OSS公共URL可访问: ${path}`);
+          return publicUrl;
+        }
+      } catch (testError) {
+        console.warn(`⚠️ OSS公共URL不可访问，尝试使用签名URL: ${testError}`);
+      }
+      
+      // 如果公共URL不可访问，使用签名URL
+      const url = client.signatureUrl(path, { 
+        expires: 86400, // 24小时 = 86400秒
+        method: 'GET'
+      });
+      // 确保URL是HTTPS（如果OSS SDK返回HTTP，手动转换）
+      const httpsUrl = url.replace(/^http:\/\//, 'https://');
+      console.log(`✅ OSS签名URL生成成功: ${path}`);
+      return httpsUrl;
     } catch (error: any) {
       lastError = error;
       const errorMessage = error instanceof Error ? error.message : String(error);

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 		const config = {
 			segmentDuration: parseInt((await getConfig("AUDIO_SEGMENT_DURATION", "170")) || "170"),
 			enableAutoSegment: ((await getConfig("AUDIO_AUTO_SEGMENT", "true")) || "true") === "true",
-			maxConcurrentSegments: parseInt((await getConfig("AUDIO_MAX_CONCURRENT", "5")) || "5"),
+      maxConcurrentSegments: parseInt((await getConfig("AUDIO_MAX_CONCURRENT", "5")) || "5"),
 		};
 
 		return Response.json({ config });
