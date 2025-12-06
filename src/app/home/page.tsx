@@ -1257,7 +1257,80 @@ export default function HomePage() {
           }
           
         } else if (taskStatus.status === 'FAILED') {
+          // 不要立即停止轮询，继续轮询一段时间，确认任务真的失败而不是中间状态
+          // 因为任务可能在ASR阶段失败后，后端会自动重试或继续处理
+          let failedPollCount = (pollInterval as any).failedPollCount || 0;
+          failedPollCount++;
+          (pollInterval as any).failedPollCount = failedPollCount;
+          
+          // 如果连续5次轮询都是FAILED，且距离任务开始时间超过2分钟，才真正认为失败
+          const taskStartTime = taskStatus.startedAt ? new Date(taskStatus.startedAt).getTime() : Date.now();
+          const timeSinceStart = Date.now() - taskStartTime;
+          const shouldMarkAsFailed = failedPollCount >= 5 && timeSinceStart > 120000; // 2分钟
+          
+          if (!shouldMarkAsFailed) {
+            console.log(`⚠️ 检测到FAILED状态，但继续轮询确认（${failedPollCount}/5次，已运行${Math.round(timeSinceStart/1000)}秒）`);
+            return; // 继续轮询
+          }
+          
           clearInterval(pollInterval);
+          
+          // 在标记为失败之前，先尝试通过URL搜索播客，看看是否已经成功保存
+          try {
+            const existing = localStorage.getItem('processingPodcasts');
+            const items = existing ? JSON.parse(existing) : [];
+            const currentItem = items.find((item: any) => item.id === processingId);
+            
+            if (currentItem?.url) {
+              console.log('🔍 任务失败后，尝试通过URL搜索播客:', currentItem.url);
+              const searchRes = await fetch(`/api/public/search?q=${encodeURIComponent(currentItem.url)}`);
+              if (searchRes.ok) {
+                const searchData = await searchRes.json();
+                if (searchData.results && searchData.results.length > 0) {
+                  const podcast = searchData.results[0];
+                  console.log('✅ 发现播客已成功保存:', podcast.id);
+                  
+                  // 更新处理状态为完成
+                  const updatedItems = items.map((item: any) => 
+                    item.id === processingId 
+                      ? { 
+                          ...item, 
+                          status: 'completed', 
+                          progress: 100, 
+                          title: podcast.title,
+                          error: null,
+                          completedAt: Date.now()
+                        }
+                      : item
+                  );
+                  localStorage.setItem('processingPodcasts', JSON.stringify(updatedItems));
+                  window.dispatchEvent(new Event('storage'));
+                  
+                  // 刷新首页数据
+                  loadLatest();
+                  loadHot();
+                  
+                  // 显示右上角通知
+                  toast.success(
+                    '处理完成',
+                    `${podcast.title || '播客'} 已处理完成，点击查看`,
+                    {
+                      duration: 8000,
+                      action: {
+                        label: '查看',
+                        onClick: () => {
+                          window.location.href = `/podcast/${podcast.id}`;
+                        }
+                      }
+                    }
+                  );
+                  return;
+                }
+              }
+            }
+          } catch (searchError) {
+            console.warn('搜索播客失败，继续标记为失败:', searchError);
+          }
           
           // 判断是否是"立刻失败"（快速失败）
           const isQuickFailure = taskStatus.startedAt && taskStatus.completedAt && 

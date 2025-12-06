@@ -557,35 +557,67 @@ export async function transcribeAudioWithSegmentation(
   fs.promises.unlink(localFile).catch(() => {});
   
   // Step 4: 并发转写每个片段
-  let results: Array<{ index: number; text: string }>;
+  let results: Array<{ index: number; text: string; error?: string }>;
   try {
     console.log(`开始并发转写 ${uploaded.length} 个音频片段...`);
+    // 为每个ASR分段转写添加超时保护，防止单个分段卡住整个流程
+    // 每个分段最多15分钟（包括轮询时间），如果超时就跳过该分段
+    const ASR_SEGMENT_TIMEOUT = 15 * 60 * 1000; // 15分钟超时
+    
     results = await runPool(uploaded, async (it) => {
       console.log(`转写片段 ${it.index + 1}/${uploaded.length}: ${it.url}`);
       
-      let lastError: any = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const r = await qwenTranscribeFromUrl(it.url, language === "auto" ? undefined : language);
-          
-          if (!r.text || r.text.trim().length === 0) {
-            throw new Error(`转写结果为空 (尝试 ${attempt}/3)`);
-          }
-          
-          console.log(`片段 ${it.index + 1}/${uploaded.length} 转写成功 (尝试 ${attempt}/3)`);
-          return { index: it.index, text: r.text.trim() };
-        } catch (error: any) {
-          lastError = error;
-          console.warn(`片段 ${it.index + 1}/${uploaded.length} 转写失败 (尝试 ${attempt}/3):`, error.message);
-          
-          if (attempt < 3) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      // 包装 ASR 调用，添加超时保护
+      const asrCallWithTimeout = async (): Promise<{ index: number; text: string }> => {
+        let lastError: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const r = await qwenTranscribeFromUrl(it.url, language === "auto" ? undefined : language);
+            
+            if (!r.text || r.text.trim().length === 0) {
+              throw new Error(`转写结果为空 (尝试 ${attempt}/3)`);
+            }
+            
+            console.log(`片段 ${it.index + 1}/${uploaded.length} 转写成功 (尝试 ${attempt}/3)`);
+            return { index: it.index, text: r.text.trim() };
+          } catch (error: any) {
+            lastError = error;
+            const errorMsg = error?.message || String(error);
+            console.warn(`片段 ${it.index + 1}/${uploaded.length} 转写失败 (尝试 ${attempt}/3):`, errorMsg);
+            
+            // 检查是否是URL访问问题
+            if (errorMsg.includes('url error') || errorMsg.includes('URL') || errorMsg.includes('403') || errorMsg.includes('404')) {
+              console.error(`⚠️ 片段 ${it.index + 1} URL访问问题: ${it.url}`);
+              console.error(`   错误详情: ${errorMsg}`);
+            }
+            
+            if (attempt < 3) {
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
           }
         }
-      }
+        
+        const finalErrorMsg = lastError?.message || String(lastError) || '未知错误';
+        throw new Error(finalErrorMsg);
+      };
       
-      console.warn(`片段 ${it.index + 1}/${uploaded.length} 转写最终失败，返回空文本`);
-      return { index: it.index, text: "" };
+      // 超时保护 Promise
+      const timeoutPromise = new Promise<{ index: number; text: string; error: string }>((resolve) => {
+        setTimeout(() => {
+          const timeoutMsg = `ASR转写超时（超过${ASR_SEGMENT_TIMEOUT / 1000 / 60}分钟）`;
+          console.error(`⏱️ 片段 ${it.index + 1}/${uploaded.length} ${timeoutMsg}`);
+          resolve({ index: it.index, text: "", error: timeoutMsg });
+        }, ASR_SEGMENT_TIMEOUT);
+      });
+      
+      // 使用 Promise.race，如果超时就返回错误，继续处理其他分段
+      try {
+        return await Promise.race([asrCallWithTimeout(), timeoutPromise]);
+      } catch (error: any) {
+        const errorMsg = error?.message || String(error) || '未知错误';
+        console.warn(`片段 ${it.index + 1}/${uploaded.length} 转写最终失败，返回空文本。错误: ${errorMsg}`);
+        return { index: it.index, text: "", error: errorMsg };
+      }
     }, maxConcurrent);
   } catch (e: any) {
     const errorMsg = e instanceof Error ? e.message : String(e);
@@ -596,7 +628,21 @@ export async function transcribeAudioWithSegmentation(
   // Step 5: 合并结果
   const nonEmpty = results.filter((r) => r && r.text && r.text.trim().length > 0);
   if (nonEmpty.length === 0) {
-    throw new Error('ASR失败: 所有分段均无有效文本');
+    // 收集所有失败的原因，提供更详细的错误信息
+    const failedCount = results.filter((r) => !r || !r.text || r.text.trim().length === 0).length;
+    const totalCount = results.length;
+    const errors = results
+      .filter((r) => r && r.error)
+      .map((r, idx) => `片段${idx + 1}: ${r.error}`)
+      .slice(0, 5); // 只显示前5个错误，避免日志过长
+    
+    console.error(`ASR失败详情: 总共${totalCount}个分段，全部失败（${failedCount}个）`);
+    if (errors.length > 0) {
+      console.error(`前${Math.min(5, errors.length)}个分段的错误信息:`);
+      errors.forEach(err => console.error(`  - ${err}`));
+    }
+    console.error(`可能原因：1) OSS URL无法访问 2) 音频文件格式问题 3) ASR API调用失败 4) 音频文件为空或损坏`);
+    throw new Error(`ASR失败: 所有分段均无有效文本（${totalCount}个分段全部失败，请检查OSS URL可访问性和音频文件格式）`);
   }
   
   console.log(`成功转写 ${nonEmpty.length}/${uploaded.length} 个片段`);

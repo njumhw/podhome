@@ -176,30 +176,12 @@ export async function uploadToOssAndGetPublicUrl(
         console.warn(`⚠️ 设置OSS文件ACL失败（可能bucket已设置为公共读）: ${aclError}`);
       }
       
-      // 使用公共URL（如果bucket是公共读）或签名URL（如果bucket是私有的）
-      // 优先使用公共URL，因为ASR API可能无法访问签名URL
-      const publicUrl = `https://${OSS_BUCKET}.oss-${OSS_REGION}.aliyuncs.com/${encodeURI(path)}`;
-      
-      // 验证公共URL是否可访问（如果不可访问，使用签名URL）
-      try {
-        const testRes = await fetch(publicUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-        if (testRes.ok) {
-          console.log(`✅ OSS公共URL可访问: ${path}`);
-          return publicUrl;
-        }
-      } catch (testError) {
-        console.warn(`⚠️ OSS公共URL不可访问，尝试使用签名URL: ${testError}`);
-      }
-      
-      // 如果公共URL不可访问，使用签名URL
-      const url = client.signatureUrl(path, { 
-        expires: 86400, // 24小时 = 86400秒
-        method: 'GET'
-      });
-      // 确保URL是HTTPS（如果OSS SDK返回HTTP，手动转换）
-      const httpsUrl = url.replace(/^http:\/\//, 'https://');
-      console.log(`✅ OSS签名URL生成成功: ${path}`);
-      return httpsUrl;
+      // 直接返回公共URL（回归到之前的简单逻辑，之前可以正常工作）
+      // 确保region格式正确（如果已经是oss-开头，不再添加）
+      const regionForUrl = OSS_REGION.startsWith('oss-') ? OSS_REGION : `oss-${OSS_REGION}`;
+      const publicUrl = `https://${OSS_BUCKET}.${regionForUrl}.aliyuncs.com/${encodeURI(path)}`;
+      console.log(`✅ OSS公共URL生成成功: ${path}`);
+      return publicUrl;
     } catch (error: any) {
       lastError = error;
       const errorMessage = error instanceof Error ? error.message : String(error);

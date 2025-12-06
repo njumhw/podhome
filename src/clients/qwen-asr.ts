@@ -109,8 +109,16 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
   let submitData: any = {};
   try { submitData = JSON.parse(submitText); } catch {}
   if (!submitRes.ok) {
-    console.error("Qwen ASR submit error:", { endpoint: submitEndpoint, status: submitRes.status, body: submitText });
-    throw new Error(submitData?.error?.message || submitData?.message || submitText || `ASR submit failed(${submitRes.status})`);
+    console.error("Qwen ASR submit error:", { 
+      endpoint: submitEndpoint, 
+      status: submitRes.status, 
+      body: submitText,
+      audioUrl: audioUrl.substring(0, 100) + '...',
+      model: asrModel
+    });
+    const errorMsg = submitData?.error?.message || submitData?.message || submitText || `ASR submit failed(${submitRes.status})`;
+    console.error(`ASR提交失败详情: ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 
   const taskId = submitData?.output?.task_id || submitData?.task_id;
@@ -122,6 +130,12 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
 
   // Step 2: Poll for results
   const maxAttempts = 1800; // 1800 attempts * 2s = 3600s max wait (1小时超时，支持超大音频)
+  let consecutiveErrors = 0; // 连续错误计数
+  const maxConsecutiveErrors = 10; // 最多连续10次错误后失败
+  let lastStatus: string | null = null; // 记录上一次的状态
+  let statusUnchangedCount = 0; // 状态未改变的次数
+  const maxStatusUnchangedCount = 300; // 如果状态300次（10分钟）未改变，认为卡住
+  
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s between polls
 
@@ -135,10 +149,18 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
         },
         signal: AbortSignal.timeout(15000) // 15秒超时
       });
+      // 成功请求，重置连续错误计数
+      consecutiveErrors = 0;
     } catch (fetchError) {
       const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
-      // 轮询时的网络错误，记录警告但不立即失败，继续重试
-      console.warn(`ASR状态查询失败 (尝试 ${attempt}):`, errorMsg);
+      consecutiveErrors++;
+      console.warn(`ASR状态查询失败 (尝试 ${attempt}, 连续错误 ${consecutiveErrors}/${maxConsecutiveErrors}):`, errorMsg);
+      
+      // 如果连续错误次数过多，提前失败
+      if (consecutiveErrors >= maxConsecutiveErrors) {
+        throw new Error(`ASR状态查询连续失败${consecutiveErrors}次，可能是网络问题或API服务不可用: ${errorMsg}`);
+      }
+      
       continue; // 继续下一次轮询
     }
 
@@ -152,6 +174,24 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
     }
 
     const taskStatus = statusData?.output?.task_status || statusData?.task_status;
+    
+    // 检测任务状态是否长时间未改变（卡住）
+    if (taskStatus === lastStatus) {
+      statusUnchangedCount++;
+      // 每50次（100秒）输出一次警告，避免日志过多
+      if (statusUnchangedCount % 50 === 0) {
+        console.warn(`ASR任务状态长时间未改变: ${taskStatus} (已持续 ${statusUnchangedCount * 2}秒)`);
+      }
+      // 如果状态长时间未改变（10分钟），认为任务卡住
+      if (statusUnchangedCount >= maxStatusUnchangedCount) {
+        throw new Error(`ASR任务状态长时间未改变（${statusUnchangedCount * 2}秒），任务可能卡在服务端。当前状态: ${taskStatus}`);
+      }
+    } else {
+      // 状态改变，重置计数
+      statusUnchangedCount = 0;
+      lastStatus = taskStatus;
+    }
+    
     console.log(`ASR task ${taskId} attempt ${attempt}: status = ${taskStatus}`);
 
     if (taskStatus === "SUCCEEDED") {
@@ -242,7 +282,15 @@ export async function qwenTranscribeFromUrl(audioUrl: string, language?: string)
       
       return { text, language: languageDetected, segments: segmentsArray };
     } else if (taskStatus === "FAILED") {
-      throw new Error(`ASR task failed: ${statusData?.output?.message || statusData?.message || "Unknown error"}`);
+      const errorMsg = statusData?.output?.message || statusData?.message || statusData?.error?.message || "Unknown error";
+      const errorDetails = statusData?.output?.error || statusData?.error || {};
+      console.error(`ASR任务失败详情:`, {
+        taskId,
+        errorMsg,
+        errorDetails: JSON.stringify(errorDetails).substring(0, 500),
+        fullResponse: JSON.stringify(statusData).substring(0, 1000)
+      });
+      throw new Error(`ASR task failed: ${errorMsg}`);
     } else if (taskStatus === "RUNNING" || taskStatus === "PENDING") {
       continue; // Keep polling
     } else {

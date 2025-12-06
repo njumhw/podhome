@@ -253,7 +253,7 @@ class TaskQueue {
       }
 
       // 查找下一个待处理的任务
-      console.log('[强制日志] 开始查询PENDING状态的任务...');
+      // 只在有任务时才输出日志，避免构建时日志过多
       const nextTask = await dbRetry.taskQueue.findFirst({
         where: {
           status: 'PENDING'
@@ -264,12 +264,12 @@ class TaskQueue {
       }) as any;
 
       if (!nextTask) {
-        // 每10次检查输出一次日志，避免日志过多
-        if (Math.random() < 0.1) {
-          console.log('[强制日志] 🔍 检查待处理任务: 无');
-        }
+        // 无任务时不输出日志，避免构建时日志过多
         return;
       }
+      
+      // 找到任务时才输出日志
+      console.log('[强制日志] 开始查询PENDING状态的任务...');
       
       const nt = nextTask as { id: string; data: any; type: string; status: string };
       console.log('[强制日志] ✅ 找到PENDING任务:', nt.id);
@@ -739,8 +739,17 @@ export const taskQueue = new TaskQueue();
 // 在应用启动时启动任务处理器
 if (typeof window === 'undefined') {
   // 只在服务器端启动，延迟初始化
-  setTimeout(async () => {
-    await taskQueue.initialize();
-    taskQueue.startProcessing();
-  }, 2000); // 延迟2秒启动，确保数据库连接就绪
+  // 在构建时（next build）不启动任务队列，避免日志过多
+  // Next.js 在构建时会设置 NEXT_PHASE 环境变量
+  const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
+  
+  if (!isBuildTime) {
+    setTimeout(async () => {
+      await taskQueue.initialize();
+      taskQueue.startProcessing();
+    }, 2000); // 延迟2秒启动，确保数据库连接就绪
+  } else {
+    // 构建时只初始化，不启动轮询
+    console.log('构建阶段：跳过任务队列启动');
+  }
 }
