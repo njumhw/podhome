@@ -1,98 +1,88 @@
 import { db } from '../src/server/db';
-import { taskQueue } from '../src/server/task-queue';
 
-async function checkTaskQueueStatus() {
+(async () => {
+  // 1. 检查这个特定任务的状态
+  const task = await db.taskQueue.findFirst({
+    where: { id: 'task_1765206389419_nviqkpoib' },
+    select: { 
+      id: true, 
+      status: true, 
+      type: true,
+      data: true,
+      startedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      error: true,
+      result: true
+    }
+  });
+  
   console.log('═══════════════════════════════════════════════════════════');
-  console.log('🔍 任务队列状态检查');
+  console.log('🔍 检查特定任务状态');
   console.log('═══════════════════════════════════════════════════════════\n');
   
-  try {
-    // 1. 检查任务队列初始化状态
-    console.log('1. 检查任务队列初始化状态...');
-    await taskQueue.initialize();
-    console.log('✅ 任务队列已初始化\n');
-    
-    // 2. 检查最近的任务
-    console.log('2. 检查最近的任务（最近10个）...');
-    const recentTasks = await db.taskQueue.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 10
-    });
-    
-    console.log(`找到 ${recentTasks.length} 个任务：\n`);
-    
-    for (const task of recentTasks) {
-      const data = task.data as any;
-      const url = data?.url || '未知';
-      const shortUrl = url.length > 60 ? url.substring(0, 60) + '...' : url;
-      
-      console.log(`任务ID: ${task.id}`);
-      console.log(`  状态: ${task.status}`);
-      console.log(`  URL: ${shortUrl}`);
-      console.log(`  创建时间: ${task.createdAt}`);
-      console.log(`  更新时间: ${task.updatedAt}`);
-      if (task.error) {
-        console.log(`  错误: ${task.error.substring(0, 200)}${task.error.length > 200 ? '...' : ''}`);
-      }
-      if (task.startedAt) {
-        console.log(`  开始时间: ${task.startedAt}`);
-      }
-      if (task.completedAt) {
-        console.log(`  完成时间: ${task.completedAt}`);
-      }
-      console.log('');
-    }
-    
-    // 3. 检查特定URL的任务
-    const targetUrl = 'https://www.xiaoyuzhoufm.com/episode/68d9d7c79f1dd30c6713e571';
-    console.log(`3. 检查特定URL的任务: ${targetUrl}\n`);
-    
-    const targetTasks = await db.taskQueue.findMany({
-      where: {
-        data: {
-          path: ['url'],
-          equals: targetUrl
-        } as any
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 5
-    });
-    
-    if (targetTasks.length === 0) {
-      console.log('❌ 未找到该URL的任务\n');
-    } else {
-      console.log(`找到 ${targetTasks.length} 个相关任务：\n`);
-      for (const task of targetTasks) {
-        console.log(`任务ID: ${task.id}`);
-        console.log(`  状态: ${task.status}`);
-        console.log(`  创建时间: ${task.createdAt}`);
-        console.log(`  更新时间: ${task.updatedAt}`);
-        if (task.error) {
-          console.log(`  错误: ${task.error}`);
-        }
-        if (task.metrics) {
-          console.log(`  指标:`, JSON.stringify(task.metrics, null, 2));
-        }
-        console.log('');
-      }
-    }
-    
-    // 4. 检查环境变量
-    console.log('4. 检查ASR相关环境变量...');
-    console.log(`  QWEN_ASR_MODEL: ${process.env.QWEN_ASR_MODEL || '未设置（将使用默认值 fun-asr）'}`);
-    console.log(`  QWEN_API_KEY: ${process.env.QWEN_API_KEY ? '已设置' : '未设置'}`);
-    console.log(`  ALIYUN_OSS_BUCKET: ${process.env.ALIYUN_OSS_BUCKET || '未设置'}`);
-    console.log(`  ALIYUN_OSS_REGION: ${process.env.ALIYUN_OSS_REGION || '未设置'}`);
-    
-  } catch (error: any) {
-    console.error('❌ 检查失败:', error.message);
-    if (error.stack) {
-      console.error('错误堆栈:', error.stack.substring(0, 500));
-    }
-  } finally {
-    await db.$disconnect();
+  if (task) {
+    console.log('任务ID:', task.id);
+    console.log('状态:', task.status);
+    console.log('类型:', task.type);
+    console.log('开始时间:', task.startedAt);
+    console.log('创建时间:', task.createdAt);
+    console.log('更新时间:', task.updatedAt);
+    console.log('错误信息:', task.error || '无');
+    console.log('结果:', task.result ? '有结果' : '无结果');
+    const data = task.data as any;
+    console.log('URL:', data?.url);
+    console.log('userId:', data?.userId);
+  } else {
+    console.log('❌ 未找到任务');
   }
-}
-
-checkTaskQueueStatus();
-
+  
+  // 2. 检查所有运行中的任务
+  const runningTasks = await db.taskQueue.findMany({
+    where: { status: 'RUNNING' },
+    select: { id: true, type: true, startedAt: true, data: true, createdAt: true },
+    orderBy: { startedAt: 'desc' },
+    take: 10
+  });
+  
+  console.log('\n═══════════════════════════════════════════════════════════');
+  console.log('🔍 所有运行中的任务');
+  console.log('═══════════════════════════════════════════════════════════\n');
+  console.log('运行中的任务数量:', runningTasks.length);
+  runningTasks.forEach((t, idx) => {
+    const data = t.data as any;
+    const runningTime = t.startedAt 
+      ? Math.round((Date.now() - t.startedAt.getTime()) / 1000 / 60)
+      : 0;
+    console.log(`${idx + 1}. ${t.id}`);
+    console.log(`   URL: ${data?.url || '未知'}`);
+    console.log(`   开始时间: ${t.startedAt}`);
+    console.log(`   已运行: ${runningTime} 分钟`);
+    console.log(`   创建时间: ${t.createdAt}`);
+    console.log('');
+  });
+  
+  // 3. 检查待处理的任务
+  const pendingTasks = await db.taskQueue.findMany({
+    where: { status: 'PENDING' },
+    select: { id: true, type: true, createdAt: true, data: true },
+    orderBy: { createdAt: 'asc' },
+    take: 10
+  });
+  
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('🔍 待处理的任务');
+  console.log('═══════════════════════════════════════════════════════════\n');
+  console.log('待处理任务数量:', pendingTasks.length);
+  pendingTasks.forEach((t, idx) => {
+    const data = t.data as any;
+    const waitTime = Math.round((Date.now() - t.createdAt.getTime()) / 1000 / 60);
+    console.log(`${idx + 1}. ${t.id}`);
+    console.log(`   URL: ${data?.url || '未知'}`);
+    console.log(`   创建时间: ${t.createdAt}`);
+    console.log(`   等待时间: ${waitTime} 分钟`);
+    console.log('');
+  });
+  
+  await db.$disconnect();
+})();

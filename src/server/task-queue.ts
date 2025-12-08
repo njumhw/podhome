@@ -636,16 +636,36 @@ class TaskQueue {
     const { url, userId } = taskRecord.data;
     
     try {
+      console.log(`[processPodcastTask] 开始处理任务: ${taskRecord.id}, URL: ${url}, userId: ${userId || 'null'}`);
+      
       // 这里调用现有的处理逻辑
       // 可以复用现有的 process-audio 逻辑，但改为内部函数调用
       const result = await this.processPodcastInternal(url, userId, taskRecord.id);
+      
+      console.log(`[processPodcastTask] processPodcastInternal 返回结果:`, result ? JSON.stringify(result).substring(0, 200) : 'null');
+      
+      // 检查结果是否为空
+      if (!result) {
+        console.error(`[processPodcastTask] ❌ processPodcastInternal 返回 null 或 undefined: ${taskRecord.id}`);
+        await this.updateTaskStatusWithRetry(taskRecord.id, {
+          status: 'FAILED',
+          result: null,
+          error: 'processAudioInternal 返回了空结果，可能是处理过程中出现了未捕获的异常',
+          completedAt: new Date(),
+          updatedAt: new Date()
+        });
+        return;
+      }
       
       // 检查是否是部分成功（ASR成功但报告失败）
       const isPartialSuccess = (result as any)?.partialSuccess === true;
       const hasError = (result as any)?.error;
       
+      console.log(`[processPodcastTask] 处理结果分析: isPartialSuccess=${isPartialSuccess}, success=${(result as any)?.success}, hasError=${!!hasError}`);
+      
       // 如果报告生成失败，任务应该标记为 FAILED，但保留结果（ASR数据）
       if (isPartialSuccess || (result as any)?.success === false) {
+        console.log(`[processPodcastTask] 标记为部分成功（ASR成功但报告失败）: ${taskRecord.id}`);
         // 使用重试机制更新状态
         await this.updateTaskStatusWithRetry(taskRecord.id, {
           status: 'FAILED',
@@ -656,6 +676,7 @@ class TaskQueue {
         });
         console.log(`播客处理部分成功（ASR成功但报告失败）: ${taskRecord.id}`);
       } else {
+        console.log(`[processPodcastTask] 标记为完全成功: ${taskRecord.id}`);
         // 完全成功，标记为 READY
         // 使用重试机制更新状态
         await this.updateTaskStatusWithRetry(taskRecord.id, {
@@ -672,6 +693,7 @@ class TaskQueue {
       this.retryAttempts.delete(taskRecord.id);
       
     } catch (error) {
+      console.error(`[processPodcastTask] ❌ 捕获到异常: ${taskRecord.id}`, error);
       throw error; // 让上层处理错误
     }
   }
@@ -715,7 +737,7 @@ class TaskQueue {
       
       // 调用内部处理函数
       console.log(`[强制日志] 准备调用 processAudioInternal: ${url}, userId: ${userId || 'null'}`);
-      const result = await processAudioInternal(url, userId, taskId, userId === null || userId === undefined);
+      const result = await processAudioInternal(url, userId, taskId);
       console.log(`[强制日志] processAudioInternal 返回结果:`, result ? '成功' : '失败');
       
       console.log(`✅ 内部处理播客成功: ${url}`);
