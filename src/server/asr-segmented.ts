@@ -380,6 +380,28 @@ export async function transcribeAudioWithSegmentation(
       const errorCode = (error as any)?.code;
       const errorSignal = (error as any)?.signal;
       const errorStderr = (error as any)?.stderr;
+      const errorStdout = (error as any)?.stdout;
+      
+      // 记录完整的错误信息（用于调试）
+      console.error(`═══════════════════════════════════════════════════════════`);
+      console.error(`❌ 音频切割失败 (${start}-${start + duration}秒)`);
+      console.error(`   输入文件: ${localFile}`);
+      console.error(`   输出文件: ${outFile}`);
+      console.error(`   命令: ${cmd}`);
+      console.error(`   错误消息: ${errorMessage}`);
+      if (errorCode) {
+        console.error(`   错误代码: ${errorCode}`);
+      }
+      if (errorSignal) {
+        console.error(`   信号: ${errorSignal}`);
+      }
+      if (errorStderr) {
+        console.error(`   FFmpeg stderr:`, errorStderr);
+      }
+      if (errorStdout) {
+        console.error(`   FFmpeg stdout:`, errorStdout);
+      }
+      console.error(`═══════════════════════════════════════════════════════════`);
       
       // 提供更详细的错误信息
       let detailedError = `音频切割失败 (${start}-${start + duration}秒): ${errorMessage}`;
@@ -402,6 +424,12 @@ export async function transcribeAudioWithSegmentation(
       // 检查是否是输入文件的问题
       if (errorMessage.includes('No such file') || errorMessage.includes('Invalid data')) {
         console.error(`   ⚠️ 可能是输入音频文件有问题: ${localFile}`);
+      }
+      
+      // 检查是否是 ffmpeg 未找到
+      if (errorMessage.includes('command not found') || errorMessage.includes('ENOENT') || errorCode === 'ENOENT') {
+        console.error(`   ⚠️ FFmpeg 未找到，请检查 FFMPEG_PATH 环境变量或安装 ffmpeg`);
+        detailedError += ` (FFmpeg未找到，请检查安装和路径配置)`;
       }
       
       throw new Error(detailedError);
