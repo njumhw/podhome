@@ -125,13 +125,16 @@ export async function uploadToOssAndGetPublicUrl(
 ): Promise<string | null> {
   const client = getOssClient();
   if (!client || !OSS_BUCKET || !OSS_REGION) {
-    console.warn('OSS客户端未配置，无法上传文件', {
+    const errorDetails = {
       hasClient: !!client,
       hasBucket: !!OSS_BUCKET,
       hasRegion: !!OSS_REGION,
       hasAccessKeyId: !!OSS_ACCESS_KEY_ID,
-      hasAccessKeySecret: !!OSS_ACCESS_KEY_SECRET
-    });
+      hasAccessKeySecret: !!OSS_ACCESS_KEY_SECRET,
+      bucket: OSS_BUCKET,
+      region: OSS_REGION
+    };
+    console.error('❌ OSS客户端未配置，无法上传文件', errorDetails);
     return null;
   }
   
@@ -206,11 +209,20 @@ export async function uploadToOssAndGetPublicUrl(
       } else {
         // 最后一次尝试失败，记录详细错误
         console.error(`❌ OSS上传失败 (${path}):`, errorMessage);
+        console.error(`   完整错误对象:`, JSON.stringify({
+          code: errorCode,
+          status: errorStatus,
+          requestId: errorRequestId,
+          hostId: errorHostId,
+          message: errorMessage,
+          name: error instanceof Error ? error.name : 'Unknown'
+        }, null, 2));
         if (ossErrorDetails.length > 0) {
           console.error(`   详细信息: ${ossErrorDetails.join(', ')}`);
         }
         console.error(`   文件大小: ${(file.length / 1024).toFixed(2)} KB`);
         console.error(`   Content-Type: ${contentType}`);
+        console.error(`   OSS配置: bucket=${OSS_BUCKET}, region=${OSS_REGION}`);
         
         // 检查是否是常见的OSS错误
         if (errorCode === 'AccessDenied') {
@@ -225,7 +237,7 @@ export async function uploadToOssAndGetPublicUrl(
         
         const errorStack = error instanceof Error ? error.stack : undefined;
         if (errorStack) {
-          console.error(`   错误堆栈: ${errorStack.substring(0, 500)}`);
+          console.error(`   错误堆栈: ${errorStack.substring(0, 1000)}`);
         }
       }
     }
