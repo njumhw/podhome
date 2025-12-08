@@ -1092,6 +1092,7 @@ export default function HomePage() {
     const maxConsecutiveErrors = 5; // 增加到5次，给更多重试机会
     let pollCount = 0;
     let lastSuccessfulPoll = Date.now(); // 记录最后一次成功轮询的时间
+    let failedPollCount = 0; // 用于跟踪FAILED状态的轮询次数
     
     console.log(`🔄 开始轮询任务状态: ${taskId}`);
     
@@ -1259,9 +1260,7 @@ export default function HomePage() {
         } else if (taskStatus.status === 'FAILED') {
           // 不要立即停止轮询，继续轮询一段时间，确认任务真的失败而不是中间状态
           // 因为任务可能在ASR阶段失败后，后端会自动重试或继续处理
-          let failedPollCount = (pollInterval as any).failedPollCount || 0;
           failedPollCount++;
-          (pollInterval as any).failedPollCount = failedPollCount;
           
           // 如果连续5次轮询都是FAILED，且距离任务开始时间超过2分钟，才真正认为失败
           const taskStartTime = taskStatus.startedAt ? new Date(taskStatus.startedAt).getTime() : Date.now();
