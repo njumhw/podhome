@@ -717,27 +717,71 @@ class TaskQueue {
       // 如果报告生成失败，任务应该标记为 FAILED，但保留结果（ASR数据）
       if (isPartialSuccess || (result as any)?.success === false) {
         console.log(`[processPodcastTask] 标记为部分成功（ASR成功但报告失败）: ${taskRecord.id}`);
-        // 使用重试机制更新状态
-        await this.updateTaskStatusWithRetry(taskRecord.id, {
-          status: 'FAILED',
-          result: result,
-          error: hasError || '报告生成失败或超时，但ASR转写已成功完成',
-          completedAt: new Date(),
-          updatedAt: new Date()
-        });
-        console.log(`播客处理部分成功（ASR成功但报告失败）: ${taskRecord.id}`);
+        // 使用重试机制更新状态，如果失败则记录错误但不抛出异常
+        try {
+          await this.updateTaskStatusWithRetry(taskRecord.id, {
+            status: 'FAILED',
+            result: result,
+            error: hasError || '报告生成失败或超时，但ASR转写已成功完成',
+            completedAt: new Date(),
+            updatedAt: new Date()
+          });
+          console.log(`播客处理部分成功（ASR成功但报告失败）: ${taskRecord.id}`);
+        } catch (updateError) {
+          console.error(`[processPodcastTask] ⚠️ 任务状态更新失败（部分成功）: ${taskRecord.id}`, updateError);
+          // 尝试直接更新
+          try {
+            await dbRetry.taskQueue.update({
+              where: { id: taskRecord.id },
+              data: {
+                status: 'FAILED',
+                result: result,
+                error: hasError || '报告生成失败或超时，但ASR转写已成功完成',
+                completedAt: new Date(),
+                updatedAt: new Date()
+              }
+            });
+            console.log(`✅ 任务状态已通过直接更新恢复（部分成功）: ${taskRecord.id}`);
+          } catch (directUpdateError) {
+            console.error(`[processPodcastTask] ❌ 直接更新也失败（部分成功）: ${taskRecord.id}`, directUpdateError);
+            // 即使更新失败，也不抛出异常，让 checkCompletedTasks 后续检查并修复状态
+          }
+        }
       } else {
         console.log(`[processPodcastTask] 标记为完全成功: ${taskRecord.id}`);
         // 完全成功，标记为 READY
-        // 使用重试机制更新状态
-        await this.updateTaskStatusWithRetry(taskRecord.id, {
-          status: 'READY',
-          result: result,
-          error: null, // 清除之前的错误信息
-          completedAt: new Date(),
-          updatedAt: new Date()
-        });
-        console.log(`✅ 播客处理任务完成: ${taskRecord.id}`);
+        // 使用重试机制更新状态，如果失败则记录错误但不抛出异常
+        try {
+          await this.updateTaskStatusWithRetry(taskRecord.id, {
+            status: 'READY',
+            result: result,
+            error: null, // 清除之前的错误信息
+            completedAt: new Date(),
+            updatedAt: new Date()
+          });
+          console.log(`✅ 播客处理任务完成: ${taskRecord.id}`);
+        } catch (updateError) {
+          // 状态更新失败，但任务实际已成功，记录警告并尝试直接更新
+          console.error(`[processPodcastTask] ⚠️ 任务状态更新失败，但任务已成功完成: ${taskRecord.id}`, updateError);
+          try {
+            // 最后一次尝试直接更新，不使用重试机制
+            await dbRetry.taskQueue.update({
+              where: { id: taskRecord.id },
+              data: {
+                status: 'READY',
+                result: result,
+                error: null,
+                completedAt: new Date(),
+                updatedAt: new Date()
+              }
+            });
+            console.log(`✅ 任务状态已通过直接更新恢复: ${taskRecord.id}`);
+          } catch (directUpdateError) {
+            console.error(`[processPodcastTask] ❌ 直接更新也失败: ${taskRecord.id}`, directUpdateError);
+            // 即使更新失败，也不抛出异常，因为任务实际已成功
+            // 让 checkCompletedTasks 后续检查并修复状态
+          }
+        }
       }
       
       // 清除重试记录
