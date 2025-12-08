@@ -34,7 +34,7 @@ async function updateTaskMetrics(taskId: string, metrics: any) {
 }
 
 // 内部处理函数，可以被TaskQueue调用
-export async function processAudioInternal(url: string, userId?: string | null, taskId?: string, allowNullUserId: boolean = false) {
+export async function processAudioInternal(url: string, userId?: string, taskId?: string) {
 	const startTime = Date.now();
 	
 	// 在函数作用域声明变量，确保在catch块中可访问
@@ -476,7 +476,7 @@ export async function processAudioInternal(url: string, userId?: string | null, 
 					if (!podcastData.sourceUrl || podcastData.sourceUrl.trim().length === 0) {
 						throw new Error('源URL不能为空');
 					}
-					if (!allowNullUserId && !userId) {
+					if (!userId) {
 						throw new Error('userId不能为空');
 					}
 					
@@ -517,7 +517,7 @@ export async function processAudioInternal(url: string, userId?: string | null, 
 						showAuthor: podcastData.showAuthor,
 						processingStartedAt: podcastData.processingStartedAt,
 						processingCompletedAt: podcastData.processingCompletedAt,
-						createdById: userId || null,
+						createdById: userId,
 						topicId: autoTaggedTopicId,
 					};
 					
