@@ -452,9 +452,8 @@ export async function transcribeAudioWithSegmentation(
   
   // Step 3: 切割并上传到OSS
   const uploaded: { index: number; url: string }[] = [];
-  // 并发数：fun-asr模型支持5个并发，qwen3-asr-flash可能有限制
-  // 如果使用fun-asr模型，可以保持5个并发以提升处理速度
-  const maxConcurrent = 5; // fun-asr模型支持5个并发
+  // 并发数：下调到3，降低网络抖动或服务端限流导致的失败概率
+  const maxConcurrent = 3;
   
   async function runPool<T>(items: any[], worker: (it: any) => Promise<T>, n: number): Promise<T[]> {
     const ret: T[] = new Array(items.length) as any;
