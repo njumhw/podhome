@@ -69,12 +69,18 @@ export async function uploadAndGetPublicUrl(
 
 
 // ---------- Aliyun OSS helpers ----------
-const OSS_ACCESS_KEY_ID = process.env.ALIYUN_ACCESS_KEY_ID as string | undefined;
-const OSS_ACCESS_KEY_SECRET = process.env.ALIYUN_ACCESS_KEY_SECRET as string | undefined;
-const OSS_REGION = process.env.ALIYUN_OSS_REGION as string | undefined; // e.g. cn-hangzhou
-const OSS_BUCKET = process.env.ALIYUN_OSS_BUCKET as string | undefined;
+// 改为运行时读取环境变量，而不是模块加载时
+function getOssEnv() {
+  return {
+    OSS_ACCESS_KEY_ID: process.env.ALIYUN_ACCESS_KEY_ID as string | undefined,
+    OSS_ACCESS_KEY_SECRET: process.env.ALIYUN_ACCESS_KEY_SECRET as string | undefined,
+    OSS_REGION: process.env.ALIYUN_OSS_REGION as string | undefined, // e.g. cn-hangzhou
+    OSS_BUCKET: process.env.ALIYUN_OSS_BUCKET as string | undefined,
+  };
+}
 
 function getOssClient(): OSS | null {
+  const { OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_REGION, OSS_BUCKET } = getOssEnv();
   if (!OSS_ACCESS_KEY_ID || !OSS_ACCESS_KEY_SECRET || !OSS_REGION || !OSS_BUCKET) {
     console.warn('OSS配置不完整:', {
       hasAccessKeyId: !!OSS_ACCESS_KEY_ID,
@@ -123,6 +129,7 @@ export async function uploadToOssAndGetPublicUrl(
   contentType: string,
   maxRetries: number = 3
 ): Promise<string | null> {
+  const { OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_REGION, OSS_BUCKET } = getOssEnv();
   const client = getOssClient();
   if (!client || !OSS_BUCKET || !OSS_REGION) {
     const errorDetails = {
@@ -181,8 +188,9 @@ export async function uploadToOssAndGetPublicUrl(
       
       // 直接返回公共URL（回归到之前的简单逻辑，之前可以正常工作）
       // 确保region格式正确（如果已经是oss-开头，不再添加）
-      const regionForUrl = OSS_REGION.startsWith('oss-') ? OSS_REGION : `oss-${OSS_REGION}`;
-      const publicUrl = `https://${OSS_BUCKET}.${regionForUrl}.aliyuncs.com/${encodeURI(path)}`;
+      const { OSS_REGION: currentRegion, OSS_BUCKET: currentBucket } = getOssEnv();
+      const regionForUrl = currentRegion?.startsWith('oss-') ? currentRegion : `oss-${currentRegion}`;
+      const publicUrl = `https://${currentBucket}.${regionForUrl}.aliyuncs.com/${encodeURI(path)}`;
       console.log(`✅ OSS公共URL生成成功: ${path}`);
       return publicUrl;
     } catch (error: any) {
