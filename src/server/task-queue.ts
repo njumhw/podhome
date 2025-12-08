@@ -54,12 +54,63 @@ class TaskQueue {
     try {
       // 测试数据库连接
       await dbRetry.taskQueue.count({});
+      
+      // 清理应用重启后遗留的 RUNNING 状态任务（重置为 PENDING，让它们重新处理）
+      await this.resetStaleRunningTasks();
+      
       this.isInitialized = true;
       console.log('TaskQueue 初始化成功');
     } catch (error) {
       console.error('TaskQueue 初始化失败:', error);
       // 延迟重试
       setTimeout(() => this.initialize(), this.connectionRetryDelay);
+    }
+  }
+
+  // 重置应用重启后遗留的 RUNNING 状态任务
+  private async resetStaleRunningTasks() {
+    try {
+      const staleTasks = await dbRetry.taskQueue.findMany({
+        where: {
+          status: 'RUNNING',
+          startedAt: {
+            not: null,
+            // 运行时间超过5分钟的任务，可能是应用重启后遗留的
+            lt: new Date(Date.now() - 5 * 60 * 1000)
+          }
+        },
+        select: {
+          id: true,
+          startedAt: true,
+          createdAt: true
+        },
+        take: 20
+      }) as Array<{ id: string; startedAt: Date | null; createdAt: Date }>;
+
+      if (staleTasks.length > 0) {
+        console.log(`🔄 发现 ${staleTasks.length} 个遗留的 RUNNING 状态任务，重置为 PENDING`);
+        
+        for (const task of staleTasks) {
+          const runningTime = task.startedAt 
+            ? Math.round((Date.now() - task.startedAt.getTime()) / 1000 / 60)
+            : 0;
+          
+          console.log(`   - 任务 ${task.id}: 已运行 ${runningTime} 分钟，重置为 PENDING`);
+          
+          await dbRetry.taskQueue.update({
+            where: { id: task.id },
+            data: {
+              status: 'PENDING',
+              startedAt: null,
+              updatedAt: new Date()
+            }
+          });
+        }
+        
+        console.log(`✅ 已重置 ${staleTasks.length} 个任务为 PENDING 状态`);
+      }
+    } catch (error) {
+      console.error('重置遗留任务时出错:', error);
     }
   }
 
