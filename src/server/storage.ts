@@ -129,7 +129,26 @@ export async function uploadToOssAndGetPublicUrl(
   contentType: string,
   maxRetries: number = 3
 ): Promise<string | null> {
-  const { OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_REGION, OSS_BUCKET } = getOssEnv();
+  // 在函数开始时立即检查环境变量，并记录详细信息
+  const env = getOssEnv();
+  const { OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_REGION, OSS_BUCKET } = env;
+  
+  // 详细记录环境变量状态（用于调试）
+  if (!OSS_ACCESS_KEY_ID || !OSS_ACCESS_KEY_SECRET || !OSS_REGION || !OSS_BUCKET) {
+    console.error('❌ OSS环境变量检查失败:');
+    console.error('   ALIYUN_ACCESS_KEY_ID:', OSS_ACCESS_KEY_ID ? `✅ (长度: ${OSS_ACCESS_KEY_ID.length})` : '❌ 未设置');
+    console.error('   ALIYUN_ACCESS_KEY_SECRET:', OSS_ACCESS_KEY_SECRET ? `✅ (长度: ${OSS_ACCESS_KEY_SECRET.length})` : '❌ 未设置');
+    console.error('   ALIYUN_OSS_REGION:', OSS_REGION || '❌ 未设置');
+    console.error('   ALIYUN_OSS_BUCKET:', OSS_BUCKET || '❌ 未设置');
+    console.error('   当前process.env中所有ALIYUN相关变量:');
+    Object.keys(process.env)
+      .filter(key => key.includes('ALIYUN') || key.includes('OSS'))
+      .forEach(key => {
+        const value = process.env[key];
+        console.error(`     ${key}: ${value ? `✅ (长度: ${value.length})` : '❌ 未设置'}`);
+      });
+  }
+  
   const client = getOssClient();
   if (!client || !OSS_BUCKET || !OSS_REGION) {
     const errorDetails = {
@@ -142,6 +161,8 @@ export async function uploadToOssAndGetPublicUrl(
       region: OSS_REGION
     };
     console.error('❌ OSS客户端未配置，无法上传文件', errorDetails);
+    console.error('   文件路径:', path);
+    console.error('   文件大小:', file.length, '字节');
     return null;
   }
   
@@ -170,13 +191,19 @@ export async function uploadToOssAndGetPublicUrl(
         throw new Error(`文件为空，无法上传`);
       }
       
+      // 记录上传前的详细信息
+      console.log(`[OSS上传] 开始上传: ${path}`);
+      console.log(`[OSS上传] 文件大小: ${file.length} 字节 (${(file.length / 1024).toFixed(2)} KB)`);
+      console.log(`[OSS上传] Content-Type: ${contentType}`);
+      console.log(`[OSS上传] Bucket: ${OSS_BUCKET}, Region: ${OSS_REGION}`);
+      
       const result = await client.put(path, file, { 
         headers: { 
           'Content-Type': contentType,
           'Content-Length': file.length.toString()
         } 
       });
-      console.log(`✅ OSS上传成功: ${path} (${(file.length / 1024).toFixed(2)} KB)`, result.res?.status || 'OK');
+      console.log(`✅ [OSS上传] 上传成功: ${path} (${(file.length / 1024).toFixed(2)} KB)`, result.res?.status || 'OK');
       
       // 尝试将文件设置为公共读，这样ASR API可以直接访问
       try {

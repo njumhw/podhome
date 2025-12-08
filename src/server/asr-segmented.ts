@@ -492,10 +492,28 @@ export async function transcribeAudioWithSegmentation(
           console.log(`片段 ${s.index + 1}/${count} 切分成功，大小: ${buf.length} 字节`);
           
           const key = `temp/asr-${s.start}-${s.end}-${Date.now()}.m4a`;
+          console.log(`[ASR分段] 准备上传片段 ${s.index + 1}/${count} 到OSS: ${key} (${buf.length} 字节)`);
+          
+          // 在上传前检查环境变量（用于调试）
+          const envCheck = {
+            hasAccessKeyId: !!process.env.ALIYUN_ACCESS_KEY_ID,
+            hasAccessKeySecret: !!process.env.ALIYUN_ACCESS_KEY_SECRET,
+            hasRegion: !!process.env.ALIYUN_OSS_REGION,
+            hasBucket: !!process.env.ALIYUN_OSS_BUCKET,
+            region: process.env.ALIYUN_OSS_REGION,
+            bucket: process.env.ALIYUN_OSS_BUCKET,
+          };
+          console.log(`[ASR分段] 环境变量检查:`, envCheck);
+          
           const url = await uploadToOssAndGetPublicUrl(key, buf, "audio/mp4");
           if (!url) {
             const errorMsg = `OSS上传失败，跳过分段 ${s.start}-${s.end}秒（片段大小: ${buf.length} 字节，请检查OSS配置和网络连接）`;
-            console.error(`❌ ${errorMsg}`);
+            console.error(`❌ [ASR分段] ${errorMsg}`);
+            console.error(`   [ASR分段] 片段索引: ${s.index + 1}/${count}`);
+            console.error(`   [ASR分段] 片段时间范围: ${s.start}-${s.end}秒`);
+            console.error(`   [ASR分段] OSS路径: ${key}`);
+            console.error(`   [ASR分段] OSS环境变量检查:`, envCheck);
+            console.error(`   [ASR分段] 请查看 uploadToOssAndGetPublicUrl 函数的详细错误日志`);
             return null;
           }
           console.log(`✅ 片段 ${s.index + 1}/${count} 上传成功: ${url} (${buf.length} 字节)`);
