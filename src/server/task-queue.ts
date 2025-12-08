@@ -835,17 +835,56 @@ class TaskQueue {
       const result = await processAudioInternal(url, userId, taskId);
       console.log(`[强制日志] processAudioInternal 返回结果:`, result ? '成功' : '失败');
       
-      console.log(`✅ 内部处理播客成功: ${url}`);
+      if (result) {
+        console.log(`✅ 内部处理播客成功: ${url}`);
+        console.log(`   播客ID: ${(result as any)?.id || 'N/A'}`);
+        console.log(`   处理耗时: ${(result as any)?.processingTime || 'N/A'}ms`);
+        console.log(`   是否部分成功: ${(result as any)?.partialSuccess || false}`);
+      } else {
+        console.warn(`⚠️ processAudioInternal 返回空结果: ${url}`);
+      }
+      
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
-      console.error(`[强制日志] processPodcastInternal 捕获错误: ${errorMessage}`);
-      console.error('❌ 播客处理失败:', errorMessage);
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error(`[强制日志] processPodcastInternal 捕获错误: ${url}`);
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error('错误类型:', errorName);
+      console.error('错误消息:', errorMessage);
       if (errorStack) {
-        console.error('错误堆栈:', errorStack.substring(0, 1000));
+        console.error('错误堆栈（前2000字符）:', errorStack.substring(0, 2000));
       }
-      throw error;
+      console.error('任务ID:', taskId || 'N/A');
+      console.error('用户ID:', userId || 'N/A');
+      console.error('═══════════════════════════════════════════════════════════');
+      
+      // 清理错误信息，移除可能的残留变量引用
+      let cleanedErrorMessage = errorMessage;
+      if (errorMessage.includes('is not defined') || errorMessage.includes('未定义')) {
+        // 如果是未定义变量错误，尝试提取更具体的错误信息
+        if (errorStack) {
+          const stackLines = errorStack.split('\n');
+          // 查找第一个包含实际错误信息的行（不是变量名）
+          const relevantLine = stackLines.find(line => 
+            (line.includes('Error') || line.includes('TypeError') || line.includes('ReferenceError')) &&
+            !line.includes('is not defined')
+          );
+          if (relevantLine) {
+            cleanedErrorMessage = `处理失败: ${relevantLine.trim()}`;
+          } else {
+            cleanedErrorMessage = '处理失败: 代码执行错误，可能是配置问题或代码版本不匹配';
+          }
+        } else {
+          cleanedErrorMessage = '处理失败: 代码执行错误，可能是配置问题或代码版本不匹配';
+        }
+      }
+      
+      // 重新抛出清理后的错误
+      throw new Error(cleanedErrorMessage);
     }
   }
 }

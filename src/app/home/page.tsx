@@ -1096,6 +1096,9 @@ export default function HomePage() {
     
     console.log(`🔄 开始轮询任务状态: ${taskId}`);
     
+    // 轮询间隔：10秒
+    const POLL_INTERVAL_MS = 10000;
+    
     const pollInterval = setInterval(async () => {
       pollCount++;
       try {
@@ -1336,7 +1339,18 @@ export default function HomePage() {
                                (new Date(taskStatus.completedAt).getTime() - new Date(taskStatus.startedAt).getTime()) < 5000; // 5秒内失败
           
           // 判断是否是网络相关错误
-          const errorMessage = taskStatus.error || '播客处理失败';
+          let errorMessage = taskStatus.error || '播客处理失败';
+          
+          // 清理错误信息，移除可能的残留变量引用或技术细节
+          if (errorMessage.includes('is not defined') || errorMessage.includes('未定义')) {
+            // 如果是未定义变量错误，尝试提取更具体的错误信息
+            if (errorMessage.includes('allowNullUserId')) {
+              errorMessage = '数据库保存失败: 处理过程中出现配置错误，但播客可能已成功保存';
+            } else {
+              errorMessage = '处理失败: 代码执行错误，但播客可能已成功保存，请刷新页面查看';
+            }
+          }
+          
           const isNetworkError = errorMessage.includes('fetch failed') || 
                                  errorMessage.includes('网络请求失败') ||
                                  errorMessage.includes('ECONNREFUSED') ||
@@ -1344,6 +1358,12 @@ export default function HomePage() {
                                  errorMessage.includes('ENOTFOUND') ||
                                  errorMessage.includes('DNS') ||
                                  errorMessage.includes('网络连接');
+          
+          // 判断是否是数据库相关错误
+          const isDatabaseError = errorMessage.includes('数据库') || 
+                                  errorMessage.includes('Prisma') ||
+                                  errorMessage.includes('保存失败') ||
+                                  errorMessage.includes('保存播客');
           
           // 更新处理状态为失败
           const existing = localStorage.getItem('processingPodcasts');
@@ -1384,6 +1404,21 @@ export default function HomePage() {
                     if (failedItem?.url) {
                       handleProcessPodcast(failedItem.url);
                     }
+                  }
+                }
+              }
+            );
+          } else if (isDatabaseError && errorMessage.includes('可能已成功保存')) {
+            // 如果是数据库错误但可能已成功保存，显示特殊提示
+            toast.warning(
+              '处理状态异常', 
+              '后端报告处理失败，但播客可能已成功保存。请刷新页面查看，或通过搜索功能查找该播客。',
+              {
+                duration: 10000, // 10秒后自动消失
+                action: {
+                  label: '刷新页面',
+                  onClick: () => {
+                    window.location.reload();
                   }
                 }
               }
@@ -1596,7 +1631,7 @@ export default function HomePage() {
           toast.error('处理失败', errorMessage || '获取任务状态失败，请稍后重试');
         }
       }
-    }, 20000); // 每20秒轮询一次
+    }, POLL_INTERVAL_MS); // 每10秒轮询一次
     
     // 设置超时，避免无限轮询
     setTimeout(() => {

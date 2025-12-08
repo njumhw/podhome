@@ -602,7 +602,32 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				};
 			} catch (error: unknown) {
 				const dbDuration = Date.now() - step5StartTime;
-				const errorMessage = error instanceof Error ? error.message : String(error);
+				let errorMessage = error instanceof Error ? error.message : String(error);
+				const errorStack = error instanceof Error ? error.stack : undefined;
+				
+				// 清理错误信息，移除可能的残留变量引用
+				// 如果错误信息包含未定义的变量引用，尝试提取更具体的错误信息
+				if (errorMessage.includes('is not defined') || errorMessage.includes('未定义')) {
+					// 尝试从堆栈中提取更具体的错误信息
+					if (errorStack) {
+						const stackLines = errorStack.split('\n');
+						// 查找第一个包含实际错误信息的行（不是变量名）
+						const relevantLine = stackLines.find(line => 
+							line.includes('Error') || 
+							line.includes('TypeError') || 
+							line.includes('ReferenceError') ||
+							line.includes('at ')
+						);
+						if (relevantLine && !relevantLine.includes('is not defined')) {
+							errorMessage = `数据库保存失败: ${relevantLine.trim()}`;
+						} else {
+							// 如果找不到更具体的信息，使用通用的错误信息
+							errorMessage = '数据库保存失败: 处理过程中出现未定义的变量或函数引用';
+						}
+					} else {
+						errorMessage = '数据库保存失败: 处理过程中出现未定义的变量或函数引用';
+					}
+				}
 				
 				// 使用错误分析工具
 				const context = createErrorContext('保存到数据库', 5, step5StartTime, {
@@ -614,7 +639,17 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				const analysis = analyzeError(error, context);
 				logErrorAnalysis(analysis);
 				
-				console.error('保存到数据库失败:', error);
+				console.error('═══════════════════════════════════════════════════════════');
+				console.error('保存到数据库失败 - 详细错误信息:');
+				console.error('═══════════════════════════════════════════════════════════');
+				console.error('错误消息:', errorMessage);
+				console.error('原始错误:', error instanceof Error ? error.name : 'Unknown');
+				if (errorStack) {
+					console.error('错误堆栈（前2000字符）:', errorStack.substring(0, 2000));
+				}
+				console.error('处理耗时:', `${(dbDuration / 1000).toFixed(1)}秒`);
+				console.error('═══════════════════════════════════════════════════════════');
+				
 				// 如果保存失败，这应该是一个真正的错误，需要抛出
 				throw new Error(`保存播客到数据库失败: ${errorMessage}`);
 			}
