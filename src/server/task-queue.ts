@@ -714,8 +714,8 @@ class TaskQueue {
       // 使用静态导入，避免 Turbopack 模块加载问题
       
       // 调用内部处理函数
-      console.log(`[强制日志] 准备调用 processAudioInternal: ${url}`);
-      const result = await processAudioInternal(url, userId, taskId);
+      console.log(`[强制日志] 准备调用 processAudioInternal: ${url}, userId: ${userId || 'null'}`);
+      const result = await processAudioInternal(url, userId, taskId, userId === null || userId === undefined);
       console.log(`[强制日志] processAudioInternal 返回结果:`, result ? '成功' : '失败');
       
       console.log(`✅ 内部处理播客成功: ${url}`);
