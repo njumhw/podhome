@@ -15,12 +15,6 @@ const nextConfig: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
   },
-  // 优化构建输出
-  swcMinify: true, // 使用 SWC 压缩（Next.js 15 默认启用）
-  // 实验性功能：优化包大小
-  experimental: {
-    optimizePackageImports: ['react-markdown', 'remark-gfm'],
-  },
 };
 
 export default nextConfig;
