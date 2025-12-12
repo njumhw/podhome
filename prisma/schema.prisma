@@ -98,6 +98,7 @@ model Podcast {
   chunks                TranscriptChunk[]
   comments              Comment[]
   likes                 PodcastLike[]
+  mulerunQueries        MulerunQueryHistory[]
 
   @@index([status, updatedAt])
 }
@@ -284,6 +285,45 @@ model PodcastLike {
   @@index([podcastId])
   @@index([userId])
   @@index([userIp])
+}
+
+model MulerunSession {
+  id          String   @id @default(uuid())
+  sessionId   String   @unique  // MuleRun 的 sessionId (UUID, 36 chars)
+  userId      String   // MuleRun 的 userId (SHA-256, 64 chars)
+  agentId     String   // MuleRun 的 agentId (UUID, 36 chars)
+  status      String   @default("running") // running, completed, error
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  expiresAt   DateTime // 基于 Max Age 计算（当前时间 + 180 分钟）
+  
+  queries     MulerunQueryHistory[]
+  
+  @@index([sessionId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model MulerunQueryHistory {
+  id          String   @id @default(uuid())
+  sessionId   String
+  session     MulerunSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  podcastId   String?  // 关联的播客 ID（如果处理成功）
+  podcast     Podcast? @relation(fields: [podcastId], references: [id])
+  queryUrl    String   // 用户输入的播客 URL
+  status      String   @default("pending") // pending, processing, completed, failed, timeout
+  meteringId  String?  @unique // Metering API 的幂等 ID
+  costCredits Float?   // 报告的成本（credits，100 credits = 0.01）
+  error       String?  // 错误信息（如果失败）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+  timeoutAt   DateTime? // 超时时间（创建时间 + 3 小时）
+  
+  @@index([sessionId])
+  @@index([status])
+  @@index([timeoutAt])
 }
 
 enum UserRole {

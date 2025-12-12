@@ -373,8 +373,9 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		// 5. 保存到数据库
 		const step5StartTime = Date.now();
 		console.log('步骤5: 保存到数据库');
-		console.log(`userId: ${userId || '未提供'}`);
-		// 无论是否登录，都尝试保存到数据库（如果有userId）
+		console.log(`userId: ${userId || '未提供（MuleRun用户）'}`);
+		// 无论是否登录，都尝试保存到数据库
+		// MuleRun 用户的 userId 为 null，但依然需要保存播客数据
 		if (userId) {
 			try {
 				// 首先验证userId是否存在（避免外键约束错误）
@@ -476,9 +477,8 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					if (!podcastData.sourceUrl || podcastData.sourceUrl.trim().length === 0) {
 						throw new Error('源URL不能为空');
 					}
-					if (!userId) {
-						throw new Error('userId不能为空');
-					}
+					// 注意：MuleRun 用户的 userId 为 null，但依然需要保存播客数据
+					// 所以这里不检查 userId，而是在创建时设置 createdById: userId || null
 					
 					// 确保status是有效的枚举值
 					if (podcastData.status !== 'READY' && podcastData.status !== 'PROCESSING' && podcastData.status !== 'FAILED') {
@@ -654,19 +654,109 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				throw new Error(`保存播客到数据库失败: ${errorMessage}`);
 			}
 		} else {
-			console.warn('未提供userId，跳过保存到数据库');
-			// 即使没有userId，也返回处理结果（但不包含id）
-			const isPartialSuccess = reportGenerationFailed;
-			console.log(`播客处理完成（未保存到数据库），总耗时: ${Date.now() - startTime}ms`);
-			
-			return {
-				success: !isPartialSuccess,
-				audioUrl: meta.audioUrl,
-				script: null,
-				summary: reportData?.summary || null,
-				reportOutline: reportData?.outline || null,
-				processingTime: Date.now() - startTime,
-				partialSuccess: isPartialSuccess,
+			// MuleRun 用户的 userId 为 null，但依然需要保存播客数据
+			console.log('MuleRun 用户（userId 为 null），跳过用户验证，直接保存播客数据');
+			try {
+				// 先自动标注主题（如果还没有主题）
+				let autoTaggedTopicId: string | null = null;
+				try {
+					const { autoTagPodcast } = await import('./topic-auto-tagger');
+					const suggestedTopic = await autoTagPodcast({
+						title: (meta.title || '未命名播客').substring(0, 500).trim(),
+						sourceUrl: url.substring(0, 2000).trim(),
+						description: meta.description ? meta.description.substring(0, 10000).trim() : null,
+						showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null,
+						summary: reportData?.summary || null,
+						originalTranscript: asrData.transcript || null,
+					});
+					
+					if (suggestedTopic) {
+						const topic = await db.topic.findUnique({
+							where: { name: suggestedTopic },
+							select: { id: true },
+						});
+						if (topic) {
+							autoTaggedTopicId = topic.id;
+							console.log(`✅ 自动标注主题: ${suggestedTopic}`);
+						}
+					}
+				} catch (tagError) {
+					// 自动标注失败不影响主流程
+					console.warn('⚠️ 自动标注主题失败:', tagError);
+				}
+				
+				// 构建数据对象
+				const podcastData: any = {
+					title: (meta.title || '未命名播客').substring(0, 500).trim(),
+					sourceUrl: url.substring(0, 2000).trim(),
+					audioUrl: meta.audioUrl ? meta.audioUrl.substring(0, 2000).trim() : null,
+					description: meta.description ? meta.description.substring(0, 10000).trim() : null,
+					publishedAt: meta.publishedAt ? new Date(meta.publishedAt) : null,
+					duration: asrData.duration ? Math.floor(asrData.duration) : null,
+					status: 'READY' as const,
+					originalTranscript: asrData.transcript || null,
+					transcript: null,
+					summary: reportData?.summary || null,
+					showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null,
+					processingStartedAt: new Date(startTime),
+					processingCompletedAt: new Date(),
+					createdById: null, // MuleRun 用户的 createdById 为 null
+					topicId: autoTaggedTopicId,
+				};
+				
+				// 如果reportOutline字段存在，则添加
+				const outline = reportData?.outline;
+				if (outline && typeof outline === 'string' && outline.trim().length > 0) {
+					podcastData.reportOutline = outline;
+					console.log(`✅ 准备保存报告大纲，长度: ${outline.length} 字符`);
+				}
+				
+				// 验证必填字段
+				if (!podcastData.title || podcastData.title.trim().length === 0) {
+					throw new Error('标题不能为空');
+				}
+				if (!podcastData.sourceUrl || podcastData.sourceUrl.trim().length === 0) {
+					throw new Error('源URL不能为空');
+				}
+				
+				// 检查是否已存在相同 URL 的播客
+				const existing = await db.podcast.findFirst({
+					where: { sourceUrl: podcastData.sourceUrl },
+					orderBy: { updatedAt: 'desc' },
+				});
+				
+				let podcast;
+				if (existing) {
+					// 更新现有播客
+					podcast = await db.podcast.update({
+						where: { id: existing.id },
+						data: {
+							...podcastData,
+							// 如果 existing.createdById 不为 null，保留它（可能是 Product A 创建的）
+							createdById: existing.createdById || null,
+						},
+					});
+					console.log(`✅ 更新现有播客: ${podcast.id}`);
+				} else {
+					// 创建新播客
+					podcast = await db.podcast.create({
+						data: podcastData,
+					});
+					console.log(`✅ 创建新播客: ${podcast.id}`);
+				}
+				
+				const isPartialSuccess = reportGenerationFailed;
+				console.log(`播客已保存到数据库: ${podcast.id}${isPartialSuccess ? '（报告生成失败，但ASR和清洗数据已保存）' : ''}`);
+				
+				return {
+					success: !isPartialSuccess,
+					id: podcast.id,
+					audioUrl: meta.audioUrl,
+					script: null,
+					summary: reportData?.summary || null,
+					reportOutline: reportData?.outline || null,
+					processingTime: Date.now() - startTime,
+					partialSuccess: isPartialSuccess,
 				error: isPartialSuccess ? '报告生成失败或超时，但ASR转写已成功完成' : undefined
 			};
 		}

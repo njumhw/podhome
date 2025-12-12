@@ -1,11 +1,15 @@
 // 应用启动初始化
 import { taskQueue } from "./task-queue";
+import { startTimeoutChecker } from "./mulerun/timeout-checker";
 
 export function initializeApp() {
   console.log('🚀 初始化应用...');
   
   // 启动后台任务处理器
   taskQueue.startProcessing();
+  
+  // 启动 MuleRun 超时检测器
+  startTimeoutChecker();
   
   console.log('✅ 应用初始化完成');
 }

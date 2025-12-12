@@ -782,6 +782,17 @@ class TaskQueue {
             // 让 checkCompletedTasks 后续检查并修复状态
           }
         }
+
+        // 如果是 MuleRun 查询，更新查询状态并报告成本
+        const mulerunQueryId = taskRecord.data?.mulerunQueryId;
+        const mulerunSessionId = taskRecord.data?.mulerunSessionId;
+        if (mulerunQueryId && mulerunSessionId && (result as any)?.id) {
+          await this.handleMulerunQuerySuccess(
+            mulerunSessionId,
+            mulerunQueryId,
+            (result as any).id
+          );
+        }
       }
       
       // 清除重试记录
@@ -789,7 +800,120 @@ class TaskQueue {
       
     } catch (error) {
       console.error(`[processPodcastTask] ❌ 捕获到异常: ${taskRecord.id}`, error);
+      
+      // 如果是 MuleRun 查询，更新查询状态为失败
+      const mulerunQueryId = taskRecord.data?.mulerunQueryId;
+      const mulerunSessionId = taskRecord.data?.mulerunSessionId;
+      if (mulerunQueryId && mulerunSessionId) {
+        await this.handleMulerunQueryFailure(
+          mulerunSessionId,
+          mulerunQueryId,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+      
       throw error; // 让上层处理错误
+    }
+  }
+
+  // 处理 MuleRun 查询成功
+  private async handleMulerunQuerySuccess(
+    mulerunSessionId: string,
+    mulerunQueryId: string,
+    podcastId: string
+  ) {
+    try {
+      const { updateQuery } = await import('./mulerun/session-manager');
+      const { reportMetering } = await import('./mulerun/metering');
+      const { db } = await import('./db');
+
+      // 获取会话信息
+      const session = await db.mulerunSession.findUnique({
+        where: { id: mulerunSessionId },
+      });
+
+      if (!session) {
+        console.error(`[MuleRun] 会话不存在: ${mulerunSessionId}`);
+        return;
+      }
+
+      // 更新查询状态
+      const meteringId = `podcast-${mulerunQueryId}-${Date.now()}`;
+      const costCredits = parseFloat(process.env.MULERUN_QUERY_COST_CREDITS || '100');
+
+      await updateQuery(mulerunQueryId, {
+        status: 'completed',
+        podcastId,
+        meteringId,
+        costCredits,
+        completedAt: new Date(),
+      });
+
+      // 报告成本到 Metering API
+      const reported = await reportMetering(
+        session.sessionId,
+        meteringId,
+        costCredits,
+        `Podcast processing completed: ${podcastId}`
+      );
+
+      if (!reported) {
+        console.error(`[MuleRun] Metering 报告失败: sessionId=${session.sessionId}, queryId=${mulerunQueryId}`);
+      } else {
+        console.log(`[MuleRun] 查询成功并报告成本: sessionId=${session.sessionId}, queryId=${mulerunQueryId}, credits=${costCredits}`);
+      }
+    } catch (error) {
+      console.error(`[MuleRun] 处理查询成功失败:`, error);
+    }
+  }
+
+  // 处理 MuleRun 查询失败
+  private async handleMulerunQueryFailure(
+    mulerunSessionId: string,
+    mulerunQueryId: string,
+    errorMessage: string
+  ) {
+    try {
+      const { updateQuery } = await import('./mulerun/session-manager');
+      const { reportMetering } = await import('./mulerun/metering');
+      const { db } = await import('./db');
+
+      // 获取会话信息
+      const session = await db.mulerunSession.findUnique({
+        where: { id: mulerunSessionId },
+      });
+
+      if (!session) {
+        console.error(`[MuleRun] 会话不存在: ${mulerunSessionId}`);
+        return;
+      }
+
+      // 更新查询状态为失败
+      await updateQuery(mulerunQueryId, {
+        status: 'failed',
+        error: errorMessage,
+        completedAt: new Date(),
+      });
+
+      // 发送 final Metering 报告（0 credits，表示失败）
+      const meteringId = `failed-${mulerunQueryId}-${Date.now()}`;
+      await reportMetering(
+        session.sessionId,
+        meteringId,
+        0,
+        `Podcast processing failed: ${errorMessage}`,
+        true // isFinal
+      );
+
+      // 更新 meteringId
+      await updateQuery(mulerunQueryId, {
+        meteringId,
+        costCredits: 0,
+      });
+
+      console.log(`[MuleRun] 查询失败并报告: sessionId=${session.sessionId}, queryId=${mulerunQueryId}`);
+    } catch (error) {
+      console.error(`[MuleRun] 处理查询失败失败:`, error);
     }
   }
 

@@ -4,6 +4,17 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
+  // 为 MuleRun 路由添加 iframe 嵌入允许头（严格按照文档）
+  if (request.nextUrl.pathname.startsWith('/mulerun/')) {
+    // 文档要求：X-Frame-Options: ALLOW-FROM https://mulerun.com
+    response.headers.set('X-Frame-Options', 'ALLOW-FROM https://mulerun.com');
+    // 文档要求：Content-Security-Policy: frame-ancestors 'self' https://mulerun.com;
+    response.headers.set(
+      'Content-Security-Policy',
+      "frame-ancestors 'self' https://mulerun.com;"
+    );
+  }
+
   // 为播客相关的API添加缓存控制头
   if (request.nextUrl.pathname.startsWith('/api/public/podcast') ||
       request.nextUrl.pathname.startsWith('/api/data-consistency') ||
@@ -24,6 +35,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/mulerun/:path*',  // MuleRun 路由
     '/api/public/podcast/:path*',
     '/api/data-consistency/:path*',
     '/api/queue-status/:path*'
