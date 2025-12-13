@@ -47,6 +47,7 @@ function MulerunSessionPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [inputUrl, setInputUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [examplePodcasts, setExamplePodcasts] = useState<any[]>([]);
 
   // 初始化会话（验证签名并创建/恢复会话）
   useEffect(() => {
@@ -94,6 +95,23 @@ function MulerunSessionPageContent() {
 
     initSession();
   }, [searchParams]);
+
+  // 加载示例播客
+  useEffect(() => {
+    const loadExamplePodcasts = async () => {
+      try {
+        const res = await fetch('/api/mulerun/examples');
+        if (res.ok) {
+          const data = await res.json();
+          setExamplePodcasts(data.podcasts || []);
+        }
+      } catch (err) {
+        console.error('Failed to load example podcasts:', err);
+      }
+    };
+
+    loadExamplePodcasts();
+  }, []);
 
   // 提交播客处理请求
   const handleSubmit = useCallback(async () => {
@@ -214,16 +232,29 @@ function MulerunSessionPageContent() {
           </div>
         </div>
 
+        {/* 示例播客 */}
+        {examplePodcasts.length > 0 && queries.length === 0 && (
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">示例播客</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {examplePodcasts.map((podcast) => (
+                <ExamplePodcastCard key={podcast.id} podcast={podcast} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 查询历史 */}
         {queries.length > 0 && (
           <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">查询历史</h2>
             {queries.map((query) => (
               <QueryCard key={query.id} query={query} />
             ))}
           </div>
         )}
 
-        {queries.length === 0 && (
+        {queries.length === 0 && examplePodcasts.length === 0 && (
           <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-500">
             No queries yet. Enter a podcast URL above to get started.
           </div>
@@ -307,6 +338,33 @@ function QueryCard({ query }: { query: Query }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// 示例播客卡片组件
+function ExamplePodcastCard({ podcast }: { podcast: any }) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer">
+      <h3 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2">
+        {podcast.title}
+      </h3>
+      {podcast.showAuthor && (
+        <p className="text-sm text-gray-600 mb-2">
+          by {podcast.showAuthor}
+        </p>
+      )}
+      {podcast.summary && (
+        <p className="text-sm text-gray-700 line-clamp-3 mb-3">
+          {podcast.summary.substring(0, 150)}...
+        </p>
+      )}
+      <a
+        href={`/mulerun/session?podcastId=${podcast.id}`}
+        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+      >
+        查看详情 →
+      </a>
     </div>
   );
 }
