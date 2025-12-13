@@ -9,10 +9,12 @@ export interface Task {
   status: 'PENDING' | 'RUNNING' | 'READY' | 'FAILED';
   data: {
     url: string;
-    userId?: string;
+    userId?: string | null;
     audioUrl?: string;
     title?: string;
     author?: string;
+    mulerunSessionId?: string;
+    mulerunQueryId?: string;
   };
   result?: any;
   error?: string;

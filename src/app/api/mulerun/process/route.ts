@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
 
     // 提交到任务队列处理
     // 注意：userId 传 null，因为 MuleRun 用户不创建 User 记录
-    const taskId = await taskQueue.submitTask({
+    const taskId = await taskQueue.addTask({
       type: 'PODCAST_PROCESSING',
       data: {
         url: queryUrl,
