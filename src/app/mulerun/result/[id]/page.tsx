@@ -34,14 +34,28 @@ export default function MulerunResultPage() {
       try {
         const res = await fetch(`/api/public/podcast?id=${id}&_mulerun=true&_t=${Date.now()}`);
         if (!res.ok) {
-          throw new Error('Failed to fetch podcast');
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to fetch podcast');
         }
         const data = await res.json();
-        setPodcast(data.podcast);
+        // API 直接返回播客数据，不是 { podcast: ... } 格式
+        if (data.id) {
+          setPodcast({
+            id: data.id,
+            title: data.title,
+            showAuthor: data.author || data.showAuthor,
+            summary: data.summary,
+            reportOutline: data.reportOutline,
+            status: 'READY',
+          });
+        } else {
+          throw new Error('Invalid podcast data format');
+        }
         setLoading(false);
       } catch (err) {
         console.error('[MuleRun] 获取播客失败:', err);
-        setError('Failed to load podcast');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load podcast';
+        setError(errorMessage);
         setLoading(false);
       }
     };
