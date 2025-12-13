@@ -85,40 +85,70 @@ export async function POST(req: NextRequest) {
     });
 
     if (existingPodcast) {
-      // 播客已存在，直接创建查询记录并返回
+      // 播客已存在，创建查询记录
       const query = await createQuery(session.id, queryUrl);
       
-      // 立即更新为完成状态
+      // 更新查询状态为处理中（模拟处理过程）
       await updateQuery(query.id, {
-        status: 'completed',
-        podcastId: existingPodcast.id,
-        completedAt: new Date(),
+        status: 'processing',
+        startedAt: new Date(),
       });
 
-      // 报告成本（100 credits）
-      const meteringId = `podcast-${query.id}-${Date.now()}`;
-      const reported = await reportMetering(
-        sessionId,
-        meteringId,
-        MULERUN_QUERY_COST_CREDITS,
-        `Podcast processing: ${existingPodcast.title || queryUrl}`
-      );
+      // 异步等待 10 秒后更新状态（不阻塞HTTP响应）
+      // 使用 setImmediate 确保在下一个事件循环中执行，避免阻塞当前请求
+      setImmediate(async () => {
+        try {
+          // 等待 10 秒
+          await new Promise(resolve => setTimeout(resolve, 10000));
 
-      if (reported) {
-        await updateQuery(query.id, {
-          meteringId,
-          costCredits: MULERUN_QUERY_COST_CREDITS,
-        });
-      }
+          // 更新为完成状态
+          await updateQuery(query.id, {
+            status: 'completed',
+            podcastId: existingPodcast.id,
+            completedAt: new Date(),
+          });
 
+          // 报告成本（100 credits）
+          const meteringId = `podcast-${query.id}-${Date.now()}`;
+          const reported = await reportMetering(
+            sessionId,
+            meteringId,
+            MULERUN_QUERY_COST_CREDITS,
+            `Podcast processing: ${existingPodcast.title || queryUrl}`
+          );
+
+          if (reported) {
+            await updateQuery(query.id, {
+              meteringId,
+              costCredits: MULERUN_QUERY_COST_CREDITS,
+            });
+          }
+
+          console.log(`[MuleRun] 缓存播客处理完成（异步）: queryId=${query.id}, podcastId=${existingPodcast.id}`);
+        } catch (error) {
+          console.error(`[MuleRun] 异步处理缓存播客失败: queryId=${query.id}`, error);
+          // 如果异步处理失败，更新查询状态为失败
+          try {
+            await updateQuery(query.id, {
+              status: 'failed',
+              error: error instanceof Error ? error.message : String(error),
+            });
+          } catch (updateError) {
+            console.error(`[MuleRun] 更新查询状态失败: queryId=${query.id}`, updateError);
+          }
+        }
+      });
+
+      // 立即返回处理中状态，前端可以通过轮询获取最终结果
       return NextResponse.json({
         success: true,
         query: {
           id: query.id,
-          status: 'completed',
-          podcast: existingPodcast,
+          status: 'processing',
+          podcast: existingPodcast, // 提前返回播客信息，前端可以显示
         },
         fromCache: true, // 标记为缓存结果
+        message: 'Podcast already processed, waiting 10 seconds before completion...',
       });
     }
 
