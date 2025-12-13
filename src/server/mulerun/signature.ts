@@ -24,6 +24,8 @@ export function verifyMulerunSignature(
   agentKey: string
 ): boolean {
   try {
+    // 清理 Agent Key（移除首尾空格和引号）
+    const cleanAgentKey = agentKey.trim().replace(/^["']|["']$/g, '');
     // 1. URL 解码所有参数（文档要求）
     // 注意：Next.js 的 searchParams 可能已经自动解码，但为了安全，我们仍然尝试解码
     const decoded: Record<string, string> = {};
@@ -60,7 +62,7 @@ export function verifyMulerunSignature(
     const jsonString = JSON.stringify(sortedParams);
 
     // 6. 计算 HMAC SHA-256（文档要求）
-    const hmac = crypto.createHmac('sha256', agentKey);
+    const hmac = crypto.createHmac('sha256', cleanAgentKey);
     hmac.update(jsonString);
     const expectedSignature = hmac.digest('hex');
 
@@ -73,11 +75,12 @@ export function verifyMulerunSignature(
         received: receivedSignature,
         jsonString,
         sortedParams,
-        agentKeyPrefix: agentKey ? `${agentKey.substring(0, 10)}...` : 'undefined',
-        agentKeyLength: agentKey?.length,
-        agentKeyEnd: agentKey ? `...${agentKey.substring(agentKey.length - 10)}` : 'undefined',
+        agentKeyPrefix: cleanAgentKey ? `${cleanAgentKey.substring(0, 10)}...` : 'undefined',
+        agentKeyLength: cleanAgentKey?.length,
+        agentKeyEnd: cleanAgentKey ? `...${cleanAgentKey.substring(cleanAgentKey.length - 10)}` : 'undefined',
         // 输出 Agent Key 的完整值（用于调试，生产环境应移除）
-        agentKeyFull: agentKey,
+        agentKeyFull: cleanAgentKey,
+        originalAgentKeyLength: agentKey?.length,
       });
     } else {
       console.log('[MuleRun] 签名验证成功');

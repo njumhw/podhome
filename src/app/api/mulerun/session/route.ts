@@ -91,7 +91,8 @@ export async function POST(req: NextRequest) {
 
     // 获取 Agent Key（优先使用环境变量，本地测试时可以从 localStorage 传递）
     // 注意：在生产环境中，应该只使用环境变量
-    let agentKey = MULERUN_AGENT_KEY;
+    // 清理 Agent Key（移除首尾空格和引号）
+    let agentKey = MULERUN_AGENT_KEY?.trim().replace(/^["']|["']$/g, '') || '';
     
     // 本地开发时，如果环境变量未加载，尝试从请求中获取（仅用于测试）
     if (!agentKey && process.env.NODE_ENV === 'development') {
