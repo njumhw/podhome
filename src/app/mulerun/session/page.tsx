@@ -184,9 +184,9 @@ function MulerunSessionPageContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
           <p className="text-gray-600">Initializing session...</p>
         </div>
       </div>
@@ -195,7 +195,7 @@ function MulerunSessionPageContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center max-w-md mx-auto p-6">
           <div className="text-red-600 text-xl font-semibold mb-2">Error</div>
           <p className="text-gray-600">{error}</p>
@@ -204,43 +204,64 @@ function MulerunSessionPageContent() {
     );
   }
 
+  // 分离已处理的播客和示例播客
+  const processedQueries = queries.filter(q => q.status === 'completed' && q.podcast);
+  const hasProcessed = processedQueries.length > 0;
+  const showExamples = examplePodcasts.length > 0;
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* 搜索框 */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+    <div className="min-h-screen bg-white">
+      {/* 像素风格背景装饰 */}
+      <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
+        backgroundImage: 'repeating-linear-gradient(0deg, #FFD700 0px, #FFD700 20px, transparent 20px, transparent 40px, #FFD700 40px), repeating-linear-gradient(90deg, #FFD700 0px, #FFD700 20px, transparent 20px, transparent 40px, #FFD700 40px)',
+        backgroundSize: '40px 40px'
+      }}></div>
+      
+      <div className="relative max-w-6xl mx-auto px-6 py-8">
+        {/* 标题和搜索框 */}
+        <div className="mb-10">
+          <h1 className="text-4xl font-bold text-gray-900 mb-6 text-center">
             Podcast to Insight
           </h1>
-          <div className="flex gap-2">
+          <div className="flex gap-3 max-w-2xl mx-auto">
             <input
               type="text"
               value={inputUrl}
               onChange={(e) => setInputUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               placeholder="Enter podcast URL (e.g., https://www.xiaoyuzhoufm.com/episode/...)"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-5 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 text-gray-900 placeholder-gray-400"
               disabled={submitting}
             />
             <button
               onClick={handleSubmit}
               disabled={submitting || !inputUrl.trim()}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-8 py-3 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
             >
               {submitting ? 'Processing...' : 'Process'}
             </button>
           </div>
         </div>
 
-        {/* 示例播客 */}
-        {examplePodcasts.length > 0 && queries.length === 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-              <h2 className="text-xl font-bold text-gray-900 px-4">示例播客</h2>
-              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+        {/* 已处理的播客 */}
+        {hasProcessed && (
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Processed</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {processedQueries.map((query) => (
+                query.podcast && (
+                  <ProcessedPodcastCard key={query.id} query={query} />
+                )
+              ))}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          </div>
+        )}
+
+        {/* 示例播客 */}
+        {showExamples && (
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Example Podcasts</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {examplePodcasts.map((podcast) => (
                 <ExamplePodcastCard key={podcast.id} podcast={podcast} />
               ))}
@@ -248,19 +269,37 @@ function MulerunSessionPageContent() {
           </div>
         )}
 
-        {/* 查询历史 */}
-        {queries.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">查询历史</h2>
-            {queries.map((query) => (
-              <QueryCard key={query.id} query={query} />
-            ))}
+        {/* 正在处理的查询 */}
+        {queries.filter(q => q.status === 'pending' || q.status === 'processing').length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Processing</h2>
+            <div className="space-y-4">
+              {queries
+                .filter(q => q.status === 'pending' || q.status === 'processing')
+                .map((query) => (
+                  <QueryCard key={query.id} query={query} />
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* 失败的查询 */}
+        {queries.filter(q => q.status === 'failed' || q.status === 'timeout').length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Failed</h2>
+            <div className="space-y-4">
+              {queries
+                .filter(q => q.status === 'failed' || q.status === 'timeout')
+                .map((query) => (
+                  <QueryCard key={query.id} query={query} />
+                ))}
+            </div>
           </div>
         )}
 
         {queries.length === 0 && examplePodcasts.length === 0 && (
-          <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-500">
-            No queries yet. Enter a podcast URL above to get started.
+          <div className="text-center py-12 text-gray-500">
+            <p className="text-lg">No queries yet. Enter a podcast URL above to get started.</p>
           </div>
         )}
       </div>
@@ -279,7 +318,7 @@ function QueryCard({ query }: { query: Query }) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
           <div className="text-sm text-gray-500 mb-1">
@@ -303,8 +342,8 @@ function QueryCard({ query }: { query: Query }) {
       )}
 
       {query.status === 'processing' && (
-        <div className="mt-4 flex items-center gap-2 text-blue-600">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+        <div className="mt-4 flex items-center gap-2 text-gray-900">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
           <span className="text-sm">Processing podcast, please wait...</span>
         </div>
       )}
@@ -324,9 +363,9 @@ function QueryCard({ query }: { query: Query }) {
 
           <a
             href={`/mulerun/result/${query.podcast.id}`}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-semibold"
           >
-            <span>查看完整详情</span>
+            <span>View Details</span>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
@@ -337,62 +376,80 @@ function QueryCard({ query }: { query: Query }) {
   );
 }
 
+// 已处理播客卡片组件
+function ProcessedPodcastCard({ query }: { query: Query }) {
+  if (!query.podcast) return null;
+
+  return (
+    <a
+      href={`/mulerun/result/${query.podcast.id}`}
+      className="group block bg-white border-2 border-gray-200 rounded-lg p-6 hover:border-yellow-400 hover:shadow-lg transition-all duration-200"
+    >
+      <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-yellow-600 transition-colors">
+        {query.podcast.title}
+      </h3>
+      
+      {query.podcast.showAuthor && (
+        <p className="text-sm text-gray-600 mb-3">
+          {query.podcast.showAuthor}
+        </p>
+      )}
+      
+      {query.podcast.summary && (
+        <p className="text-sm text-gray-700 line-clamp-3 mb-4 leading-relaxed">
+          {query.podcast.summary.replace(/#{1,6}\s*/g, '').replace(/\*\*/g, '').substring(0, 120)}...
+        </p>
+      )}
+      
+      <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 group-hover:text-yellow-600 transition-colors">
+        <span>View Details</span>
+        <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    </a>
+  );
+}
+
 // 示例播客卡片组件
 function ExamplePodcastCard({ podcast }: { podcast: any }) {
   return (
-    <div className="group relative bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-300 cursor-pointer overflow-hidden">
-      {/* 装饰性背景元素 */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-50 to-transparent opacity-50 rounded-full -mr-16 -mt-16 group-hover:opacity-70 transition-opacity"></div>
+    <a
+      href={`/mulerun/result/${podcast.id}`}
+      className="group block bg-white border-2 border-gray-200 rounded-lg p-6 hover:border-yellow-400 hover:shadow-lg transition-all duration-200"
+    >
+      <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-yellow-600 transition-colors">
+        {podcast.title}
+      </h3>
       
-      <div className="relative z-10">
-        {/* 标题 */}
-        <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors">
-          {podcast.title}
-        </h3>
-        
-        {/* 作者 */}
-        {podcast.showAuthor && (
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-semibold">
-              {podcast.showAuthor.charAt(0).toUpperCase()}
-            </div>
-            <p className="text-sm text-gray-600 font-medium">
-              {podcast.showAuthor}
-            </p>
-          </div>
-        )}
-        
-        {/* 摘要 */}
-        {podcast.summary && (
-          <p className="text-sm text-gray-700 line-clamp-3 mb-4 leading-relaxed">
-            {podcast.summary.replace(/#{1,6}\s*/g, '').replace(/\*\*/g, '').substring(0, 120)}...
-          </p>
-        )}
-        
-        {/* 操作按钮 */}
-        <a
-          href={`/mulerun/result/${podcast.id}`}
-          className="flex items-center gap-2 text-sm font-semibold text-blue-600 group-hover:text-blue-700 transition-colors"
-        >
-          <span>查看详情</span>
-          <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </a>
+      {podcast.showAuthor && (
+        <p className="text-sm text-gray-600 mb-3">
+          {podcast.showAuthor}
+        </p>
+      )}
+      
+      {podcast.summary && (
+        <p className="text-sm text-gray-700 line-clamp-3 mb-4 leading-relaxed">
+          {podcast.summary.replace(/#{1,6}\s*/g, '').replace(/\*\*/g, '').substring(0, 120)}...
+        </p>
+      )}
+      
+      <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 group-hover:text-yellow-600 transition-colors">
+        <span>View Details</span>
+        <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
       </div>
-      
-      {/* 悬停时的边框高光 */}
-      <div className="absolute inset-0 rounded-xl border-2 border-blue-400 opacity-0 group-hover:opacity-20 transition-opacity pointer-events-none"></div>
-    </div>
+    </a>
   );
 }
 
 export default function MulerunSessionPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
