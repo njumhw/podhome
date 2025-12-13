@@ -757,10 +757,13 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					reportOutline: reportData?.outline || null,
 					processingTime: Date.now() - startTime,
 					partialSuccess: isPartialSuccess,
-				error: isPartialSuccess ? '报告生成失败或超时，但ASR转写已成功完成' : undefined
-			};
+					error: isPartialSuccess ? '报告生成失败或超时，但ASR转写已成功完成' : undefined,
+				};
+			} catch (dbError) {
+				console.error('MuleRun 用户保存播客数据失败:', dbError);
+				throw dbError;
+			}
 		}
-		
 	} catch (error: unknown) {
 		const totalDuration = Date.now() - startTime;
 		const errorMessage = error instanceof Error ? error.message : String(error);
