@@ -61,11 +61,11 @@ npx prisma generate
 ## 步骤 6: 运行数据库迁移
 
 ```bash
-# 检查是否有待迁移的变更
-npx prisma migrate status
+# 对于已有数据库，使用 db push 同步 schema（推荐）
+npx prisma db push
 
-# 如果有待迁移的变更，执行迁移
-npx prisma migrate deploy
+# 如果 db push 失败，参考 docs/DATABASE_MIGRATION_FIX.md
+# 注意：不要使用 prisma migrate deploy，因为数据库已有数据
 ```
 
 ---
