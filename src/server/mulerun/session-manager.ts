@@ -36,6 +36,18 @@ export async function createOrRestoreSession(
       queries: {
         orderBy: { createdAt: 'desc' },
         take: 50, // 最多加载最近 50 条查询
+        include: {
+          podcast: {
+            select: {
+              id: true,
+              title: true,
+              showAuthor: true,
+              summary: true,
+              reportOutline: true,
+              status: true,
+            },
+          },
+        },
       },
     },
   });
@@ -56,6 +68,18 @@ export async function createOrRestoreSession(
           queries: {
             orderBy: { createdAt: 'desc' },
             take: 50,
+            include: {
+              podcast: {
+                select: {
+                  id: true,
+                  title: true,
+                  showAuthor: true,
+                  summary: true,
+                  reportOutline: true,
+                  status: true,
+                },
+              },
+            },
           },
         },
       });
@@ -78,6 +102,18 @@ export async function createOrRestoreSession(
       queries: {
         orderBy: { createdAt: 'desc' },
         take: 50,
+        include: {
+          podcast: {
+            select: {
+              id: true,
+              title: true,
+              showAuthor: true,
+              summary: true,
+              reportOutline: true,
+              status: true,
+            },
+          },
+        },
       },
     },
   });
@@ -96,6 +132,18 @@ export async function getSession(sessionId: string) {
       queries: {
         orderBy: { createdAt: 'desc' },
         take: 50,
+        include: {
+          podcast: {
+            select: {
+              id: true,
+              title: true,
+              showAuthor: true,
+              summary: true,
+              reportOutline: true,
+              status: true,
+            },
+          },
+        },
       },
     },
   });
