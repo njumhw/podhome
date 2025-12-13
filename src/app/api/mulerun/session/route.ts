@@ -72,13 +72,6 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    if (!MULERUN_AGENT_KEY) {
-      return NextResponse.json(
-        { error: 'MuleRun Agent Key not configured' },
-        { status: 500 }
-      );
-    }
-
     const { searchParams } = new URL(req.url);
     
     // 提取所有 URL 参数
@@ -96,8 +89,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 获取 Agent Key（优先使用环境变量，本地测试时可以从 localStorage 传递）
+    // 注意：在生产环境中，应该只使用环境变量
+    let agentKey = MULERUN_AGENT_KEY;
+    
+    // 本地开发时，如果环境变量未加载，尝试从请求中获取（仅用于测试）
+    if (!agentKey && process.env.NODE_ENV === 'development') {
+      // 从请求头或查询参数中获取（测试用）
+      const testAgentKey = req.headers.get('x-test-agent-key') || searchParams.get('_test_agent_key');
+      if (testAgentKey) {
+        agentKey = testAgentKey;
+        console.warn('[MuleRun] 使用测试 Agent Key（仅开发模式）');
+      }
+    }
+
+    if (!agentKey) {
+      return NextResponse.json(
+        { error: 'MuleRun Agent Key not configured. Please restart the development server after adding MULERUN_AGENT_KEY to .env file.' },
+        { status: 500 }
+      );
+    }
+
     // 验证签名（严格按照文档）
-    const isValid = verifyMulerunSignature(params, MULERUN_AGENT_KEY);
+    const isValid = verifyMulerunSignature(params, agentKey);
     if (!isValid) {
       console.error('[MuleRun] 签名验证失败:', { sessionId, userId, agentId });
       return NextResponse.json(

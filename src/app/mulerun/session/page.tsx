@@ -234,9 +234,13 @@ function MulerunSessionPageContent() {
 
         {/* 示例播客 */}
         {examplePodcasts.length > 0 && queries.length === 0 && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">示例播客</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+              <h2 className="text-xl font-bold text-gray-900 px-4">示例播客</h2>
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {examplePodcasts.map((podcast) => (
                 <ExamplePodcastCard key={podcast.id} podcast={podcast} />
               ))}
@@ -345,26 +349,53 @@ function QueryCard({ query }: { query: Query }) {
 // 示例播客卡片组件
 function ExamplePodcastCard({ podcast }: { podcast: any }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer">
-      <h3 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2">
-        {podcast.title}
-      </h3>
-      {podcast.showAuthor && (
-        <p className="text-sm text-gray-600 mb-2">
-          by {podcast.showAuthor}
-        </p>
-      )}
-      {podcast.summary && (
-        <p className="text-sm text-gray-700 line-clamp-3 mb-3">
-          {podcast.summary.substring(0, 150)}...
-        </p>
-      )}
-      <a
-        href={`/mulerun/session?podcastId=${podcast.id}`}
-        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-      >
-        查看详情 →
-      </a>
+    <div className="group relative bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-300 cursor-pointer overflow-hidden">
+      {/* 装饰性背景元素 */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-50 to-transparent opacity-50 rounded-full -mr-16 -mt-16 group-hover:opacity-70 transition-opacity"></div>
+      
+      <div className="relative z-10">
+        {/* 标题 */}
+        <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors">
+          {podcast.title}
+        </h3>
+        
+        {/* 作者 */}
+        {podcast.showAuthor && (
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-semibold">
+              {podcast.showAuthor.charAt(0).toUpperCase()}
+            </div>
+            <p className="text-sm text-gray-600 font-medium">
+              {podcast.showAuthor}
+            </p>
+          </div>
+        )}
+        
+        {/* 摘要 */}
+        {podcast.summary && (
+          <p className="text-sm text-gray-700 line-clamp-3 mb-4 leading-relaxed">
+            {podcast.summary.replace(/#{1,6}\s*/g, '').replace(/\*\*/g, '').substring(0, 120)}...
+          </p>
+        )}
+        
+        {/* 操作按钮 */}
+        <a
+          href={`/mulerun/session?podcastId=${podcast.id}`}
+          className="flex items-center gap-2 text-sm font-semibold text-blue-600 group-hover:text-blue-700 transition-colors"
+          onClick={(e) => {
+            e.preventDefault();
+            // 在实际使用中，这里可以跳转到详情页
+          }}
+        >
+          <span>查看详情</span>
+          <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </a>
+      </div>
+      
+      {/* 悬停时的边框高光 */}
+      <div className="absolute inset-0 rounded-xl border-2 border-blue-400 opacity-0 group-hover:opacity-20 transition-opacity pointer-events-none"></div>
     </div>
   );
 }
