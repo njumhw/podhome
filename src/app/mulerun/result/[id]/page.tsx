@@ -32,7 +32,7 @@ export default function MulerunResultPage() {
 
     const fetchPodcast = async () => {
       try {
-        const res = await fetch(`/api/public/podcast?id=${id}&_t=${Date.now()}`);
+        const res = await fetch(`/api/public/podcast?id=${id}&_mulerun=true&_t=${Date.now()}`);
         if (!res.ok) {
           throw new Error('Failed to fetch podcast');
         }

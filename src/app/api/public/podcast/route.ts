@@ -31,6 +31,16 @@ export async function GET(request: NextRequest) {
     const clientIp = getClientIp(request);
     const userAgent = getUserAgent(request);
 
+    // 检查是否是 MuleRun 用户请求（通过 Referer 或 URL 参数判断）
+    const referer = request.headers.get('referer') || '';
+    const isMulerunFromReferer = referer.includes('/mulerun/');
+    const isMulerunFromParam = searchParams.get('_mulerun') === 'true';
+    const isMulerunRequest = isMulerunFromReferer || isMulerunFromParam;
+    
+    if (isMulerunRequest) {
+      console.log(`[api/public/podcast] 检测到 MuleRun 用户请求: referer=${referer}, param=${isMulerunFromParam}`);
+    }
+
     // 尝试获取用户（可能为 null，表示 Visitor）
     let user = null;
     try {
@@ -47,9 +57,9 @@ export async function GET(request: NextRequest) {
 
     let visitorUsage = null;
     let visitorLimitExceeded = false;
-    // 只有真正的 Visitor（未登录用户）才检查限制
-    // 已登录用户（包括 READER, PODCASTER, PODCASTER_VIP, ADMIN）都不应该被限制
-    if (!user) {
+    // MuleRun 用户和已登录用户都不应该被限制
+    // 只有真正的 Visitor（未登录用户且不是 MuleRun 请求）才检查限制
+    if (!user && !isMulerunRequest) {
       console.log(`[api/public/podcast] 检测到 Visitor 访问，检查访问限制: ip=${clientIp}`);
       visitorUsage = await getVisitorUsage(clientIp, userAgent);
       if (!visitorUsage.allowed) {
@@ -59,7 +69,9 @@ export async function GET(request: NextRequest) {
       } else {
         console.log(`[api/public/podcast] Visitor 访问允许: count=${visitorUsage.count}, limit=${visitorUsage.limit}`);
       }
-    } else {
+    } else if (isMulerunRequest) {
+      console.log(`[api/public/podcast] MuleRun 用户访问，跳过 Visitor 限制检查`);
+    } else if (user) {
       console.log(`[api/public/podcast] 已登录用户访问，跳过 Visitor 限制检查: role=${user.role}`);
     }
     const url = searchParams.get('url');
@@ -232,7 +244,8 @@ export async function GET(request: NextRequest) {
 
     // 只有在权限未用完时才记录访问（避免重复计数）
     // 如果权限已用完，说明之前已经记录过了，不再重复记录
-    if (!visitorLimitExceeded) {
+    // MuleRun 用户不记录访问（因为他们已经通过签名验证，有无限访问权限）
+    if (!visitorLimitExceeded && !isMulerunRequest) {
       await recordVisitorAccess({
         podcastId: resolvedFromAudioCache ? null : podcast.id,
         audioCacheId: resolvedFromAudioCache ? podcast.id : null,
@@ -243,13 +256,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 如果是 Visitor 且权限已用完，只返回前10行内容
-    // 注意：只有真正的 Visitor（未登录用户）才会被限制
-    // 已登录用户（包括 READER, PODCASTER, PODCASTER_VIP, ADMIN）都不应该被限制
+    // 注意：只有真正的 Visitor（未登录用户且不是 MuleRun 请求）才会被限制
+    // 已登录用户和 MuleRun 用户都不应该被限制
     let summaryToReturn = podcast.summary;
     let transcriptToReturn = podcast.originalTranscript || podcast.transcript;
     
     // 只有 Visitor 且权限已用完时才限制内容
-    if (!user && visitorLimitExceeded) {
+    if (!user && !isMulerunRequest && visitorLimitExceeded) {
       console.log(`[api/public/podcast] Visitor 权限已用完，返回受限内容`);
       // 截取摘要的前10行
       if (summaryToReturn) {
@@ -264,6 +277,8 @@ export async function GET(request: NextRequest) {
         const previewLines = transcriptLines.slice(0, 10);
         transcriptToReturn = previewLines.join('\n');
       }
+    } else if (isMulerunRequest) {
+      console.log(`[api/public/podcast] MuleRun 用户访问，返回完整内容`);
     } else if (user) {
       console.log(`[api/public/podcast] 已登录用户访问，返回完整内容: role=${user.role}`);
     }
@@ -280,17 +295,17 @@ export async function GET(request: NextRequest) {
       topic: podcast.topic,
       script: null, // 清洗稿已移除，始终为null
       originalTranscript: transcriptToReturn, // ASR原文（如果权限受限，只返回前10行）
-      reportOutline: (!user && visitorLimitExceeded) ? null : ((podcast as any).reportOutline || null), // 报告大纲（只有 Visitor 权限受限时不返回）
+      reportOutline: (!user && !isMulerunRequest && visitorLimitExceeded) ? null : ((podcast as any).reportOutline || null), // 报告大纲（只有 Visitor 权限受限时不返回）
       report: summaryToReturn,
       updatedAt: podcast.updatedAt,
       likeCount,
       // 标记是否受限（只有 Visitor 且权限已用完时才为 true）
-      isLimited: !user && visitorLimitExceeded,
-      visitorLimitExceeded: !user && visitorLimitExceeded
+      isLimited: !user && !isMulerunRequest && visitorLimitExceeded,
+      visitorLimitExceeded: !user && !isMulerunRequest && visitorLimitExceeded
     };
 
-    // 返回访客信息（包括权限用完的情况）
-    if (!user) {
+    // 返回访客信息（包括权限用完的情况，MuleRun 用户不需要）
+    if (!user && !isMulerunRequest) {
       if (visitorLimitExceeded && visitorUsage) {
         // 权限已用完，返回受限信息
         responseData.visitorInfo = {
