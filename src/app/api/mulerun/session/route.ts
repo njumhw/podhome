@@ -111,9 +111,36 @@ export async function POST(req: NextRequest) {
     }
 
     // 验证签名（严格按照文档）
+    console.log('[MuleRun] 开始签名验证:', {
+      sessionId,
+      userId: userId?.substring(0, 10) + '...',
+      agentId,
+      hasSignature: !!signature,
+      paramKeys: Object.keys(params),
+      agentKeyPrefix: agentKey ? `${agentKey.substring(0, 10)}...` : 'undefined',
+      agentKeyLength: agentKey?.length,
+      agentKeyEnd: agentKey ? `...${agentKey.substring(agentKey.length - 10)}` : 'undefined',
+    });
+    
     const isValid = verifyMulerunSignature(params, agentKey);
     if (!isValid) {
-      console.error('[MuleRun] 签名验证失败:', { sessionId, userId, agentId });
+      console.error('[MuleRun] 签名验证失败:', { 
+        sessionId, 
+        userId: userId?.substring(0, 10) + '...', 
+        agentId,
+        receivedParams: Object.keys(params),
+        agentKeyPrefix: agentKey ? `${agentKey.substring(0, 10)}...` : 'undefined',
+        // 输出接收到的参数值（部分，用于调试）
+        paramValues: {
+          userId: userId?.substring(0, 10) + '...',
+          sessionId: sessionId?.substring(0, 10) + '...',
+          agentId: agentId?.substring(0, 10) + '...',
+          time: time,
+          origin: origin,
+          nonce: nonce?.substring(0, 10) + '...',
+          signature: signature?.substring(0, 20) + '...',
+        },
+      });
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 401 }

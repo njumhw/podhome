@@ -25,12 +25,15 @@ export function verifyMulerunSignature(
 ): boolean {
   try {
     // 1. URL 解码所有参数（文档要求）
+    // 注意：Next.js 的 searchParams 可能已经自动解码，但为了安全，我们仍然尝试解码
     const decoded: Record<string, string> = {};
     for (const [key, value] of Object.entries(params)) {
       try {
+        // 如果已经是解码后的值，decodeURIComponent 不会改变它
+        // 如果包含编码字符，则会被解码
         decoded[key] = decodeURIComponent(value);
       } catch {
-        // 如果解码失败，使用原值
+        // 如果解码失败，使用原值（可能已经是解码后的）
         decoded[key] = value;
       }
     }
@@ -69,8 +72,15 @@ export function verifyMulerunSignature(
         expected: expectedSignature,
         received: receivedSignature,
         jsonString,
-        params: Object.keys(sortedParams),
+        sortedParams,
+        agentKeyPrefix: agentKey ? `${agentKey.substring(0, 10)}...` : 'undefined',
+        agentKeyLength: agentKey?.length,
+        agentKeyEnd: agentKey ? `...${agentKey.substring(agentKey.length - 10)}` : 'undefined',
+        // 输出 Agent Key 的完整值（用于调试，生产环境应移除）
+        agentKeyFull: agentKey,
       });
+    } else {
+      console.log('[MuleRun] 签名验证成功');
     }
 
     return isValid;

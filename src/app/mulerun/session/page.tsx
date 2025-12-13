@@ -322,24 +322,15 @@ function QueryCard({ query }: { query: Query }) {
             )}
           </div>
 
-          {query.podcast.summary && (
-            <div className="prose prose-sm max-w-none">
-              <div className="text-gray-700 whitespace-pre-wrap">
-                {query.podcast.summary}
-              </div>
-            </div>
-          )}
-
-          {query.podcast.reportOutline && (
-            <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-semibold text-gray-700 hover:text-gray-900">
-                View Report Outline
-              </summary>
-              <div className="mt-2 prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
-                {query.podcast.reportOutline}
-              </div>
-            </details>
-          )}
+          <a
+            href={`/mulerun/result/${query.podcast.id}`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold"
+          >
+            <span>查看完整详情</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
         </div>
       )}
     </div>
@@ -380,12 +371,8 @@ function ExamplePodcastCard({ podcast }: { podcast: any }) {
         
         {/* 操作按钮 */}
         <a
-          href={`/mulerun/session?podcastId=${podcast.id}`}
+          href={`/mulerun/result/${podcast.id}`}
           className="flex items-center gap-2 text-sm font-semibold text-blue-600 group-hover:text-blue-700 transition-colors"
-          onClick={(e) => {
-            e.preventDefault();
-            // 在实际使用中，这里可以跳转到详情页
-          }}
         >
           <span>查看详情</span>
           <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
