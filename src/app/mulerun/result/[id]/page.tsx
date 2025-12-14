@@ -32,12 +32,26 @@ export default function MulerunResultPage() {
 
     const fetchPodcast = async () => {
       try {
-        const res = await fetch(`/api/public/podcast?id=${id}&_mulerun=true&_t=${Date.now()}`);
+        const url = `/api/public/podcast?id=${id}&_mulerun=true&_t=${Date.now()}`;
+        console.log('[MuleRun] 开始获取播客:', { id, url });
+        
+        const res = await fetch(url);
+        console.log('[MuleRun] API 响应状态:', res.status, res.statusText);
+        
         if (!res.ok) {
           const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to fetch podcast');
+          console.error('[MuleRun] API 返回错误:', errorData);
+          throw new Error(errorData.error || `HTTP ${res.status}: ${res.statusText}`);
         }
+        
         const data = await res.json();
+        console.log('[MuleRun] API 返回数据:', { 
+          hasId: !!data.id, 
+          hasTitle: !!data.title,
+          hasSummary: !!data.summary,
+          keys: Object.keys(data)
+        });
+        
         // API 直接返回播客数据，不是 { podcast: ... } 格式
         if (data.id) {
           setPodcast({
@@ -48,8 +62,10 @@ export default function MulerunResultPage() {
             reportOutline: data.reportOutline,
             status: 'READY',
           });
+          console.log('[MuleRun] 播客数据已设置:', data.id, data.title);
         } else {
-          throw new Error('Invalid podcast data format');
+          console.error('[MuleRun] 数据格式无效:', data);
+          throw new Error(`Invalid podcast data format: missing id. Received keys: ${Object.keys(data).join(', ')}`);
         }
         setLoading(false);
       } catch (err) {
