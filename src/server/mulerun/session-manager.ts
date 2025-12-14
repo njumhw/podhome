@@ -19,7 +19,7 @@ export interface MulerunSessionParams {
  * 创建或恢复 MuleRun 会话
  * 
  * @param params - 会话参数
- * @returns 会话记录
+ * @returns 会话记录（包含该用户的所有查询历史）
  */
 export async function createOrRestoreSession(
   params: MulerunSessionParams
@@ -29,124 +29,122 @@ export async function createOrRestoreSession(
   // 计算过期时间（当前时间 + 超时时间）
   const expiresAt = new Date(Date.now() + SESSION_TIMEOUT_MINUTES * 60 * 1000);
 
-  // 尝试查找现有会话
+  // 尝试查找现有会话（根据 sessionId）
   const existing = await db.mulerunSession.findUnique({
     where: { sessionId },
-    include: {
-      queries: {
-        orderBy: { createdAt: 'desc' },
-        take: 50, // 最多加载最近 50 条查询
-        include: {
-          podcast: {
-            select: {
-              id: true,
-              title: true,
-              showAuthor: true,
-              summary: true,
-              reportOutline: true,
-              status: true,
-            },
-          },
-        },
-      },
-    },
   });
 
+  let session;
   if (existing) {
     // 恢复现有会话
     // 检查是否已过期
     if (new Date() > existing.expiresAt) {
       // 会话已过期，更新为新的过期时间
-      return await db.mulerunSession.update({
+      session = await db.mulerunSession.update({
         where: { sessionId },
         data: {
           expiresAt,
           status: 'running',
           updatedAt: new Date(),
         },
-        include: {
-          queries: {
-            orderBy: { createdAt: 'desc' },
-            take: 50,
-            include: {
-              podcast: {
-                select: {
-                  id: true,
-                  title: true,
-                  showAuthor: true,
-                  summary: true,
-                  reportOutline: true,
-                  status: true,
-                },
-              },
-            },
-          },
-        },
       });
+    } else {
+      // 会话未过期，使用现有会话
+      session = existing;
     }
-
-    // 会话未过期，直接返回
-    return existing;
+  } else {
+    // 创建新会话
+    session = await db.mulerunSession.create({
+      data: {
+        sessionId,
+        userId,
+        agentId,
+        status: 'running',
+        expiresAt,
+      },
+    });
   }
 
-  // 创建新会话
-  return await db.mulerunSession.create({
-    data: {
-      sessionId,
-      userId,
-      agentId,
-      status: 'running',
-      expiresAt,
+  // 关键改进：查找该用户的所有查询历史（跨会话）
+  // 这样即使用户使用新的 sessionId，也能看到之前处理过的播客
+  const allUserQueries = await db.mulerunQueryHistory.findMany({
+    where: {
+      session: {
+        userId: userId, // 根据 userId 查找所有会话的查询
+      },
+      status: {
+        in: ['completed', 'processing'], // 只返回已完成或处理中的查询
+      },
     },
+    orderBy: { createdAt: 'desc' },
+    take: 50, // 最多加载最近 50 条查询
     include: {
-      queries: {
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-        include: {
-          podcast: {
-            select: {
-              id: true,
-              title: true,
-              showAuthor: true,
-              summary: true,
-              reportOutline: true,
-              status: true,
-            },
-          },
+      podcast: {
+        select: {
+          id: true,
+          title: true,
+          showAuthor: true,
+          summary: true,
+          reportOutline: true,
+          status: true,
         },
       },
     },
   });
+
+  // 返回会话信息，但包含该用户的所有查询历史
+  return {
+    ...session,
+    queries: allUserQueries,
+  };
 }
 
 /**
  * 获取会话信息
  * 
  * @param sessionId - 会话 ID
- * @returns 会话记录
+ * @returns 会话记录（包含该用户的所有查询历史）
  */
 export async function getSession(sessionId: string) {
-  return await db.mulerunSession.findUnique({
+  const session = await db.mulerunSession.findUnique({
     where: { sessionId },
+  });
+
+  if (!session) {
+    return null;
+  }
+
+  // 查找该用户的所有查询历史（跨会话）
+  const allUserQueries = await db.mulerunQueryHistory.findMany({
+    where: {
+      session: {
+        userId: session.userId, // 根据 userId 查找所有会话的查询
+      },
+      status: {
+        in: ['completed', 'processing'], // 只返回已完成或处理中的查询
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 50, // 最多加载最近 50 条查询
     include: {
-      queries: {
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-        include: {
-          podcast: {
-            select: {
-              id: true,
-              title: true,
-              showAuthor: true,
-              summary: true,
-              reportOutline: true,
-              status: true,
-            },
-          },
+      podcast: {
+        select: {
+          id: true,
+          title: true,
+          showAuthor: true,
+          summary: true,
+          reportOutline: true,
+          status: true,
         },
       },
     },
   });
+
+  // 返回会话信息，但包含该用户的所有查询历史
+  return {
+    ...session,
+    queries: allUserQueries,
+  };
 }
 
 /**
