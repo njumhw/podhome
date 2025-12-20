@@ -1151,7 +1151,7 @@ export default function PodcastDetailPage() {
               </div>
             ) : (
               <div className="mb-8 p-6 bg-white/5 border border-white/10 rounded-xl text-center backdrop-blur-sm">
-                <p className="text-zinc-300 dark:text-zinc-300 [data-theme='light']:text-slate-700 mb-2 font-sans text-sm">请先登录后发表评论</p>
+                <p className="text-white dark:text-white [data-theme='light']:text-slate-700 mb-2 font-sans text-sm">请先登录后发表评论</p>
                 <Link href="/login" className="text-white dark:text-white [data-theme='light']:text-foreground hover:text-zinc-200 dark:hover:text-zinc-200 [data-theme='light']:hover:text-slate-800 underline transition-colors font-sans text-sm">
                   立即登录
                 </Link>
@@ -1161,7 +1161,7 @@ export default function PodcastDetailPage() {
             {/* Comment List */}
             <div className="space-y-4">
               {comments.length === 0 ? (
-                <div className="text-center text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-500 py-12 font-sans text-sm">
+                <div className="text-center text-white dark:text-white [data-theme='light']:text-slate-600 py-12 font-sans text-sm">
                   暂无评论，来发表第一条评论吧！
                 </div>
               ) : (
@@ -1179,7 +1179,7 @@ export default function PodcastDetailPage() {
                               {new Date(comment.createdAt).toLocaleDateString()}
                             </span>
                           </div>
-                          <p className="text-zinc-200 leading-relaxed font-sans">{comment.content}</p>
+                          <p className="text-white dark:text-white [data-theme='light']:text-slate-800 leading-relaxed font-sans">{comment.content}</p>
                         </div>
                         <button
                           onClick={() => handleLikeComment(comment.id)}
