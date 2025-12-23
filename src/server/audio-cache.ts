@@ -8,6 +8,8 @@ export interface AudioCacheData {
 	script?: string;
 	summary?: string;
 	report?: string;
+	translatedTranscript?: string; // 翻译后的全文
+	translatedSummary?: string; // 翻译后的总结
 	segments?: string[]; // ASR分段数据
 	originalUrl?: string; // 原始页面URL
 	publishedAt?: string; // 发布时间 (ISO string)
@@ -41,6 +43,8 @@ export async function getCachedAudio(audioUrl: string): Promise<AudioCacheData |
 			script: cached.script || undefined,
 			summary: cached.summary || undefined,
 			report: cached.summary || undefined,
+			translatedTranscript: cached.translatedTranscript || undefined,
+			translatedSummary: cached.translatedSummary || undefined,
 			segments: cached.segments || undefined,
 			originalUrl: cached.originalUrl || undefined,
 			publishedAt: cached.publishedAt?.toISOString() || undefined,
@@ -64,6 +68,8 @@ export async function setCachedAudio(audioUrl: string, data: AudioCacheData): Pr
 				transcript: data.transcript,
 				script: data.script,
 				summary: data.summary,
+				translatedTranscript: data.translatedTranscript,
+				translatedSummary: data.translatedSummary,
 				segments: data.segments,
 				// report字段已删除，只使用summary
 				originalUrl: data.originalUrl,
@@ -79,6 +85,8 @@ export async function setCachedAudio(audioUrl: string, data: AudioCacheData): Pr
 				transcript: data.transcript,
 				script: data.script,
 				summary: data.summary,
+				translatedTranscript: data.translatedTranscript,
+				translatedSummary: data.translatedSummary,
 				segments: data.segments,
 				// report字段已删除，只使用summary
 				originalUrl: data.originalUrl,
