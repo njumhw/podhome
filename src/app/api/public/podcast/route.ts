@@ -109,9 +109,11 @@ export async function GET(request: NextRequest) {
           audioUrl: true,
           sourceUrl: true,
           summary: true,
+          translatedSummary: true, // 中文翻译总结
           topic: { select: { name: true } },
           transcript: true,
           originalTranscript: true, // 添加ASR原文字段
+          translatedTranscript: true, // 中文翻译原文
           reportOutline: true, // 报告大纲（如果字段存在）
           updatedAt: true
         }
@@ -135,9 +137,11 @@ export async function GET(request: NextRequest) {
               audioUrl: true,
               sourceUrl: true,
               summary: true,
+              translatedSummary: true,
               topic: { select: { name: true } },
               transcript: true,
               originalTranscript: true,
+              translatedTranscript: true,
               updatedAt: true
             }
           });
@@ -178,7 +182,9 @@ export async function GET(request: NextRequest) {
             author: true,
             audioUrl: true,
             summary: true,
+            translatedSummary: true,
             transcript: true,
+            translatedTranscript: true,
             script: true,
             // report字段已删除
             publishedAt: true,
@@ -199,9 +205,11 @@ export async function GET(request: NextRequest) {
             audioUrl: audioCache.audioUrl,
             sourceUrl: audioCache.audioUrl,
             summary: audioCache.summary,
+            translatedSummary: audioCache.translatedSummary || null,
             topic: audioCache.topic,
             transcript: null, // 清洗稿已移除
             originalTranscript: audioCache.transcript,  // ASR原文
+            translatedTranscript: audioCache.translatedTranscript || null,
             reportOutline: null, // AudioCache没有reportOutline字段
             updatedAt: audioCache.updatedAt
           };
@@ -292,9 +300,11 @@ export async function GET(request: NextRequest) {
       audioUrl: podcast.audioUrl,
       originalUrl: podcast.sourceUrl,
       summary: summaryToReturn,
+      translatedSummary: (!user && !isMulerunRequest && visitorLimitExceeded) ? null : ((podcast as any).translatedSummary || null), // 中文翻译总结（只有 Visitor 权限受限时不返回）
       topic: podcast.topic,
       script: null, // 清洗稿已移除，始终为null
       originalTranscript: transcriptToReturn, // ASR原文（如果权限受限，只返回前10行）
+      translatedTranscript: (!user && !isMulerunRequest && visitorLimitExceeded) ? null : ((podcast as any).translatedTranscript || null), // 中文翻译原文（只有 Visitor 权限受限时不返回）
       reportOutline: (!user && !isMulerunRequest && visitorLimitExceeded) ? null : ((podcast as any).reportOutline || null), // 报告大纲（只有 Visitor 权限受限时不返回）
       report: summaryToReturn,
       updatedAt: podcast.updatedAt,

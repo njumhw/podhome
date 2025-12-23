@@ -30,9 +30,11 @@ type PodcastDetail = {
   audioUrl: string;
   originalUrl: string;
   summary: string | null;
+  translatedSummary: string | null; // 中文翻译总结
   topic: Topic | null;
   script: string | null; // 清洗稿（已移除，始终为null）
   originalTranscript: string | null; // ASR原文
+  translatedTranscript: string | null; // 中文翻译原文
   reportOutline: string | null; // 报告大纲
   // report字段已删除，只使用summary
   updatedAt: string;
@@ -89,6 +91,7 @@ export default function PodcastDetailPage() {
   const [showVisitorLimitModal, setShowVisitorLimitModal] = useState(false);
   const [visitorLimitInfo, setVisitorLimitInfo] = useState<{ count: number; limit: number } | null>(null);
   const [isContentLimited, setIsContentLimited] = useState(false); // 内容是否受限
+  const [isEnglishOriginal, setIsEnglishOriginal] = useState(false); // 是否显示英文原文（默认显示中文翻译）
   
   // 共享的点赞状态，用于同步两个点赞按钮
   const [sharedLikeState, setSharedLikeState] = useState<{ liked: boolean; likeCount: number } | null>(null);
@@ -800,6 +803,19 @@ export default function PodcastDetailPage() {
                   <circle cx="5.66" cy="18.34" r="1.5" fill="currentColor" />
                 </svg>
                 <h2 className="text-2xl font-bold font-sans text-white dark:text-white [data-theme='light']:text-foreground">Insight</h2>
+                {/* 翻译切换按钮（仅当有翻译时显示） */}
+                {podcast.translatedSummary && (
+                  <button
+                    onClick={() => setIsEnglishOriginal(!isEnglishOriginal)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-200 rounded-lg bg-white/5 dark:bg-white/5 [data-theme='light']:bg-white hover:bg-white/10 dark:hover:bg-white/10 [data-theme='light']:hover:bg-slate-100 text-white dark:text-white [data-theme='light']:text-slate-700 transition-colors"
+                    title={isEnglishOriginal ? '切换到中文翻译' : '切换到英文原文'}
+                  >
+                    <span>{isEnglishOriginal ? 'EN' : '中'}</span>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                  </button>
+                )}
                 <MinimalLikeButton 
                   podcastId={podcast.id} 
                   initialLikeCount={podcast.likeCount || 0}
@@ -816,7 +832,12 @@ export default function PodcastDetailPage() {
               {/* Right: Copy Button */}
               {podcast.summary && !isEditing && (
                 <button
-                  onClick={() => handleCopy(podcast.summary || '', 'AI Insights')}
+                  onClick={() => handleCopy(
+                    isEnglishOriginal && podcast.translatedSummary 
+                      ? podcast.summary || '' 
+                      : (podcast.translatedSummary || podcast.summary || ''), 
+                    'AI Insights'
+                  )}
                   className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 hover:text-white dark:hover:text-white [data-theme='light']:hover:text-foreground transition-colors font-mono"
                   title="复制全文"
                 >
@@ -852,8 +873,16 @@ export default function PodcastDetailPage() {
             ) : (
               <div className="prose prose-invert dark:prose-invert [data-theme='light']:prose prose-lg max-w-none relative">
                 <SummaryDisplay 
-                  summary={podcast.summary}
-                  report={podcast.summary}
+                  summary={
+                    isEnglishOriginal && podcast.translatedSummary
+                      ? podcast.summary  // 显示英文原文
+                      : (podcast.translatedSummary || podcast.summary)  // 默认显示中文翻译，如果没有翻译则显示原文
+                  }
+                  report={
+                    isEnglishOriginal && podcast.translatedSummary
+                      ? podcast.summary
+                      : (podcast.translatedSummary || podcast.summary)
+                  }
                   fallbackText="暂无播客总结"
                 />
                 {/* 内容受限遮罩 */}
@@ -1031,6 +1060,16 @@ export default function PodcastDetailPage() {
                     <div className="w-2 h-2 rounded-full bg-green-500/60"></div>
                   </div>
                   <h2 className="text-xs font-mono text-slate-600 dark:text-zinc-300">ASR Transcript</h2>
+                  {/* 翻译切换按钮（仅当有翻译时显示） */}
+                  {podcast.translatedTranscript && (
+                    <button
+                      onClick={() => setIsEnglishOriginal(!isEnglishOriginal)}
+                      className="ml-2 px-2 py-0.5 text-xs font-mono border border-slate-200 dark:border-white/10 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-zinc-300 transition-colors"
+                      title={isEnglishOriginal ? '切换到中文翻译' : '切换到英文原文'}
+                    >
+                      {isEnglishOriginal ? 'EN' : '中'}
+                    </button>
+                  )}
                 </div>
                 {!isEditing && (
                   <button
@@ -1070,7 +1109,12 @@ export default function PodcastDetailPage() {
                   >
                     <div className="flex items-center justify-end gap-2 mb-4 pb-2 border-b border-slate-200 dark:border-white/10">
                       <button
-                        onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
+                        onClick={() => handleCopy(
+                          isEnglishOriginal && podcast.translatedTranscript
+                            ? podcast.originalTranscript || ''
+                            : (podcast.translatedTranscript || podcast.originalTranscript || ''),
+                          'ASR原文'
+                        )}
                         className="px-2 py-1 text-xs text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-white/10 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors font-mono"
                         title="复制ASR原文"
                       >
@@ -1084,7 +1128,10 @@ export default function PodcastDetailPage() {
                       </button>
                     </div>
                     <span className="text-slate-400 dark:text-zinc-500">$ </span>
-                    {podcast.originalTranscript}
+                    {isEnglishOriginal && podcast.translatedTranscript
+                      ? podcast.originalTranscript  // 显示英文原文
+                      : (podcast.translatedTranscript || podcast.originalTranscript)  // 默认显示中文翻译，如果没有翻译则显示原文
+                    }
                     {/* 内容受限遮罩 */}
                     {isContentLimited && (
                       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/60 to-black/90 backdrop-blur-sm flex items-end justify-center pb-8 pointer-events-auto">
