@@ -1,6 +1,6 @@
 import { db } from "@/server/db";
 import { transcribeFromUrl } from "@/clients/aliyun-asr";
-import { cleanTranscript, summarize, identifySpeakers, qwenChat } from "@/clients/qwen-text";
+import { cleanTranscript, summarize, identifySpeakers, qwenChat, type ChatMessage } from "@/clients/qwen-text";
 import { embedText } from "@/clients/qwen-embedding";
 import { ensureVectorSetup } from "@/server/vector";
 import { 
@@ -144,7 +144,7 @@ async function translateToChineseLarge(text: string, label: string): Promise<str
 	const translated: string[] = [];
 	for (let i = 0; i < chunks.length; i++) {
 		const chunk = chunks[i];
-		const msg = [
+		const msg: ChatMessage[] = [
 			{
 				role: "system",
 				content:

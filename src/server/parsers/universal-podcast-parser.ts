@@ -467,21 +467,21 @@ export class UniversalPodcastParser {
           
           try {
             // 为 Apple Podcasts 设置特定的 Header
-            const headers: HeadersInit = {
-              ...DEFAULT_HEADERS,
-              'Accept-Encoding': 'gzip, deflate, br',
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache',
-            };
-            
-            // Apple Podcasts 特定 Header
-            if (isApplePodcasts) {
-              headers['Referer'] = 'https://podcasts.apple.com/';
-              headers['Origin'] = 'https://podcasts.apple.com';
-              // 使用更现代的 Safari User-Agent
-              headers['user-agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
-            }
+              const headers: Record<string, string> = {
+                ...(DEFAULT_HEADERS as Record<string, string>),
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+              };
+              
+              // Apple Podcasts 特定 Header
+              if (isApplePodcasts) {
+                headers['Referer'] = 'https://podcasts.apple.com/';
+                headers['Origin'] = 'https://podcasts.apple.com';
+                // 使用更现代的 Safari User-Agent
+                headers['user-agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
+              }
             
             const res = await fetch(url, {
               headers,
