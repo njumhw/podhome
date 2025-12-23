@@ -212,7 +212,6 @@ export async function generateReportWhole(input: ReportGenerationInput, fromChun
 **Step 3 逻辑重组**：运用MECE原则构建报告框架。确保观点相互独立、完全穷尽，不遗漏关键信息，也不重复相同逻辑。按照信息密度决定每个部分的展开程度，不要为了凑字数而强行扩写。
 
 **Step 4 撰写与自查**：开始撰写报告，并实时进行去重检查，确保没有同义反复。在生成每个段落时，自我检查是否存在"车轱辘话"或"同义反复"，特别检查是否在AI总结后又引用了意思完全相同的原话。`;
-  }
 
   const primarySource = transcript;  // ASR原文（唯一源）
   
