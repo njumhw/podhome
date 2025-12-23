@@ -420,17 +420,6 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
             }
         }
 		
-		// 将报告与翻译写入缓存（如果生成成功）
-		try {
-			await setCachedAudio(meta.audioUrl, {
-				summary: reportData?.summary || undefined,
-				translatedTranscript: translatedTranscript || undefined,
-				translatedSummary: translatedSummary || undefined,
-			});
-		} catch (e) {
-			console.warn('写入报告缓存失败（可忽略）:', e);
-		}
-
 		// 4.5 翻译（仅当 ASR 语言为英文时）
 		const language = asrData.language || 'unknown';
 		const isEnglish = language.startsWith('en');
@@ -453,6 +442,17 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					console.warn('⚠️ 总结翻译失败（继续流程，保留英文原文）:', e);
 				}
 			}
+		}
+
+		// 将报告与翻译写入缓存（如果生成成功）
+		try {
+			await setCachedAudio(meta.audioUrl, {
+				summary: reportData?.summary || undefined,
+				translatedTranscript: translatedTranscript || undefined,
+				translatedSummary: translatedSummary || undefined,
+			});
+		} catch (e) {
+			console.warn('写入报告缓存失败（可忽略）:', e);
 		}
 
 		// 5. 保存到数据库
