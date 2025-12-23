@@ -1,23 +1,66 @@
 import { z } from "zod";
 import { jsonError } from "@/utils/http";
 import { parseXiaoyuzhouEpisode } from "@/server/parsers/xiaoyuzhou";
-import { parseXiaoyuzhouEpisode as parseXiaoyuzhouEpisodeSimple } from "@/server/parsers/xiaoyuzhou-simple";
+import { parseUniversalPodcast } from "@/server/parsers/universal-podcast-parser";
 import { getCachedAudio, setCachedAudio } from "@/server/audio-cache";
 import { recordASRUsage, recordLLMUsage } from "@/server/monitoring";
 import { db } from "@/server/db";
 import { withRetry } from "@/utils/error-handler";
 import { transcribeWithAliyunASR } from "@/server/asr";
 import { generateReportWhole } from "@/clients/report-generator";
+import { qwenChat } from "@/clients/qwen-text";
 import { analyzeError, logErrorAnalysis, createErrorContext } from "@/utils/error-analyzer";
+import { Prisma } from "@prisma/client";
+
+// 语言检测（基于 ASR 返回）
+function detectLanguage(asrResult: any): string {
+	const lang = (asrResult?.language || asrResult?.lang || asrResult?.languageCode || "").toLowerCase();
+	if (lang.startsWith("en")) return "en";
+	if (lang.startsWith("zh")) return "zh";
+	return lang || "unknown";
+}
+
+// 按块翻译为中文，避免超长上下文
+async function translateToChineseLarge(text: string, label: string): Promise<string> {
+	if (!text || !text.trim()) return "";
+	const chunkSize = 3500; // 保守块大小，兼顾上下文与性能
+	const chunks: string[] = [];
+	for (let i = 0; i < text.length; i += chunkSize) {
+		chunks.push(text.slice(i, i + chunkSize));
+	}
+
+	const translated: string[] = [];
+	for (let i = 0; i < chunks.length; i++) {
+		const chunk = chunks[i];
+		const msg = [
+			{
+				role: "system",
+				content:
+					"你是专业的中英翻译，请将用户提供的英文内容准确、完整地翻译成中文，不要省略信息，不要添加说明。仅输出翻译后的中文内容。",
+			},
+			{
+				role: "user",
+				content: `第 ${i + 1}/${chunks.length} 段（${label}）英文内容：\n${chunk}`,
+			},
+		];
+		const translatedChunk = await qwenChat(msg, { maxTokens: 6000, temperature: 0.1 });
+		translated.push(translatedChunk.trim());
+	}
+	return translated.join("\n");
+}
 
 // 更新任务指标的函数
-async function updateTaskMetrics(taskId: string, metrics: any) {
+async function updateTaskMetrics(taskId: string | undefined | null, metrics: any) {
+  // 无 taskId 直接跳过，避免无谓的 DB 请求
+  if (!taskId) return;
+
+  // 测试任务跳过
+  if (taskId.startsWith('test_')) {
+    console.log(`[测试模式] 跳过任务指标更新: ${taskId}`);
+    return;
+  }
+
   try {
-    // 如果 taskId 以 test_ 开头，说明是测试调用，跳过数据库更新
-    if (taskId && taskId.startsWith('test_')) {
-      console.log(`[测试模式] 跳过任务指标更新: ${taskId}`);
-      return;
-    }
     await db.taskQueue.update({
       where: { id: taskId },
       data: {
@@ -27,8 +70,12 @@ async function updateTaskMetrics(taskId: string, metrics: any) {
         updatedAt: new Date()
       }
     });
-  } catch (error) {
-    // 如果任务不存在，只记录警告，不中断处理
+  } catch (error: any) {
+    // P2025: 记录警告但不中断主流程
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      console.warn(`[updateTaskMetrics] 任务不存在，跳过更新。taskId=${taskId}`);
+      return;
+    }
     console.warn('更新任务指标失败（可能是测试调用或任务不存在）:', error);
   }
 }
@@ -55,13 +102,26 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		console.log('步骤1: 解析播客元数据');
 		console.log(`[步骤1] 开始时间: ${new Date().toISOString()}`);
 		try {
-			// 使用简化版解析器（静态导入，避免动态导入问题）
-			console.log(`[步骤1] 准备调用解析器: ${url}`);
-			meta = await parseXiaoyuzhouEpisodeSimple(url);
-			console.log(`[步骤1] 解析器返回结果:`, meta ? '成功' : '失败');
-			if (!meta.audioUrl) {
+			// 使用通用解析器（支持 Apple Podcasts 等所有平台）
+			console.log(`[步骤1] 准备调用通用解析器: ${url}`);
+			const universalResult = await parseUniversalPodcast(url);
+			console.log(`[步骤1] 通用解析器返回结果:`, universalResult ? '成功' : '失败');
+			
+			if (!universalResult.audioUrl) {
 				throw new Error('无法获取音频URL');
 			}
+			
+			// 将通用解析器的结果转换为兼容格式
+			meta = {
+				audioUrl: universalResult.audioUrl,
+				title: universalResult.title,
+				podcastTitle: universalResult.podcastTitle,
+				author: universalResult.author,
+				description: universalResult.description,
+				publishedAt: universalResult.publishedAt,
+			};
+			
+			console.log(`[步骤1] 解析成功: 标题=${meta.title || '未知'}, 音频URL=${meta.audioUrl.substring(0, 100)}...`);
 			console.log(`✅ 步骤1完成，耗时: ${((Date.now() - step1StartTime) / 1000).toFixed(1)}秒`);
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
@@ -149,7 +209,8 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 			})),
 			segmentTexts: asrSegmentTexts, // 保存原始分段文本数组
 			duration: asrResult.duration,
-			error: asrResult.error
+			error: asrResult.error,
+			language: detectLanguage(asrResult),
 		};
 		
 		// 更新ASR完成指标
@@ -359,14 +420,38 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
             }
         }
 		
-		// 将报告(summary)写入缓存（如果生成成功）
-		if (reportData?.summary) {
+		// 将报告与翻译写入缓存（如果生成成功）
+		try {
+			await setCachedAudio(meta.audioUrl, {
+				summary: reportData?.summary || undefined,
+				translatedTranscript: translatedTranscript || undefined,
+				translatedSummary: translatedSummary || undefined,
+			});
+		} catch (e) {
+			console.warn('写入报告缓存失败（可忽略）:', e);
+		}
+
+		// 4.5 翻译（仅当 ASR 语言为英文时）
+		const language = asrData.language || 'unknown';
+		const isEnglish = language.startsWith('en');
+		let translatedTranscript: string | null = null;
+		let translatedSummary: string | null = null;
+
+		if (isEnglish) {
+			console.log(`检测到 ASR 语言为英文(${language})，开始中文翻译...`);
 			try {
-				await setCachedAudio(meta.audioUrl, {
-					summary: reportData.summary,
-				});
+				translatedTranscript = await translateToChineseLarge(asrData.transcript, 'transcript');
+				console.log(`✅ 转写翻译完成，长度: ${translatedTranscript.length} 字符`);
 			} catch (e) {
-				console.warn('写入报告缓存失败（可忽略）:', e);
+				console.warn('⚠️ 转写翻译失败（继续流程，保留英文原文）:', e);
+			}
+			if (reportData?.summary) {
+				try {
+					translatedSummary = await translateToChineseLarge(reportData.summary, 'summary');
+					console.log(`✅ 总结翻译完成，长度: ${translatedSummary.length} 字符`);
+				} catch (e) {
+					console.warn('⚠️ 总结翻译失败（继续流程，保留英文原文）:', e);
+				}
 			}
 		}
 
@@ -421,6 +506,9 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					
 					// 构建数据对象，如果reportOutline字段不存在则忽略
 					// 确保所有字段都符合schema要求
+					const transcriptToStore = asrData.transcript || null; // 英文原文保留
+					const summaryToStore = reportData?.summary || null;    // 英文原文保留
+
 					const podcastData: any = {
 						title: (meta.title || '未命名播客').substring(0, 500).trim(), // 限制title长度，避免过长，并去除首尾空格
 						sourceUrl: url.substring(0, 2000).trim(), // 限制URL长度，并去除首尾空格
@@ -430,8 +518,10 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 						duration: asrData.duration ? Math.floor(asrData.duration) : null, // 确保是整数或null
 						status: 'READY' as const, // PodcastStatus枚举值
 						originalTranscript: asrData.transcript || null, // 确保不是undefined
-						transcript: null, // 清洗已移除
-						summary: reportData?.summary || null, // 即使报告生成失败，summary为null也能保存
+						transcript: transcriptToStore, // 英文原文
+						summary: summaryToStore, // 英文原文
+						translatedTranscript: translatedTranscript || null,
+						translatedSummary: translatedSummary || null,
 						showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null, // 限制author长度，并去除首尾空格
 						processingStartedAt: new Date(startTime),
 						processingCompletedAt: new Date(),
@@ -495,8 +585,10 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 							duration: number | null;
 							status: 'READY';
 							originalTranscript: string | null;
-							transcript: null;
+							transcript: string | null;
+							translatedTranscript?: string | null;
 							summary: string | null;
+							translatedSummary?: string | null;
 							showAuthor: string | null;
 							processingStartedAt: Date;
 							processingCompletedAt: Date;
@@ -512,8 +604,10 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 						duration: podcastData.duration,
 						status: podcastData.status,
 						originalTranscript: podcastData.originalTranscript,
-						transcript: null,
+						transcript: podcastData.transcript,
+						translatedTranscript: podcastData.translatedTranscript,
 						summary: podcastData.summary,
+						translatedSummary: podcastData.translatedSummary,
 						showAuthor: podcastData.showAuthor,
 						processingStartedAt: podcastData.processingStartedAt,
 						processingCompletedAt: podcastData.processingCompletedAt,
@@ -526,9 +620,11 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					}
 					
 					try {
-						return await db.podcast.create({
-							data: createData
-						});
+						const created = await withRetry(async () => {
+							return await db.podcast.create({ data: createData });
+						}, 3, 1000);
+						console.log(`✅ 创建新播客（withRetry）: ${created.id}`);
+						return created;
 					} catch (prismaError: any) {
 						// 捕获并记录完整的 Prisma 错误信息
 						const errorMessage = prismaError?.message || String(prismaError);
@@ -685,7 +781,10 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					console.warn('⚠️ 自动标注主题失败:', tagError);
 				}
 				
-				// 构建数据对象
+				// 构建数据对象（英文原文保留，翻译写入 translated*）
+				const transcriptToStore = asrData.transcript || null;
+				const summaryToStore = reportData?.summary || null;
+
 				const podcastData: any = {
 					title: (meta.title || '未命名播客').substring(0, 500).trim(),
 					sourceUrl: url.substring(0, 2000).trim(),
@@ -695,8 +794,10 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					duration: asrData.duration ? Math.floor(asrData.duration) : null,
 					status: 'READY' as const,
 					originalTranscript: asrData.transcript || null,
-					transcript: null,
-					summary: reportData?.summary || null,
+					transcript: transcriptToStore,
+					translatedTranscript: translatedTranscript || null,
+					summary: summaryToStore,
+					translatedSummary: translatedSummary || null,
 					showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null,
 					processingStartedAt: new Date(startTime),
 					processingCompletedAt: new Date(),
@@ -728,21 +829,25 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				let podcast;
 				if (existing) {
 					// 更新现有播客
-					podcast = await db.podcast.update({
-						where: { id: existing.id },
-						data: {
-							...podcastData,
-							// 如果 existing.createdById 不为 null，保留它（可能是 Product A 创建的）
-							createdById: existing.createdById || null,
-						},
-					});
-					console.log(`✅ 更新现有播客: ${podcast.id}`);
+					podcast = await withRetry(async () => {
+						return await db.podcast.update({
+							where: { id: existing.id },
+							data: {
+								...podcastData,
+								// 如果 existing.createdById 不为 null，保留它（可能是 Product A 创建的）
+								createdById: existing.createdById || null,
+							},
+						});
+					}, 3, 1000);
+					console.log(`✅ 更新现有播客（withRetry）: ${podcast.id}`);
 				} else {
 					// 创建新播客
-					podcast = await db.podcast.create({
-						data: podcastData,
-					});
-					console.log(`✅ 创建新播客: ${podcast.id}`);
+					podcast = await withRetry(async () => {
+						return await db.podcast.create({
+							data: podcastData,
+						});
+					}, 3, 1000);
+					console.log(`✅ 创建新播客（withRetry）: ${podcast.id}`);
 				}
 				
 				const isPartialSuccess = reportGenerationFailed;
@@ -761,6 +866,13 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				};
 			} catch (dbError) {
 				console.error('MuleRun 用户保存播客数据失败:', dbError);
+				const errObj: any = dbError;
+				console.error('错误摘要:', {
+					message: errObj?.message,
+					code: errObj?.code,
+					meta: errObj?.meta,
+					stack: errObj?.stack ? errObj.stack.substring(0, 1000) : undefined,
+				});
 				throw dbError;
 			}
 		}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { jsonError } from "@/utils/http";
 import { parseXiaoyuzhouEpisode } from "@/server/parsers/xiaoyuzhou";
 import { parseStablePodcast } from "@/server/parsers/stable-podcast-parser";
+import { parseUniversalPodcast } from "@/server/parsers/universal-podcast-parser";
 import { getCachedAudio, setCachedAudio } from "@/server/audio-cache";
 import { detectAudioFormat } from "@/server/audio-converter";
 
@@ -73,13 +74,33 @@ export async function POST(req: NextRequest) {
 
 async function resolvePodcast(url: string) {
     try {
-        // 优先使用新的稳定解析器
-        console.log(`使用稳定解析器解析: ${url}`);
+        // 优先使用通用解析器（支持 Apple Podcasts 等所有平台）
+        console.log(`[resolve-audio] 使用通用解析器解析: ${url}`);
+        const universalResult = await parseUniversalPodcast(url);
+        
+        // 如果通用解析器成功获取到音频链接，使用其结果
+        if (universalResult.audioUrl && universalResult.confidence > 0.3) {
+            console.log(`[resolve-audio] 通用解析器成功: 可信度=${(universalResult.confidence * 100).toFixed(1)}%, 来源=${universalResult.source}`);
+            return {
+                success: true,
+                audioUrl: universalResult.audioUrl,
+                title: universalResult.title,
+                podcastTitle: universalResult.podcastTitle,
+                author: universalResult.author,
+                description: universalResult.description,
+                publishedAt: universalResult.publishedAt,
+                confidence: universalResult.confidence,
+                extractionMethod: universalResult.source || 'UniversalParser',
+            };
+        }
+        
+        // 如果通用解析器失败，回退到稳定解析器
+        console.log(`[resolve-audio] 通用解析器失败，尝试稳定解析器: ${url}`);
         const stableResult = await parseStablePodcast(url);
         
         // 如果稳定解析器成功获取到音频链接，使用其结果
         if (stableResult.audioUrl && stableResult.confidence > 0.5) {
-            console.log(`稳定解析器成功: 可信度=${stableResult.confidence}, 方法=${stableResult.extractionMethod}`);
+            console.log(`[resolve-audio] 稳定解析器成功: 可信度=${(stableResult.confidence * 100).toFixed(1)}%, 方法=${stableResult.extractionMethod}`);
             return {
                 success: true,
                 audioUrl: stableResult.audioUrl,
@@ -93,10 +114,21 @@ async function resolvePodcast(url: string) {
             };
         }
         
-        // 如果稳定解析器失败，回退到原有解析器
-        console.log(`稳定解析器失败，回退到原有解析器: ${url}`);
+        // 如果稳定解析器也失败，回退到小宇宙专用解析器
+        console.log(`[resolve-audio] 稳定解析器失败，回退到专用解析器: ${url}`);
         if (url.includes('xiaoyuzhoufm.com/episode')) {
-            return await parseXiaoyuzhouEpisode(url);
+            const xiaoyuzhouResult = await parseXiaoyuzhouEpisode(url);
+            return {
+                success: true,
+                audioUrl: xiaoyuzhouResult.audioUrl,
+                title: xiaoyuzhouResult.title,
+                podcastTitle: xiaoyuzhouResult.podcastTitle,
+                author: xiaoyuzhouResult.author,
+                description: xiaoyuzhouResult.description,
+                publishedAt: xiaoyuzhouResult.publishedAt,
+                confidence: 0.8,
+                extractionMethod: 'XiaoyuzhouParser',
+            };
         }
         
         // 最后尝试通用解析
@@ -104,11 +136,26 @@ async function resolvePodcast(url: string) {
         return { audioUrl: generic } as { audioUrl: string | null };
         
     } catch (error) {
-        console.error('稳定解析器出错，回退到原有解析器:', error);
+        console.error('[resolve-audio] 解析器出错，尝试回退:', error);
         
         // 出错时回退到原有逻辑
-        if (url.includes('xiaoyuzhoufm.com/episode')) {
-            return await parseXiaoyuzhouEpisode(url);
+        try {
+            if (url.includes('xiaoyuzhoufm.com/episode')) {
+                const xiaoyuzhouResult = await parseXiaoyuzhouEpisode(url);
+                return {
+                    success: true,
+                    audioUrl: xiaoyuzhouResult.audioUrl,
+                    title: xiaoyuzhouResult.title,
+                    podcastTitle: xiaoyuzhouResult.podcastTitle,
+                    author: xiaoyuzhouResult.author,
+                    description: xiaoyuzhouResult.description,
+                    publishedAt: xiaoyuzhouResult.publishedAt,
+                    confidence: 0.8,
+                    extractionMethod: 'XiaoyuzhouParser',
+                };
+            }
+        } catch (fallbackError) {
+            console.error('[resolve-audio] 回退解析器也失败:', fallbackError);
         }
         
         const generic = await resolveGenericAudio(url);

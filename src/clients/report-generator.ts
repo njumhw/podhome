@@ -292,10 +292,19 @@ ${primarySource}
       }
     ];
     
-    outline = await qwenChat(outlineMessages, { 
+    // 长文本适当拉长等待时间，避免过快回退
+    const isVeryLong = primarySource.length > 100000;
+    const outlineTimeout = isVeryLong ? 25 * 60 * 1000 : 12 * 60 * 1000; // 25分钟/12分钟
+    const outlinePromise = qwenChat(outlineMessages, { 
       maxTokens: 12000, // 大纲使用12K token，确保极其详细（从8K提升到12K）
       temperature: 0.1
     });
+    const outlineRace = Promise.race<string>([
+      outlinePromise,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout at Stage 1 (outline)')), outlineTimeout))
+    ]);
+
+    outline = await outlineRace;
     
     console.log(`qwenChat返回结果，长度: ${outline?.length || 0} 字符`);
     console.log(`大纲内容预览（前200字符）: ${outline?.substring(0, 200) || '空'}...`);
@@ -321,8 +330,8 @@ ${primarySource}
       console.error('错误堆栈:', errorStack.substring(0, 500));
     }
     console.error('═══════════════════════════════════════════════════════════');
-    // 如果大纲生成失败，回退到单轮生成
-    console.log('⚠️ 大纲生成失败，回退到单轮生成模式（不会生成大纲）...');
+    // 如果大纲生成失败，回退到单轮生成，并记录原因
+    console.log(`⚠️ 大纲生成失败，回退到单轮生成模式（不会生成大纲），原因: ${errorMessage || 'Unknown'}`);
     return await generateReportWholeFallback(input, systemPrompt, fromChunked);
   }
   
@@ -423,10 +432,19 @@ ${primarySource}
       }
     ];
     
-    const summary = await qwenChat(reportMessages, { 
+    // 长文本提升等待时间，避免过快回退
+    const isVeryLong = primarySource.length > 100000;
+    const reportTimeout = isVeryLong ? 40 * 60 * 1000 : 20 * 60 * 1000; // 40分钟/20分钟
+    const reportPromise = qwenChat(reportMessages, { 
       maxTokens: 32000, // 使用最大输出限制
       temperature: 0.1
     });
+    const reportRace = Promise.race<string>([
+      reportPromise,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout at Stage 2 (report)')), reportTimeout))
+    ]);
+
+    const summary = await reportRace;
     
     if (!summary || summary.trim().length === 0) {
       throw new Error('报告生成失败：AI返回了空结果');
@@ -459,7 +477,7 @@ ${primarySource}
     
     // 如果报告生成失败，尝试回退到单轮生成模式（即使大纲已生成）
     // 这样可以确保至少生成一份报告，而不是返回空字符串
-    console.log('⚠️ 报告生成失败，回退到单轮生成模式（尝试基于ASR原文直接生成报告）...');
+    console.log(`⚠️ 报告生成失败，回退到单轮生成模式（尝试基于ASR原文直接生成报告），原因: ${errorMessage}`);
     try {
       const fallbackResult = await generateReportWholeFallback(input, systemPrompt, fromChunked);
       // 如果回退成功，保留大纲信息（如果存在）

@@ -892,8 +892,8 @@ export default function PodcastDetailPage() {
             )}
 
             {!isEditing && (
-              <div className="mt-6 flex flex-wrap items-center gap-3 justify-between border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg px-4 py-3 bg-black/30 dark:bg-black/30 [data-theme='light']:bg-slate-50/50">
-                <div className="text-sm text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600 font-mono">
+              <div className="mt-6 flex flex-wrap items-center gap-3 justify-between border border-slate-200 dark:border-white/10 rounded-lg px-4 py-3 bg-white dark:bg-black/30 shadow-none">
+                <div className="text-sm text-slate-900 dark:text-zinc-300 font-mono">
                   值得一读？快点赞并分享给你的小伙伴们吧
                 </div>
                 <div className="flex items-center gap-2">
@@ -927,201 +927,6 @@ export default function PodcastDetailPage() {
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* ASR Transcript - Terminal Log Style */}
-          <div className="rounded-lg border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 bg-black/40 dark:bg-black/40 [data-theme='light']:bg-white/90 backdrop-blur-sm overflow-hidden">
-            {/* Header: Terminal-style header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-black/60 dark:bg-black/60 [data-theme='light']:bg-slate-50 border-b border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200">
-              <div className="flex items-center gap-3">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-500/60"></div>
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/60"></div>
-                  <div className="w-3 h-3 rounded-full bg-green-500/60"></div>
-                </div>
-                <h2 className="text-sm font-mono text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-600">ASR Transcript</h2>
-                {/* Tab切换：ASR原文 / 报告大纲 */}
-                {podcast.reportOutline && (
-                  <div className="flex items-center gap-1 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg p-1 bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-100">
-                    <button
-                      onClick={() => setAsrTab('asr')}
-                      className={`px-3 py-1 text-xs rounded transition-colors font-mono ${
-                        asrTab === 'asr'
-                          ? `${accentStyle.bg} ${accentStyle.text}`
-                          : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
-                      }`}
-                    >
-                      ASR原文
-                    </button>
-                    <button
-                      onClick={() => setAsrTab('outline')}
-                      className={`px-3 py-1 text-xs rounded transition-colors font-mono ${
-                        asrTab === 'outline'
-                          ? `${accentStyle.bg} ${accentStyle.text}`
-                          : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
-                      }`}
-                    >
-                      报告大纲
-                    </button>
-                  </div>
-                )}
-              </div>
-              {!isEditing && (
-                <div className="flex items-center gap-2">
-                  {asrTab === 'asr' && podcast.originalTranscript && (
-                    <>
-                      <button
-                        onClick={() => setShowASR(!showASR)}
-                        className="px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
-                      >
-                        {showASR ? 'Collapse' : 'Expand'}
-                      </button>
-                      {showASR && (
-                        <>
-                          <button
-                            onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
-                            className="px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
-                            title="复制ASR原文"
-                          >
-                            复制
-                          </button>
-                          <button
-                            onClick={() => setShowFullscreenScript(true)}
-                            className={`px-3 py-1.5 text-xs ${accentStyle.text} border ${accentStyle.border} rounded-lg hover:${accentStyle.bg} transition-colors font-mono`}
-                          >
-                            全屏
-                          </button>
-                        </>
-                      )}
-                    </>
-                  )}
-                  {asrTab === 'outline' && podcast.reportOutline && (
-                    <>
-                      <button
-                        onClick={() => handleCopy(podcast.reportOutline || '', '报告大纲')}
-                        className="px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
-                        title="复制报告大纲"
-                      >
-                        复制
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-            {/* Body: Terminal-style content */}
-            {isEditing ? (
-              <div className="p-4">
-                <label className="block text-xs font-medium text-zinc-500 mb-2 font-mono">ASR原文内容</label>
-                <textarea
-                  value={editData.script}
-                  onChange={(e) => setEditData({ ...editData, script: e.target.value })}
-                  className="w-full p-4 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-black/60 dark:bg-black/60 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/10 dark:focus:border-white/10 [data-theme='light']:focus:border-slate-300 font-mono text-sm leading-relaxed"
-                  rows={20}
-                  placeholder="请输入ASR原文内容..."
-                />
-              </div>
-            ) : (
-              <>
-                {asrTab === 'asr' ? (
-                  showASR && podcast.originalTranscript ? (
-                    <div 
-                      className="p-6 font-mono text-sm overflow-y-auto relative"
-                      style={{ 
-                        height: '400px', 
-                        wordWrap: 'break-word', 
-                        overflowWrap: 'break-word',
-                        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                        color: '#ffffff',
-                        lineHeight: '1.8',
-                        whiteSpace: 'pre-wrap'
-                      }}
-                      onWheel={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      <span className="text-zinc-500">$ </span>
-                      {podcast.originalTranscript}
-                      {/* 内容受限遮罩 */}
-                      {isContentLimited && (
-                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/60 to-black/90 backdrop-blur-sm flex items-end justify-center pb-8 pointer-events-auto">
-                          <div className="bg-zinc-900/95 dark:bg-zinc-900/95 [data-theme='light']:bg-white/95 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
-                            <div className="text-center mb-4">
-                              <div className="text-3xl mb-3">🔒</div>
-                              <h3 className="text-lg font-bold text-white dark:text-white [data-theme='light']:text-foreground mb-2">
-                                今日查看次数已用完
-                              </h3>
-                              <p className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 mb-4">
-                                您今天已经查看了 {visitorLimitInfo?.count || 3} 个播客详情。
-                                <br />
-                                注册登录后可无限浏览所有播客！
-                              </p>
-                            </div>
-                            <div className="space-y-3">
-                              <Link
-                                href="/register"
-                                className="block w-full px-6 py-3 bg-white text-black rounded-lg font-bold hover:bg-zinc-200 transition-colors text-center"
-                              >
-                                立即注册
-                              </Link>
-                              <Link
-                                href="/login"
-                                className="visitor-login-btn block w-full px-6 py-3 bg-zinc-800 dark:bg-zinc-800 [data-theme='light']:bg-slate-900 text-white dark:text-white border border-white/10 rounded-lg font-bold hover:bg-zinc-700 dark:hover:bg-zinc-700 [data-theme='light']:hover:bg-slate-800 transition-colors text-center"
-                              >
-                                登录
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-6 text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500 text-xs font-mono text-center bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-50">
-                      {podcast.originalTranscript ? '' : 'No ASR transcript available'}
-                    </div>
-                  )
-                ) : (
-                  // 报告大纲tab
-                  podcast.reportOutline ? (
-                    <div 
-                      className="p-6 overflow-y-auto font-mono text-sm"
-                      style={{ 
-                        height: '400px', 
-                        wordWrap: 'break-word', 
-                        overflowWrap: 'break-word',
-                        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                        color: '#10b981',
-                        lineHeight: '1.8',
-                      }}
-                      onWheel={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          h1: ({ children }) => <h1 className="text-lg font-bold mb-3 mt-4 text-emerald-400 font-mono">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 mt-3 text-emerald-400 font-mono">{children}</h2>,
-                          h3: ({ children }) => <h3 className="text-sm font-semibold mb-2 mt-2 text-emerald-300 font-mono">{children}</h3>,
-                          p: ({ children }) => <p className="mb-2 leading-7 text-emerald-200 font-mono">{children}</p>,
-                          ul: ({ children }) => <ul className="list-none mb-2 space-y-1 text-emerald-200 font-mono">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-none mb-2 space-y-1 text-emerald-200 font-mono">{children}</ol>,
-                          li: ({ children }) => <li className="text-sm before:content-['>_'] before:text-emerald-400 font-mono">{children}</li>,
-                          strong: ({ children }) => <strong className="font-semibold text-emerald-300 font-mono">{children}</strong>,
-                          em: ({ children }) => <em className="italic text-emerald-200 font-mono">{children}</em>,
-                        }}
-                      >
-                        {podcast.reportOutline}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <div className="p-6 text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-500 text-xs font-mono text-center bg-black/40 dark:bg-black/40 [data-theme='light']:bg-slate-50">
-                      暂无报告大纲
-                    </div>
-                  )
-                )}
-              </>
             )}
           </div>
           
@@ -1213,6 +1018,110 @@ export default function PodcastDetailPage() {
               )}
             </div>
           </div>
+
+          {/* ASR Transcript - Compact Style */}
+          {podcast.originalTranscript && (
+            <div className="mt-6 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/30 shadow-sm">
+              {/* Header: Compact header */}
+              <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-black/40 border-b border-slate-200 dark:border-white/10">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 rounded-full bg-red-500/60"></div>
+                    <div className="w-2 h-2 rounded-full bg-yellow-500/60"></div>
+                    <div className="w-2 h-2 rounded-full bg-green-500/60"></div>
+                  </div>
+                  <h2 className="text-xs font-mono text-slate-600 dark:text-zinc-300">ASR Transcript</h2>
+                </div>
+                {!isEditing && (
+                  <button
+                    onClick={() => setShowASR(!showASR)}
+                    className="px-2 py-1 text-xs text-slate-500 dark:text-zinc-400 border border-slate-200 dark:border-white/10 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors font-mono"
+                  >
+                    {showASR ? '收起' : '展开全文'}
+                  </button>
+                )}
+              </div>
+              {/* Body: Terminal-style content */}
+              {isEditing ? (
+                <div className="p-4">
+                  <label className="block text-xs font-medium text-zinc-500 mb-2 font-mono">ASR原文内容</label>
+                  <textarea
+                    value={editData.script}
+                    onChange={(e) => setEditData({ ...editData, script: e.target.value })}
+                    className="w-full p-4 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-200 rounded-lg bg-black/60 dark:bg-black/60 [data-theme='light']:bg-white text-white dark:text-white [data-theme='light']:text-foreground focus:outline-none focus:border-white/10 dark:focus:border-white/10 [data-theme='light']:focus:border-slate-300 font-mono text-sm leading-relaxed"
+                    rows={20}
+                    placeholder="请输入ASR原文内容..."
+                  />
+                </div>
+              ) : (
+                showASR ? (
+                  <div 
+                    className="p-6 font-mono text-sm overflow-y-auto relative bg-white dark:bg-black/40 text-slate-900 dark:text-zinc-200"
+                    style={{ 
+                      height: '400px', 
+                      wordWrap: 'break-word', 
+                      overflowWrap: 'break-word',
+                      lineHeight: '1.8',
+                      whiteSpace: 'pre-wrap'
+                    }}
+                    onWheel={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <div className="flex items-center justify-end gap-2 mb-4 pb-2 border-b border-slate-200 dark:border-white/10">
+                      <button
+                        onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
+                        className="px-2 py-1 text-xs text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-white/10 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors font-mono"
+                        title="复制ASR原文"
+                      >
+                        复制
+                      </button>
+                      <button
+                        onClick={() => setShowFullscreenScript(true)}
+                        className={`px-2 py-1 text-xs ${accentStyle.text} border ${accentStyle.border} rounded hover:${accentStyle.bg} transition-colors font-mono`}
+                      >
+                        全屏
+                      </button>
+                    </div>
+                    <span className="text-slate-400 dark:text-zinc-500">$ </span>
+                    {podcast.originalTranscript}
+                    {/* 内容受限遮罩 */}
+                    {isContentLimited && (
+                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/60 to-black/90 backdrop-blur-sm flex items-end justify-center pb-8 pointer-events-auto">
+                        <div className="bg-zinc-900/95 dark:bg-zinc-900/95 [data-theme='light']:bg-white/95 border border-white/10 dark:border-white/10 [data-theme='light']:border-slate-300 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
+                          <div className="text-center mb-4">
+                            <div className="text-3xl mb-3">🔒</div>
+                            <h3 className="text-lg font-bold text-white dark:text-white [data-theme='light']:text-foreground mb-2">
+                              今日查看次数已用完
+                            </h3>
+                            <p className="text-sm text-gray-400 dark:text-gray-400 [data-theme='light']:text-slate-600 mb-4">
+                              您今天已经查看了 {visitorLimitInfo?.count || 3} 个播客详情。
+                              <br />
+                              注册登录后可无限浏览所有播客！
+                            </p>
+                          </div>
+                          <div className="space-y-3">
+                            <Link
+                              href="/register"
+                              className="block w-full px-6 py-3 bg-white text-black rounded-lg font-bold hover:bg-zinc-200 transition-colors text-center"
+                            >
+                              立即注册
+                            </Link>
+                            <Link
+                              href="/login"
+                              className="visitor-login-btn block w-full px-6 py-3 bg-zinc-800 dark:bg-zinc-800 [data-theme='light']:bg-slate-900 text-white dark:text-white border border-white/10 rounded-lg font-bold hover:bg-zinc-700 dark:hover:bg-zinc-700 [data-theme='light']:hover:bg-slate-800 transition-colors text-center"
+                            >
+                              登录
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null
+              )}
+            </div>
+          )}
         </div>
       </div>
 

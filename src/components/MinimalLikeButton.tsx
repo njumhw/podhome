@@ -104,16 +104,16 @@ export default function MinimalLikeButton({
       disabled={loading}
       className={`group flex items-center gap-3 px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
         liked 
-          ? 'border-transparent' 
-          : 'border-transparent hover:bg-white/5'
+          ? 'border-transparent bg-transparent dark:bg-transparent hover:bg-slate-50 dark:hover:bg-white/5' 
+          : 'border-transparent hover:bg-slate-50/60 dark:hover:bg-white/5'
       } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${className}`}
     >
       {/* Heart icon */}
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
-        fill={liked ? '#000000' : 'none'}
-        stroke={liked ? `url(#heart-gradient-border-${podcastId})` : 'currentColor'}
+        fill={liked ? `url(#heart-gradient-fill-${podcastId})` : 'none'}
+        stroke={liked ? '#000000' : 'currentColor'}
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -122,10 +122,10 @@ export default function MinimalLikeButton({
         }`}
       >
         <defs>
-          <linearGradient id={`heart-gradient-border-${podcastId}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#8b5cf6" />
-            <stop offset="50%" stopColor="#ec4899" />
-            <stop offset="100%" stopColor="#f43f5e" />
+          <linearGradient id={`heart-gradient-fill-${podcastId}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#fb923c" />
+            <stop offset="50%" stopColor="#f97316" />
+            <stop offset="100%" stopColor="#facc15" />
           </linearGradient>
         </defs>
         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />

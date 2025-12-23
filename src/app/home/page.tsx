@@ -1261,17 +1261,18 @@ export default function HomePage() {
           }
           
         } else if (taskStatus.status === 'FAILED') {
-          // 不要立即停止轮询，继续轮询一段时间，确认任务真的失败而不是中间状态
-          // 因为任务可能在ASR阶段失败后，后端会自动重试或继续处理
+          // 连续 FAILED 轮询的上限，防止无限循环
+          const MAX_FAILED_POLLS = 8; // 超过8次直接判失败
+          const MAX_FAILED_DURATION = 2 * 60 * 1000; // 或超过2分钟
+
           failedPollCount++;
           
-          // 如果连续5次轮询都是FAILED，且距离任务开始时间超过2分钟，才真正认为失败
           const taskStartTime = taskStatus.startedAt ? new Date(taskStatus.startedAt).getTime() : Date.now();
           const timeSinceStart = Date.now() - taskStartTime;
-          const shouldMarkAsFailed = failedPollCount >= 5 && timeSinceStart > 120000; // 2分钟
+          const shouldMarkAsFailed = failedPollCount >= MAX_FAILED_POLLS || timeSinceStart > MAX_FAILED_DURATION;
           
           if (!shouldMarkAsFailed) {
-            console.log(`⚠️ 检测到FAILED状态，但继续轮询确认（${failedPollCount}/5次，已运行${Math.round(timeSinceStart/1000)}秒）`);
+            console.log(`⚠️ 检测到FAILED状态，但继续轮询确认（${failedPollCount}/${MAX_FAILED_POLLS}次，已运行${Math.round(timeSinceStart/1000)}秒）`);
             return; // 继续轮询
           }
           

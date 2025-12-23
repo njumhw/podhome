@@ -15,7 +15,9 @@ type Detail = {
 	guests?: string | null;
 	publishedAt?: string | null;
 	summary?: string | null;
+	translatedSummary?: string | null;
 	transcript?: string | null;
+	translatedTranscript?: string | null;
 	audioUrl?: string | null;
 };
 
@@ -34,6 +36,8 @@ export default function PodcastDetail({ params }: { params: Promise<{ id: string
 			.catch(() => setDetail(null));
 	}, [id]);
 
+	const [isEnglishOriginal, setIsEnglishOriginal] = useState(false); // 默认显示中文翻译
+
 	return (
 		<div className="space-y-6">
 			<div className="flex items-center justify-between">
@@ -43,22 +47,72 @@ export default function PodcastDetail({ params }: { params: Promise<{ id: string
 			{detail && (
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 					<section className="md:col-span-2 space-y-3">
-						<h3 className="text-base font-semibold">逐字稿</h3>
-						<div className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-sm leading-6 bg-white/60 dark:bg-black/40 whitespace-pre-wrap">
-							{detail.transcript || "逐字稿内容暂未生成。"}
+						<div className="flex items-center justify-between gap-2">
+							<h3 className="text-base font-semibold">逐字稿</h3>
+							{detail.translatedTranscript && (
+								<button
+									type="button"
+									onClick={() => setIsEnglishOriginal((v) => !v)}
+									className="flex items-center gap-2 rounded-full border border-gray-300/70 dark:border-gray-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+								>
+									<span className="inline-flex items-center gap-1">
+										<span className={`w-2 h-2 rounded-full ${isEnglishOriginal ? 'bg-blue-500' : 'bg-green-500'}`} />
+										{isEnglishOriginal ? '显示译文' : '显示原文'}
+									</span>
+									<span className="text-gray-500">EN / 中</span>
+								</button>
+							)}
 						</div>
-						{detail.transcript && <CopyButton text={detail.transcript} label="一键复制逐字稿" />}
+						{(() => {
+							const transcriptToShow =
+								detail.translatedTranscript && !isEnglishOriginal
+									? detail.translatedTranscript
+									: detail.transcript;
+							return (
+								<>
+									<div className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-sm leading-6 bg-white/60 dark:bg-black/40 whitespace-pre-wrap">
+										{transcriptToShow || "逐字稿内容暂未生成。"}
+									</div>
+									{transcriptToShow && <CopyButton text={transcriptToShow} label="一键复制逐字稿" />}
+								</>
+							);
+						})()}
 					</section>
 					<aside className="space-y-3">
-						<h3 className="text-base font-semibold">总结</h3>
-						<SummaryDisplay 
-							summary={detail.summary}
-							report={detail.summary}
-							className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-sm leading-6 bg-white/60 dark:bg-black/40"
-							showMarkdown={false}
-							fallbackText="总结内容暂未生成。"
-						/>
-						{detail.summary && <CopyButton text={detail.summary} label="一键复制总结" />}
+						<div className="flex items-center justify-between gap-2">
+							<h3 className="text-base font-semibold">总结</h3>
+							{detail.translatedSummary && (
+								<button
+									type="button"
+									onClick={() => setIsEnglishOriginal((v) => !v)}
+									className="flex items-center gap-2 rounded-full border border-gray-300/70 dark:border-gray-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+								>
+									<span className="inline-flex items-center gap-1">
+										<span className={`w-2 h-2 rounded-full ${isEnglishOriginal ? 'bg-blue-500' : 'bg-green-500'}`} />
+										{isEnglishOriginal ? '显示译文' : '显示原文'}
+									</span>
+									<span className="text-gray-500">EN / 中</span>
+								</button>
+							)}
+						</div>
+						{(() => {
+							const summaryToShow =
+								detail.translatedSummary && !isEnglishOriginal
+									? detail.translatedSummary
+									: detail.summary;
+							return (
+								<>
+									<SummaryDisplay 
+										summary={summaryToShow}
+										report={summaryToShow}
+										className="rounded-xl border border-black/10 dark:border-white/10 p-4 text-sm leading-6 bg-white/60 dark:bg-black/40"
+										showMarkdown={false}
+										fallbackText="总结内容暂未生成。"
+									/>
+									{summaryToShow && <CopyButton text={summaryToShow} label="一键复制总结" />}
+								</>
+							);
+						})()}
 						<div className="pt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
                             <EditMeta id={id} detail={detail} onUpdated={(d)=>setDetail(d)} />
 							<p>嘉宾：{detail.guests || "—"}</p>

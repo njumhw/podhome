@@ -1,6 +1,6 @@
 import { db } from "@/server/db";
 import { transcribeFromUrl } from "@/clients/aliyun-asr";
-import { cleanTranscript, summarize, identifySpeakers } from "@/clients/qwen-text";
+import { cleanTranscript, summarize, identifySpeakers, qwenChat } from "@/clients/qwen-text";
 import { embedText } from "@/clients/qwen-embedding";
 import { ensureVectorSetup } from "@/server/vector";
 import { 
@@ -124,6 +124,43 @@ function smartChunk(text: string): { startSec: number; endSec: number; text: str
 	}));
 }
 
+// 语言检测
+function detectLanguage(asr: any): string {
+	const lang = (asr?.language || asr?.lang || asr?.languageCode || "").toLowerCase();
+	if (lang.startsWith("en")) return "en";
+	if (lang.startsWith("zh")) return "zh";
+	return lang || "unknown";
+}
+
+// 分片翻译英文 -> 中文
+async function translateToChineseLarge(text: string, label: string): Promise<string> {
+	if (!text || !text.trim()) return "";
+	const chunkSize = 3500;
+	const chunks: string[] = [];
+	for (let i = 0; i < text.length; i += chunkSize) {
+		chunks.push(text.slice(i, i + chunkSize));
+	}
+
+	const translated: string[] = [];
+	for (let i = 0; i < chunks.length; i++) {
+		const chunk = chunks[i];
+		const msg = [
+			{
+				role: "system",
+				content:
+					"你是专业的中英翻译，请将用户提供的英文内容准确、完整地翻译成中文，不要省略信息，不要添加解释。仅输出翻译后的中文内容。",
+			},
+			{
+				role: "user",
+				content: `第 ${i + 1}/${chunks.length} 段（${label}）英文内容：\n${chunk}`,
+			},
+		];
+		const translatedChunk = await qwenChat(msg, { maxTokens: 6000, temperature: 0.1 });
+		translated.push(translatedChunk.trim());
+	}
+	return translated.join("\n");
+}
+
 // 兼容性函数，保持原有接口
 function naiveChunk(text: string): { startSec: number; endSec: number; text: string }[] {
 	return smartChunk(text).map(chunk => ({
@@ -148,6 +185,8 @@ export async function runPipeline(podcastId: string) {
 	// 步骤1: ASR转写（必须串行，因为后续步骤依赖此结果）
 	const asr = await withTask(podcastId, "TRANSCRIBE", async () => transcribeFromUrl(audioUrl));
 	const rawTranscript = asr.segments.map(s => `${s.speaker ?? "Speaker"}:${s.text}`).join("\n");
+	const language = detectLanguage(asr);
+	const isEnglish = language.startsWith("en");
 	
 	// 保存原始转写结果
 	await db.podcast.update({ 
@@ -177,14 +216,30 @@ export async function runPipeline(podcastId: string) {
 	]);
 
 	// 步骤5: 批量数据库操作优化
-	await db.podcast.update({ 
-		where: { id: podcastId }, 
-		data: { 
-			transcript: withSpeakers, 
-			summary, 
+	let translatedTranscript: string | null = null;
+	let translatedSummary: string | null = null;
+
+	if (isEnglish) {
+		try {
+			translatedTranscript = await translateToChineseLarge(withSpeakers, "transcript");
+			if (summary) {
+				translatedSummary = await translateToChineseLarge(summary, "summary");
+			}
+		} catch (e) {
+			console.warn("⚠️ 翻译失败（继续保留英文原文）:", e);
+		}
+	}
+
+	await db.podcast.update({
+		where: { id: podcastId },
+		data: {
+			transcript: withSpeakers,            // 原文（英文/中文）
+			summary: summary || null,            // 原文总结
+			translatedTranscript: translatedTranscript || null,
+			translatedSummary: translatedSummary || null,
 			status: "READY",
 			processingCompletedAt: new Date()
-		} 
+		}
 	});
 
 	// 批量处理分块数据

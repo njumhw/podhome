@@ -19,24 +19,24 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   accessLogs   AccessLog[]
+  comments     Comment[]
+  commentLikes CommentLike[]
   inviteCodes  InviteCode[]  @relation("UserInviteCodes")
   invitesUsed  InviteCode[]  @relation("InviteUsedBy")
   podcasts     Podcast[]
-  comments     Comment[]
-  commentLikes CommentLike[]
   podcastLikes PodcastLike[]
 }
 
 model InviteCode {
   id          String    @id @default(cuid())
   code        String    @unique
-  targetRole  UserRole  @default(PODCASTER) // 邀请码目标角色（目前仅用于 Reader → Podcaster 升级）
   createdAt   DateTime  @default(now())
   expiresAt   DateTime?
   maxUses     Int       @default(1)
   uses        Int       @default(0)
   createdById String?
   usedById    String?
+  targetRole  UserRole  @default(PODCASTER)
   createdBy   User?     @relation("UserInviteCodes", fields: [createdById], references: [id])
   usedBy      User?     @relation("InviteUsedBy", fields: [usedById], references: [id])
 }
@@ -67,7 +67,7 @@ model Prompt {
 }
 
 model Podcast {
-  id                    String            @id @default(cuid())
+  id                    String                @id @default(cuid())
   title                 String
   sourceUrl             String
   audioUrl              String?
@@ -77,28 +77,30 @@ model Podcast {
   episodeNumber         String?
   duration              Int?
   fileSize              BigInt?
-  language              String?           @default("zh")
-  status                PodcastStatus     @default(PROCESSING)
+  language              String?               @default("zh")
+  status                PodcastStatus         @default(PROCESSING)
   originalTranscript    String?
   transcript            String?
   summary               String?
-  reportOutline         String? // 报告大纲/框架（两轮生成的第一轮产出）
   processingStartedAt   DateTime?
   processingCompletedAt DateTime?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
   createdById           String?
   topicId               String?
   showAuthor            String?
   showTitle             String?
+  reportOutline         String?
+  translatedTranscript  String?
+  translatedSummary     String?
   accessLogs            AccessLog[]
-  createdBy             User?             @relation(fields: [createdById], references: [id])
-  topic                 Topic?            @relation(fields: [topicId], references: [id])
+  comments              Comment[]
+  mulerunQueries        MulerunQueryHistory[]
+  createdBy             User?                 @relation(fields: [createdById], references: [id])
+  topic                 Topic?                @relation(fields: [topicId], references: [id])
+  likes                 PodcastLike[]
   taskLogs              TaskLog[]
   chunks                TranscriptChunk[]
-  comments              Comment[]
-  likes                 PodcastLike[]
-  mulerunQueries        MulerunQueryHistory[]
 
   @@index([status, updatedAt])
 }
@@ -118,10 +120,10 @@ model AccessLog {
   id           String      @id @default(cuid())
   podcastId    String?
   userId       String?
-  userIp       String?     // Visitor 的 IP 地址
-  userAgent    String?     // Visitor 的 User-Agent
   createdAt    DateTime    @default(now())
   audioCacheId String?
+  userAgent    String?
+  userIp       String?
   audioCache   AudioCache? @relation(fields: [audioCacheId], references: [id])
   podcast      Podcast?    @relation(fields: [podcastId], references: [id])
   user         User?       @relation(fields: [userId], references: [id])
@@ -129,7 +131,7 @@ model AccessLog {
   @@index([podcastId, createdAt])
   @@index([audioCacheId, createdAt])
   @@index([createdAt])
-  @@index([userIp, userAgent, createdAt]) // Visitor 访问计数查询优化
+  @@index([userIp, userAgent, createdAt])
 }
 
 model TaskLog {
@@ -179,24 +181,26 @@ model ApiUsageLog {
 }
 
 model AudioCache {
-  id          String      @id @default(cuid())
-  audioUrl    String      @unique
-  title       String?
-  author      String?
-  duration    Int?
-  transcript  String?
-  script      String?
-  summary     String?
-  segments    String[]    @default([]) // ASR分段数据
-  metadata    Json?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  originalUrl String?
-  topicId     String?
-  publishedAt DateTime?
-  accessLogs  AccessLog[]
-  topic       Topic?      @relation(fields: [topicId], references: [id])
-  comments    Comment[]
+  id                   String      @id @default(cuid())
+  audioUrl             String      @unique
+  title                String?
+  author               String?
+  duration             Int?
+  transcript           String?
+  script               String?
+  summary              String?
+  metadata             Json?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  originalUrl          String?
+  topicId              String?
+  publishedAt          DateTime?
+  segments             String[]    @default([])
+  translatedTranscript String?
+  translatedSummary    String?
+  accessLogs           AccessLog[]
+  topic                Topic?      @relation(fields: [topicId], references: [id])
+  comments             Comment[]
 
   @@index([audioUrl])
   @@index([originalUrl])
@@ -226,11 +230,11 @@ model TaskQueue {
   data        Json
   result      Json?
   error       String?
-  metrics     Json? // 处理指标数据
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   startedAt   DateTime?
   completedAt DateTime?
+  metrics     Json?
 
   @@index([status])
   @@index([createdAt])
@@ -238,18 +242,17 @@ model TaskQueue {
 }
 
 model Comment {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   content      String
   podcastId    String?
   audioCacheId String?
   userId       String
-  likes        Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  user         User          @relation(fields: [userId], references: [id])
-  podcast      Podcast?      @relation(fields: [podcastId], references: [id])
+  likes        Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   audioCache   AudioCache?   @relation(fields: [audioCacheId], references: [id])
+  podcast      Podcast?      @relation(fields: [podcastId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
   commentLikes CommentLike[]
 
   @@index([podcastId, createdAt])
@@ -262,9 +265,8 @@ model CommentLike {
   commentId String
   userId    String
   createdAt DateTime @default(now())
-
-  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id])
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
 
   @@unique([commentId, userId])
   @@index([commentId])
@@ -274,65 +276,63 @@ model CommentLike {
 model PodcastLike {
   id        String   @id @default(cuid())
   podcastId String
-  userId    String? // 允许为null，支持游客点赞
-  userIp    String? // 游客IP地址
+  userId    String?
+  userIp    String?
   createdAt DateTime @default(now())
+  podcast   Podcast  @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
 
-  podcast Podcast @relation(fields: [podcastId], references: [id], onDelete: Cascade)
-  user    User?   @relation(fields: [userId], references: [id])
-
-  @@unique([podcastId, userId, userIp]) // 确保同一用户/IP不能重复点赞
+  @@unique([podcastId, userId, userIp])
   @@index([podcastId])
   @@index([userId])
   @@index([userIp])
 }
 
 model MulerunSession {
-  id          String   @id @default(uuid())
-  sessionId   String   @unique  // MuleRun 的 sessionId (UUID, 36 chars)
-  userId      String   // MuleRun 的 userId (SHA-256, 64 chars)
-  agentId     String   // MuleRun 的 agentId (UUID, 36 chars)
-  status      String   @default("running") // running, completed, error
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  expiresAt   DateTime // 基于 Max Age 计算（当前时间 + 180 分钟）
-  
-  queries     MulerunQueryHistory[]
-  
+  id        String                @id @default(uuid())
+  sessionId String                @unique
+  userId    String
+  agentId   String
+  status    String                @default("running")
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  expiresAt DateTime
+  queries   MulerunQueryHistory[]
+
   @@index([sessionId])
   @@index([userId])
   @@index([expiresAt])
 }
 
 model MulerunQueryHistory {
-  id          String   @id @default(uuid())
+  id          String         @id @default(uuid())
   sessionId   String
-  session     MulerunSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  podcastId   String?  // 关联的播客 ID（如果处理成功）
-  podcast     Podcast? @relation(fields: [podcastId], references: [id])
-  queryUrl    String   // 用户输入的播客 URL
-  status      String   @default("pending") // pending, processing, completed, failed, timeout
-  meteringId  String?  @unique // Metering API 的幂等 ID
-  costCredits Float?   // 报告的成本（credits，100 credits = 0.01）
-  error       String?  // 错误信息（如果失败）
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  podcastId   String?
+  queryUrl    String
+  status      String         @default("pending")
+  meteringId  String?        @unique
+  costCredits Float?
+  error       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
   startedAt   DateTime?
   completedAt DateTime?
-  timeoutAt   DateTime? // 超时时间（创建时间 + 3 小时）
-  
+  timeoutAt   DateTime?
+  podcast     Podcast?       @relation(fields: [podcastId], references: [id])
+  session     MulerunSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
   @@index([sessionId])
   @@index([status])
   @@index([timeoutAt])
 }
 
 enum UserRole {
-  READER          // 读者：无需邀请码注册，可浏览、点赞、评论，不能上传
-  PODCASTER       // 播客创作者：通过邀请码升级，每日可上传 1 次
-  PODCASTER_VIP   // VIP 播客创作者：管理员授权，无限制上传
-  ADMIN           // 管理员：所有权限 + 后台管理
-  USER            // 旧角色（已废弃，保留用于兼容）
-  GUEST           // 游客角色（已废弃，保留用于兼容）
+  USER
+  ADMIN
+  GUEST
+  READER
+  PODCASTER
+  PODCASTER_VIP
 }
 
 enum PodcastStatus {
