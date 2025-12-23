@@ -6,6 +6,7 @@ export interface ReportGenerationInput {
   originalTranscript?: string; // ASR原文（A1）
   segments?: string[]; // ASR分段数组（按时间分割的73段），优先使用此字段进行分块
   title?: string;
+  language?: string; // ASR检测到的语言（'en' 或 'zh'），用于决定输出语言
 }
 
 export interface ReportGenerationOutput {
@@ -16,12 +17,54 @@ export interface ReportGenerationOutput {
 }
 
 /**
+ * 根据语言生成相应的提示词
+ */
+function getSystemPromptByLanguage(language?: string, basePrompt?: string): string {
+  const isEnglish = language?.startsWith('en');
+  const base = basePrompt || `你是前麦肯锡全球合伙人，前哈佛大学心理系教授，现阿里巴巴战略部负责人。你是一位拥有丰富战略咨询、学术研究和商业实践经验的专家。
+
+请基于ASR原文生成一份专业的播客总结/报告，采用麦肯锡研究报告或投资公司研报的风格。报告应该适合深度阅读，使用完整的长句子进行深入阐述，避免散点式的短句罗列。`;
+
+  if (isEnglish) {
+    // 英文播客：要求输出英文总结
+    return `${base}
+
+**重要：输出语言要求**
+- ASR原文是英文，请生成高质量的英文总结报告
+- 使用专业、流畅的英文进行总结，保持原文的专业术语和表达风格
+- 确保准确理解英文内容的含义，包括专业术语、文化背景、具体案例和数据
+- 输出必须是流畅、专业、地道的英文报告，符合英文读者的阅读习惯
+
+**信息密度与长度原则：**
+- 密度优先：报告长度应完全取决于源内容的信息密度，不要为了凑字数而强行扩写
+- MECE原则：确保观点相互独立、完全穷尽，不遗漏关键信息，也不重复相同逻辑
+- 引用逻辑：禁止同义重复，引用应作为证据或保留独特表达，而不是重复AI已总结的内容
+- 去重检查：确保每句话都提供新的信息增量，避免"车轱辘话"或"同义反复"`;
+  } else {
+    // 中文播客：要求输出中文总结（原有逻辑）
+    return `${base}
+
+**重要：多语言支持**
+- 无论ASR原文是中文还是英文，都必须生成高质量的中文总结报告
+- 如果ASR原文是英文，请先准确理解英文内容的含义，包括专业术语、文化背景、具体案例和数据
+- 确保英文专业术语的准确翻译和理解，保持原意的完整性和准确性
+- 输出必须是流畅、专业的中文报告，符合中文读者的阅读习惯
+
+**信息密度与长度原则：**
+- 密度优先：报告长度应完全取决于源内容的信息密度，不要为了凑字数而强行扩写
+- MECE原则：确保观点相互独立、完全穷尽，不遗漏关键信息，也不重复相同逻辑
+- 引用逻辑：禁止同义重复，引用应作为证据或保留独特表达，而不是重复AI已总结的内容
+- 去重检查：确保每句话都提供新的信息增量，避免"车轱辘话"或"同义反复"`;
+  }
+}
+
+/**
  * 两轮生成访谈报告（方案2：框架+填充）
  * 第一轮：生成详细大纲/框架
  * 第二轮：基于框架+原始ASR生成完整报告
  */
 export async function generateReportWhole(input: ReportGenerationInput, fromChunked: boolean = false): Promise<ReportGenerationOutput> {
-  const { transcript, originalTranscript, title, segments } = input;
+  const { transcript, originalTranscript, title, segments, language } = input;
   const startTime = Date.now();
   
   // 检查输入长度限制（Qwen Flash支持最大约1M tokens，中文约1:1）
@@ -53,47 +96,31 @@ export async function generateReportWhole(input: ReportGenerationInput, fromChun
   if (!shouldUseTwoStage) {
     console.log(`音频段落数: ${segmentCount}，小于等于40，使用单轮生成（直接基于ASR原文生成总结）`);
     // 获取系统提示词
-    let fallbackSystemPrompt: string;
+    let basePrompt: string | undefined;
     try {
-      fallbackSystemPrompt = await getPrompt('report_generation_whole');
+      basePrompt = await getPrompt('report_generation_whole');
     } catch (error) {
       console.warn('Failed to get dynamic prompt, using fallback:', error);
-      fallbackSystemPrompt = `你是前麦肯锡全球合伙人，前哈佛大学心理系教授，现阿里巴巴战略部负责人。你是一位拥有丰富战略咨询、学术研究和商业实践经验的专家。
-
-请基于ASR原文生成一份专业的播客总结/报告，采用麦肯锡研究报告或投资公司研报的风格。报告应该适合深度阅读，使用完整的长句子进行深入阐述，避免散点式的短句罗列。
-
-**重要：多语言支持**
-- 无论ASR原文是中文还是英文，都必须生成高质量的中文总结报告
-- 如果ASR原文是英文，请先准确理解英文内容的含义，包括专业术语、文化背景、具体案例和数据
-- 确保英文专业术语的准确翻译和理解，保持原意的完整性和准确性
-- 输出必须是流畅、专业的中文报告，符合中文读者的阅读习惯
-
-**信息密度与长度原则：**
-- 密度优先：报告长度应完全取决于源内容的信息密度，不要为了凑字数而强行扩写
-- MECE原则：确保观点相互独立、完全穷尽，不遗漏关键信息，也不重复相同逻辑
-- 引用逻辑：禁止同义重复，引用应作为证据或保留独特表达，而不是重复AI已总结的内容
-- 去重检查：确保每句话都提供新的信息增量，避免"车轱辘话"或"同义反复"`;
     }
+    const fallbackSystemPrompt = getSystemPromptByLanguage(language, basePrompt);
     return await generateReportWholeFallback(input, fallbackSystemPrompt, fromChunked);
   }
   
   console.log(`开始两轮生成访谈报告，文本长度: ${transcript.length} 字符，段落数: ${segmentCount}`);
   
   // 获取动态系统提示词
-  let systemPrompt: string;
+  let basePrompt: string | undefined;
   try {
-    systemPrompt = await getPrompt('report_generation_whole');
+    basePrompt = await getPrompt('report_generation_whole');
   } catch (error) {
     console.warn('Failed to get dynamic prompt, using fallback:', error);
-    systemPrompt = `你是前麦肯锡全球合伙人，前哈佛大学心理系教授，现阿里巴巴战略部负责人。你是一位拥有丰富战略咨询、学术研究和商业实践经验的专家。
-
-请基于ASR原文生成一份专业的播客总结/报告，采用麦肯锡研究报告或投资公司研报的风格。报告应该适合深度阅读，使用完整的长句子进行深入阐述，避免散点式的短句罗列。
-
-**重要：多语言支持**
-- 无论ASR原文是中文还是英文，都必须生成高质量的中文总结报告
-- 如果ASR原文是英文，请先准确理解英文内容的含义，包括专业术语、文化背景、具体案例和数据
-- 确保英文专业术语的准确翻译和理解，保持原意的完整性和准确性
-- 输出必须是流畅、专业的中文报告，符合中文读者的阅读习惯
+  }
+  
+  // 根据语言生成相应的提示词
+  let systemPrompt = getSystemPromptByLanguage(language, basePrompt);
+  
+  // 添加两轮生成的特定限制
+  systemPrompt += `
 
 **重要限制：**
 - 仅基于本次提供的播客内容撰写，禁止引入外部信息

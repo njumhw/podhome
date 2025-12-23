@@ -135,6 +135,11 @@ export default function PodcastDetailPage() {
       const data = await res.json();
       setPodcast(data);
       
+      // 如果有翻译字段，默认显示英文原文（isEnglishOriginal = true）
+      if (data.translatedSummary || data.translatedTranscript) {
+        setIsEnglishOriginal(true);
+      }
+      
       // 初始化共享点赞状态（从播客数据获取初始值）
       // 使用传入的 currentUser 参数，如果没有则使用 user 状态
       const userToCheck = currentUser !== undefined ? currentUser : user;

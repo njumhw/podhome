@@ -269,7 +269,8 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 			// originalTranscript 不再提供
 			segments: asrData.segmentTexts && asrData.segmentTexts.length > 0 ? asrData.segmentTexts : undefined, // ASR分段（73段），优先使用此进行分块
 			title: meta.title || undefined,
-			audioUrl: meta.audioUrl 
+			audioUrl: meta.audioUrl,
+			language: asrData.language || undefined // 传递ASR检测到的语言，用于决定输出语言
 		};
 		
 		if (asrData.segmentTexts && asrData.segmentTexts.length > 0) {
