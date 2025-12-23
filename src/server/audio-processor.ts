@@ -8,7 +8,7 @@ import { db } from "@/server/db";
 import { withRetry } from "@/utils/error-handler";
 import { transcribeWithAliyunASR } from "@/server/asr";
 import { generateReportWhole } from "@/clients/report-generator";
-import { qwenChat } from "@/clients/qwen-text";
+import { qwenChat, ChatMessage } from "@/clients/qwen-text";
 import { analyzeError, logErrorAnalysis, createErrorContext } from "@/utils/error-analyzer";
 import { Prisma } from "@prisma/client";
 
@@ -32,7 +32,7 @@ async function translateToChineseLarge(text: string, label: string): Promise<str
 	const translated: string[] = [];
 	for (let i = 0; i < chunks.length; i++) {
 		const chunk = chunks[i];
-		const msg = [
+		const msg: ChatMessage[] = [
 			{
 				role: "system",
 				content:
