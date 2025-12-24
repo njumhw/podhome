@@ -80,7 +80,8 @@ export default function HomePage() {
 
   // 加载主题列表
 
-  const fetchWithTimeout = async (url: string, timeout = 30000): Promise<Response> => {
+  // 带超时的 fetch（超时时间增加到 60 秒）
+  const fetchWithTimeout = async (url: string, timeout = 60000): Promise<Response> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     try {
@@ -103,6 +104,62 @@ export default function HomePage() {
     }
   };
 
+  // 带重试机制的 fetch（自动重试 2-3 次）
+  const fetchWithRetry = async (
+    url: string,
+    options: { maxRetries?: number; retryDelay?: number; timeout?: number } = {}
+  ): Promise<Response> => {
+    const { maxRetries = 3, retryDelay = 2000, timeout = 60000 } = options;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetchWithTimeout(url, timeout);
+        
+        // 如果是 5xx 服务器错误，重试
+        if (response.status >= 500 && response.status < 600 && attempt < maxRetries) {
+          console.warn(`[fetchWithRetry] 服务器错误 ${response.status}，第 ${attempt}/${maxRetries} 次重试:`, url);
+          await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+          continue;
+        }
+        
+        // 如果是 408 超时错误，重试
+        if (response.status === 408 && attempt < maxRetries) {
+          console.warn(`[fetchWithRetry] 请求超时，第 ${attempt}/${maxRetries} 次重试:`, url);
+          await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+          continue;
+        }
+        
+        return response;
+      } catch (error: any) {
+        lastError = error;
+        
+        // 网络错误或超时，重试
+        if (attempt < maxRetries) {
+          const isNetworkError = 
+            error.name === 'AbortError' ||
+            error.name === 'TypeError' ||
+            error.message?.includes('fetch') ||
+            error.message?.includes('network') ||
+            error.message?.includes('Failed to fetch');
+          
+          if (isNetworkError) {
+            console.warn(`[fetchWithRetry] 网络错误，第 ${attempt}/${maxRetries} 次重试:`, url, error.message);
+            await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+            continue;
+          }
+        }
+        
+        // 最后一次尝试失败，抛出错误
+        if (attempt === maxRetries) {
+          throw error;
+        }
+      }
+    }
+    
+    throw lastError || new Error('请求失败');
+  };
+
   const prefetchLatest = (limit = LATEST_PREFETCH_LIMIT, options?: { resetDisplay?: boolean; force?: boolean }): Promise<PodcastItem[] | null> => {
     if (!options?.force) {
       if (limit <= LATEST_PREFETCH_LIMIT && latestPrefetched) {
@@ -115,7 +172,7 @@ export default function HomePage() {
 
     const fetchTask = (async () => {
       try {
-        const res = await fetchWithTimeout(`/api/public/list?type=latest&limit=${limit}`);
+        const res = await fetchWithRetry(`/api/public/list?type=latest&limit=${limit}`, { maxRetries: 2, retryDelay: 2000 });
         if (!res.ok) {
           const errorText = await res.text();
           console.error('[首页] 预加载最新播客失败:', res.status, errorText);
@@ -178,8 +235,8 @@ export default function HomePage() {
       setLoading(prev => ({ ...prev, latest: true, hot: true }));
 
       const [latestRes, hotRes] = await Promise.allSettled([
-        fetchWithTimeout(`/api/public/list?type=latest&limit=${LATEST_INITIAL_LIMIT}`),
-        fetchWithTimeout(`/api/public/list?type=hot&limit=15&_t=${timestamp}`)
+        fetchWithRetry(`/api/public/list?type=latest&limit=${LATEST_INITIAL_LIMIT}`, { maxRetries: 3, retryDelay: 2000 }),
+        fetchWithRetry(`/api/public/list?type=hot&limit=15&_t=${timestamp}`, { maxRetries: 3, retryDelay: 2000 })
       ]);
 
       // 最新
@@ -198,17 +255,20 @@ export default function HomePage() {
           } else {
             const errorText = await latestRes.value.text();
             console.error('[首页] 获取最新播客失败:', latestRes.value.status, errorText);
-            setLatest([]);
+            // 不设置为空数组，保留之前的数据（如果有）
+            // setLatest([]);
             setLatestHasMore(false);
           }
         } catch (error) {
           console.error('[首页] 解析最新播客失败:', error);
-          setLatest([]);
+          // 不设置为空数组，保留之前的数据（如果有）
+          // setLatest([]);
           setLatestHasMore(false);
         }
       } else {
         console.error('[首页] 最新播客请求失败:', latestRes.reason);
-        setLatest([]);
+        // 不设置为空数组，保留之前的数据（如果有）
+        // setLatest([]);
         setLatestHasMore(false);
       }
       setLoading(prev => ({ ...prev, latest: false }));
@@ -227,29 +287,33 @@ export default function HomePage() {
           } else {
             const errorText = await hotRes.value.text();
             console.error('[首页] 获取热门播客失败:', hotRes.value.status, errorText);
-            setHot([]);
+            // 不设置为空数组，保留之前的数据（如果有）
+            // setHot([]);
             setHotHasMore(false);
-            setHotDisplayCount(0);
+            // setHotDisplayCount(0);
           }
         } catch (error) {
           console.error('[首页] 解析热门播客失败:', error);
-          setHot([]);
+          // 不设置为空数组，保留之前的数据（如果有）
+          // setHot([]);
           setHotHasMore(false);
-          setHotDisplayCount(0);
+          // setHotDisplayCount(0);
         }
       } else {
         console.error('[首页] 获取热门播客请求失败:', hotRes.reason);
-        setHot([]);
+        // 不设置为空数组，保留之前的数据（如果有）
+        // setHot([]);
         setHotHasMore(false);
-        setHotDisplayCount(0);
+        // setHotDisplayCount(0);
       }
       setLoading(prev => ({ ...prev, hot: false }));
     };
 
     loadInitialData().catch((error) => {
       console.error('加载首页初始数据失败:', error);
-      setLatest([]);
-      setHot([]);
+      // 不设置为空数组，保留之前的数据（如果有）
+      // setLatest([]);
+      // setHot([]);
       setLatestHasMore(false);
       setHotHasMore(false);
     });
