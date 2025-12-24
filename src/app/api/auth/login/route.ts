@@ -64,11 +64,36 @@ export async function POST(req: NextRequest) {
 		console.log("✅ 会话设置成功");
 		
 		return Response.json({ ok: true });
-	} catch (error) {
+	} catch (error: any) {
 		console.error("❌ 登录 API 错误:", error);
+		
+		// 检查是否是数据库连接错误
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		const errorCode = (error as any)?.code;
+		const errorName = error instanceof Error ? error.name : 'UnknownError';
+		
+		// 数据库连接错误
+		if (errorMessage.includes('Can\'t reach database') ||
+		    errorMessage.includes('connection') ||
+		    errorMessage.includes('P1001') ||
+		    errorMessage.includes('P1002') ||
+		    errorMessage.includes('P1017') ||
+		    errorCode === 'P1001' ||
+		    errorCode === 'P1002' ||
+		    errorCode === 'P1017' ||
+		    errorName === 'PrismaClientInitializationError') {
+			console.error('[API /auth/login] 数据库连接错误，返回503 JSON响应');
+			return Response.json(
+				{ error: '数据库连接失败，请稍后重试', code: 'DB_CONNECTION_ERROR' },
+				{ status: 503 }
+			);
+		}
+		
+		// 其他错误
 		return Response.json({ 
 			error: "服务器内部错误，请稍后重试", 
-			details: String(error) 
+			code: 'INTERNAL_SERVER_ERROR',
+			details: process.env.NODE_ENV === 'development' ? String(error) : undefined
 		}, { status: 500 });
 	}
 }

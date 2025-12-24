@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db as prisma } from '@/server/db';
+import { db as prisma, checkDatabaseHealth, reconnectDatabase } from '@/server/db';
 import { cache, cacheKeys } from '@/utils/cache';
 import { handleApiError, withRetry } from '@/utils/error-handler';
 import { withQueryTimeout } from '@/utils/query-timeout';
@@ -10,6 +10,7 @@ const LATEST_LOOKBACK_DAYS = 7;
 const HOT_LOOKBACK_DAYS = 30;
 
 export async function GET(request: NextRequest) {
+  // 确保所有错误都返回JSON，而不是HTML
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'latest'; // latest, hot, hot_all, topics
@@ -166,6 +167,19 @@ export async function GET(request: NextRequest) {
           errorMessage.includes('P1017')) {
         console.error(`[API /api/public/list] 数据库连接问题，尝试返回过期缓存或空结果`);
         
+        // 尝试重新连接数据库（异步，不阻塞响应）
+        setImmediate(async () => {
+          try {
+            const isHealthy = await checkDatabaseHealth();
+            if (!isHealthy) {
+              console.log('[API /api/public/list] 数据库不健康，尝试重新连接...');
+              await reconnectDatabase();
+            }
+          } catch (reconnectError) {
+            console.error('[API /api/public/list] 数据库重连失败:', reconnectError);
+          }
+        });
+        
         // 如果有过期缓存，返回它
         if (fallbackCache) {
           console.log(`[API /api/public/list] 返回过期缓存作为降级方案`);
@@ -224,8 +238,9 @@ export async function GET(request: NextRequest) {
     // 如果是热度排序，使用优化的数据库查询
     if (type === 'hot' || type === 'hot_all') {
       if (type === 'hot_all') {
-        const { response } = await buildHotAllResponse(limit, includeSummary);
-        items = response.items.map(item => ({
+        try {
+          const { response } = await buildHotAllResponse(limit, includeSummary);
+          items = response.items.map(item => ({
           id: item.id,
           title: item.title,
           author: item.author,
@@ -239,6 +254,12 @@ export async function GET(request: NextRequest) {
           likeCount: item.likeCount || 0
         }));
         total = response.pagination.total;
+        } catch (hotAllError: any) {
+          console.error(`[API /api/public/list] hot_all查询失败:`, hotAllError);
+          // 查询失败时返回空结果
+          items = [];
+          total = 0;
+        }
       } else {
         const hotLookbackDate = new Date();
         hotLookbackDate.setDate(hotLookbackDate.getDate() - HOT_LOOKBACK_DAYS);
@@ -392,7 +413,33 @@ export async function GET(request: NextRequest) {
     const res = NextResponse.json(response);
     res.headers.set('Cache-Control', cacheControl);
     return res;
-  } catch (error) {
+  } catch (error: any) {
+    // 确保所有错误都返回JSON
+    console.error(`[API /api/public/list] 未捕获的错误:`, error);
+    
+    // 检查是否是数据库连接错误
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as any)?.code;
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    
+    // 数据库连接错误
+    if (errorMessage.includes('Can\'t reach database') ||
+        errorMessage.includes('connection') ||
+        errorMessage.includes('P1001') ||
+        errorMessage.includes('P1002') ||
+        errorMessage.includes('P1017') ||
+        errorCode === 'P1001' ||
+        errorCode === 'P1002' ||
+        errorCode === 'P1017' ||
+        errorName === 'PrismaClientInitializationError') {
+      console.error('[API /api/public/list] 数据库连接错误，返回503 JSON响应');
+      return NextResponse.json(
+        { error: '数据库连接失败', code: 'DB_CONNECTION_ERROR' },
+        { status: 503 }
+      );
+    }
+    
+    // 使用统一的错误处理
     return handleApiError(error);
   }
 }
