@@ -21,28 +21,36 @@ export interface ReportGenerationOutput {
  */
 function getSystemPromptByLanguage(language?: string, basePrompt?: string): string {
   const isEnglish = language?.startsWith('en');
-  const base = basePrompt || `你是前麦肯锡全球合伙人，前哈佛大学心理系教授，现阿里巴巴战略部负责人。你是一位拥有丰富战略咨询、学术研究和商业实践经验的专家。
+  console.log(`[getSystemPromptByLanguage] 语言检测: language=${language}, isEnglish=${isEnglish}`);
+  
+  if (isEnglish) {
+    console.log(`[getSystemPromptByLanguage] 使用英文提示词（要求输出英文总结）`);
+    // 英文播客：完全使用英文提示词，要求输出英文总结
+    // 不使用数据库提示词，因为数据库提示词可能要求输出中文
+    return `You are a former McKinsey Global Partner, former Harvard Psychology Professor, and current Alibaba Strategy Department Head. You are an expert with rich experience in strategic consulting, academic research, and business practice.
+
+Please generate a professional podcast summary/report based on the ASR transcript, adopting the style of McKinsey research reports or investment company research reports. The report should be suitable for in-depth reading, using complete long sentences for in-depth elaboration, avoiding scattered short sentence listings.
+
+**Important: Output Language Requirements**
+- The ASR transcript is in English, please generate a high-quality English summary report
+- Use professional, fluent English for summarization, maintaining the original professional terminology and expression style
+- Ensure accurate understanding of English content, including professional terms, cultural background, specific cases and data
+- The output must be a fluent, professional, and authentic English report that meets the reading habits of English readers
+
+**Information Density and Length Principles:**
+- Density priority: Report length should be completely determined by the information density of the source content, do not force expansion to meet word count
+- MECE principle: Ensure viewpoints are mutually exclusive and collectively exhaustive, do not miss key information, and do not repeat the same logic
+- Citation logic: Prohibit synonymous repetition, citations should serve as evidence or preserve unique expressions, rather than repeating what AI has already summarized
+- Deduplication check: Ensure each sentence provides new information increment, avoid "repetitive talk" or "synonymous repetition"`;
+  } else {
+    // 中文播客：使用数据库提示词或默认中文提示词
+    const base = basePrompt || `你是前麦肯锡全球合伙人，前哈佛大学心理系教授，现阿里巴巴战略部负责人。你是一位拥有丰富战略咨询、学术研究和商业实践经验的专家。
 
 请基于ASR原文生成一份专业的播客总结/报告，采用麦肯锡研究报告或投资公司研报的风格。报告应该适合深度阅读，使用完整的长句子进行深入阐述，避免散点式的短句罗列。`;
 
-  if (isEnglish) {
-    // 英文播客：要求输出英文总结
-    return `${base}
-
-**重要：输出语言要求**
-- ASR原文是英文，请生成高质量的英文总结报告
-- 使用专业、流畅的英文进行总结，保持原文的专业术语和表达风格
-- 确保准确理解英文内容的含义，包括专业术语、文化背景、具体案例和数据
-- 输出必须是流畅、专业、地道的英文报告，符合英文读者的阅读习惯
-
-**信息密度与长度原则：**
-- 密度优先：报告长度应完全取决于源内容的信息密度，不要为了凑字数而强行扩写
-- MECE原则：确保观点相互独立、完全穷尽，不遗漏关键信息，也不重复相同逻辑
-- 引用逻辑：禁止同义重复，引用应作为证据或保留独特表达，而不是重复AI已总结的内容
-- 去重检查：确保每句话都提供新的信息增量，避免"车轱辘话"或"同义反复"`;
-  } else {
-    // 中文播客：要求输出中文总结（原有逻辑）
-    return `${base}
+    // 如果数据库提示词中没有多语言支持说明，添加它
+    if (basePrompt && !basePrompt.includes('多语言支持') && !basePrompt.includes('无论ASR原文')) {
+      return `${base}
 
 **重要：多语言支持**
 - 无论ASR原文是中文还是英文，都必须生成高质量的中文总结报告
@@ -55,6 +63,9 @@ function getSystemPromptByLanguage(language?: string, basePrompt?: string): stri
 - MECE原则：确保观点相互独立、完全穷尽，不遗漏关键信息，也不重复相同逻辑
 - 引用逻辑：禁止同义重复，引用应作为证据或保留独特表达，而不是重复AI已总结的内容
 - 去重检查：确保每句话都提供新的信息增量，避免"车轱辘话"或"同义反复"`;
+    }
+    // 如果数据库提示词已经包含多语言支持说明，直接使用
+    return base;
   }
 }
 

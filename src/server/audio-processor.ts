@@ -272,6 +272,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 			audioUrl: meta.audioUrl,
 			language: asrData.language || undefined // 传递ASR检测到的语言，用于决定输出语言
 		};
+		console.log(`[报告生成] 传递语言参数: language=${reportBody.language}, transcript长度=${reportBody.transcript.length}`);
 		
 		if (asrData.segmentTexts && asrData.segmentTexts.length > 0) {
 			console.log(`✅ ASR分段已传递: ${asrData.segmentTexts.length} 段，报告生成时将保持语义边界`);
@@ -424,11 +425,12 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		// 4.5 翻译（仅当 ASR 语言为英文时）
 		const language = asrData.language || 'unknown';
 		const isEnglish = language.startsWith('en');
+		console.log(`[语言检测] asrData.language=${asrData.language}, language=${language}, isEnglish=${isEnglish}`);
 		let translatedTranscript: string | null = null;
 		let translatedSummary: string | null = null;
 
 		if (isEnglish) {
-			console.log(`检测到 ASR 语言为英文(${language})，开始中文翻译...`);
+			console.log(`✅ 检测到 ASR 语言为英文(${language})，开始中文翻译...`);
 			try {
 				translatedTranscript = await translateToChineseLarge(asrData.transcript, 'transcript');
 				console.log(`✅ 转写翻译完成，长度: ${translatedTranscript.length} 字符`);
