@@ -198,6 +198,9 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		}
 		
 		// 转换为API格式
+		const detectedLang = detectLanguage(asrResult);
+		console.log(`[语言检测] asrResult.language=${asrResult.language}, detectLanguage结果=${detectedLang}`);
+		
 		const asrData = {
 			success: asrResult.success,
 			transcript: asrResult.transcript,
@@ -210,8 +213,10 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 			segmentTexts: asrSegmentTexts, // 保存原始分段文本数组
 			duration: asrResult.duration,
 			error: asrResult.error,
-			language: detectLanguage(asrResult),
+			language: detectedLang,
 		};
+		
+		console.log(`[ASR数据] 语言字段: ${asrData.language}, 是否为英文: ${asrData.language?.startsWith('en')}`);
 		
 		// 更新ASR完成指标
 		if (taskId) {

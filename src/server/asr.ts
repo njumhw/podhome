@@ -16,6 +16,7 @@ export interface ASRResult {
 		text: string;
 	}>;
 	duration: number;
+	language?: string; // ASR检测到的语言
 	error?: string;
 }
 
@@ -62,6 +63,7 @@ export async function transcribeWithAliyunASR(audioUrl: string, language: string
         const transcript = result.transcript;
         const segments = result.segments; // 73个ASR片段（对于146分钟音频）
         const duration = result.duration;
+        const detectedLanguage = result.language; // 从ASR返回的语言信息
         
         // 将ASR片段转换为speaker格式（每个片段对应120秒音频）
         const speakers = segments.map((segmentText, idx) => ({
@@ -71,13 +73,14 @@ export async function transcribeWithAliyunASR(audioUrl: string, language: string
             text: segmentText
         }));
         
-        console.log(`分段ASR转写完成: ${segments.length} 个片段，总字符数 ${transcript.length}，总时长 ${duration}秒`);
+        console.log(`分段ASR转写完成: ${segments.length} 个片段，总字符数 ${transcript.length}，总时长 ${duration}秒，检测到语言: ${detectedLanguage || '未检测'}`);
         
         return {
             success: true,
             transcript,
             speakers,
-            duration: duration
+            duration: duration,
+            language: detectedLanguage // 添加语言字段
         };
     } catch (error: any) {
         const errorMessage = error instanceof Error ? error.message : String(error);

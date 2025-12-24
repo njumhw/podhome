@@ -27,6 +27,7 @@ export async function transcribeAudioWithSegmentation(
   transcript: string; // 完整ASR文本（所有片段拼接）
   segments: string[]; // ASR片段数组（每个片段对应120秒音频）
   duration: number; // 音频总时长（秒）
+  language?: string; // 检测到的语言（从ASR返回）
 }> {
   const segmentDuration = ASR_CONFIG.maxDuration; // 120秒
   
@@ -602,7 +603,7 @@ export async function transcribeAudioWithSegmentation(
   fs.promises.unlink(localFile).catch(() => {});
   
   // Step 4: 并发转写每个片段
-  let results: Array<{ index: number; text: string; error?: string }>;
+  let results: Array<{ index: number; text: string; language?: string; error?: string }>;
   try {
     console.log(`开始并发转写 ${uploaded.length} 个音频片段...`);
     // 为每个ASR分段转写添加超时保护，防止单个分段卡住整个流程
@@ -613,7 +614,7 @@ export async function transcribeAudioWithSegmentation(
       console.log(`转写片段 ${it.index + 1}/${uploaded.length}: ${it.url}`);
       
       // 包装 ASR 调用，添加超时保护
-      const asrCallWithTimeout = async (): Promise<{ index: number; text: string }> => {
+      const asrCallWithTimeout = async (): Promise<{ index: number; text: string; language?: string }> => {
         let lastError: any = null;
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
@@ -623,8 +624,8 @@ export async function transcribeAudioWithSegmentation(
               throw new Error(`转写结果为空 (尝试 ${attempt}/3)`);
             }
             
-            console.log(`片段 ${it.index + 1}/${uploaded.length} 转写成功 (尝试 ${attempt}/3)`);
-            return { index: it.index, text: r.text.trim() };
+            console.log(`片段 ${it.index + 1}/${uploaded.length} 转写成功 (尝试 ${attempt}/3), 语言: ${r.language || '未检测'}`);
+            return { index: it.index, text: r.text.trim(), language: r.language };
           } catch (error: any) {
             lastError = error;
             const errorMsg = error?.message || String(error);
@@ -647,7 +648,7 @@ export async function transcribeAudioWithSegmentation(
       };
       
       // 超时保护 Promise
-      const timeoutPromise = new Promise<{ index: number; text: string; error: string }>((resolve) => {
+      const timeoutPromise = new Promise<{ index: number; text: string; language?: string; error: string }>((resolve) => {
         setTimeout(() => {
           const timeoutMsg = `ASR转写超时（超过${ASR_SEGMENT_TIMEOUT / 1000 / 60}分钟）`;
           console.error(`⏱️ 片段 ${it.index + 1}/${uploaded.length} ${timeoutMsg}`);
@@ -700,12 +701,21 @@ export async function transcribeAudioWithSegmentation(
   // 拼接完整文本
   const merged = asrSegments.join("\n\n");
   
+  // 从第一个成功的片段获取语言信息（所有片段应该是同一种语言）
+  const detectedLanguage = nonEmpty.find(r => r.language)?.language;
+  if (detectedLanguage) {
+    console.log(`ASR检测到语言: ${detectedLanguage}`);
+  } else {
+    console.warn(`ASR未返回语言信息，使用默认值: ${language}`);
+  }
+  
   console.log(`ASR转写完成: ${asrSegments.length} 个片段，总字符数 ${merged.length}`);
   
   return {
     transcript: merged,
     segments: asrSegments,
-    duration: duration
+    duration: duration,
+    language: detectedLanguage || (language !== "auto" ? language : undefined)
   };
 }
 
