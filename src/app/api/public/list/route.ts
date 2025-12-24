@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/server/db';
 import { cache, cacheKeys } from '@/utils/cache';
 import { handleApiError, withRetry } from '@/utils/error-handler';
+import { withQueryTimeout } from '@/utils/query-timeout';
 import '@/server/jobs/hotAllScheduler';
 import { refreshHotAllCache, HOT_ALL_CACHE_TTL, buildHotAllResponse } from '@/server/services/hotAllCache';
 
@@ -22,12 +23,23 @@ export async function GET(request: NextRequest) {
     const startTime = Date.now();
 
     // 检查缓存
-    // latest和hot类型都使用短期缓存（60秒），减少数据库查询压力，提高本地开发体验
+    // latest和hot类型都使用短期缓存，减少数据库查询压力
+    // hot类型使用更长的缓存时间（5分钟），因为排序计算较慢
     const cacheKey = `${cacheKeys.podcastList(type, topic || undefined, page, limit)}:${includeSummary ? 'summary' : 'basic'}`;
     const cached = await cache.get(cacheKey);
     if (cached) {
       console.log(`[API /api/public/list] 使用缓存: type=${type}, 缓存命中`);
       return NextResponse.json(cached);
+    }
+    
+    // 对于hot类型，如果查询失败，尝试返回缓存（即使过期）
+    let fallbackCache: any = null;
+    if (type === 'hot' || type === 'hot_all') {
+      try {
+        fallbackCache = await cache.get(cacheKey, { allowStale: true, staleTtl: 300000 }); // 允许使用过期5分钟的缓存
+      } catch (e) {
+        // 忽略缓存错误
+      }
     }
 
     let whereClause: any = { status: 'READY' }; // 只展示发布完成的数据
@@ -78,6 +90,7 @@ export async function GET(request: NextRequest) {
       
       const queryStartTime = Date.now();
       
+      // 使用查询超时，防止慢查询阻塞
       // 先查询数据，count查询可以异步进行（对于latest类型直接跳过count）
       const selectFields: Record<string, any> = {
         id: true,
@@ -95,20 +108,31 @@ export async function GET(request: NextRequest) {
         selectFields.summary = true;
       }
       
-      const items = await prisma.podcast.findMany({
-        where: optimizedWhere,
-        select: selectFields,
-        orderBy,
-        skip: offset,
-        take: limit
+      // 使用查询超时，防止慢查询阻塞
+      const items = await withQueryTimeout(
+        () => prisma.podcast.findMany({
+          where: optimizedWhere,
+          select: selectFields,
+          orderBy,
+          skip: offset,
+          take: limit
+        }),
+        15000, // 15秒超时
+        `${type}类型播客查询超时`
+      ).catch((error) => {
+        console.error(`[API /api/public/list] ${type}类型查询失败:`, error);
+        // 查询失败时返回空数组，避免整个API失败
+        return [];
       });
       
       // 对于latest类型，使用估算值而不是精确count（提高性能）
       const total = type === 'latest' 
         ? limit * 10 // 估算值，避免慢查询
-        : await prisma.podcast.count({ 
-            where: optimizedWhere
-          });
+        : await withQueryTimeout(
+            () => prisma.podcast.count({ where: optimizedWhere }),
+            10000, // count查询10秒超时
+            'count查询超时'
+          ).catch(() => items.length); // count失败时使用items.length作为估算值
       
       const queryEndTime = Date.now();
       console.log(`[API /api/public/list] 数据库查询完成: 耗时=${queryEndTime - queryStartTime}ms, 返回${items.length}条数据`);
@@ -132,12 +156,22 @@ export async function GET(request: NextRequest) {
       const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
       console.error(`[API /api/public/list] 数据库查询失败: type=${type}, error=${errorMessage}`);
       
-      // 如果是超时或连接错误，返回空结果而不是抛出错误
+      // 如果是超时或连接错误，尝试返回过期缓存或空结果
       if (errorMessage.includes('超时') || 
           errorMessage.includes('timeout') || 
           errorMessage.includes('Can\'t reach database') ||
-          errorMessage.includes('connection')) {
-        console.error(`[API /api/public/list] 数据库连接问题，返回空结果`);
+          errorMessage.includes('connection') ||
+          errorMessage.includes('P1001') ||
+          errorMessage.includes('P1002') ||
+          errorMessage.includes('P1017')) {
+        console.error(`[API /api/public/list] 数据库连接问题，尝试返回过期缓存或空结果`);
+        
+        // 如果有过期缓存，返回它
+        if (fallbackCache) {
+          console.log(`[API /api/public/list] 返回过期缓存作为降级方案`);
+          return NextResponse.json(fallbackCache);
+        }
+        
         podcastItemsRaw = [];
         podcastTotal = 0;
       } else {
@@ -230,11 +264,20 @@ export async function GET(request: NextRequest) {
           hotSelectFields.summary = true;
         }
         
-        const hotItemsRaw = await prisma.podcast.findMany({
-          where: optimizedHotWhere,
-          select: hotSelectFields,
-          orderBy: { updatedAt: 'desc' },
-          take: Math.min(200, Math.max(limit * 4, 60))
+        // 使用查询超时，防止慢查询阻塞
+        const hotItemsRaw = await withQueryTimeout(
+          () => prisma.podcast.findMany({
+            where: optimizedHotWhere,
+            select: hotSelectFields,
+            orderBy: { updatedAt: 'desc' },
+            take: Math.min(200, Math.max(limit * 4, 60))
+          }),
+          15000, // 15秒超时
+          '热门播客查询超时'
+        ).catch((error) => {
+          console.error(`[API /api/public/list] 热门播客查询失败:`, error);
+          // 查询失败时返回空数组，避免整个API失败
+          return [];
         });
         
         console.log(`[API /api/public/list] 热度排序（优化后）：获取到 ${hotItemsRaw.length} 条播客数据（最近${HOT_LOOKBACK_DAYS}天）`);

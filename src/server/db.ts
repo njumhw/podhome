@@ -14,8 +14,9 @@ const createPrismaClient = () => {
 	let finalDatabaseUrl = databaseUrl;
 	if (databaseUrl && !databaseUrl.includes('connection_limit')) {
 		// 添加连接池参数
+		// 增加连接池大小到20，增加超时时间到60秒，提高稳定性
 		const separator = databaseUrl.includes('?') ? '&' : '?';
-		finalDatabaseUrl = `${databaseUrl}${separator}connection_limit=10&pool_timeout=20`;
+		finalDatabaseUrl = `${databaseUrl}${separator}connection_limit=20&pool_timeout=60`;
 	}
 	
 	return new PrismaClient({
