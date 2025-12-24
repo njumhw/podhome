@@ -40,7 +40,9 @@ export function handleApiError(error: unknown): NextResponse {
   if (error && typeof error === 'object' && 'code' in error) {
     const prismaError = error as { code?: string };
     
-    switch (prismaError.code) {
+    if (!prismaError.code) {
+      // code 为 undefined，跳过 Prisma 错误处理
+    } else switch (prismaError.code) {
       case 'P1001':
         return NextResponse.json(
           { error: '数据库连接失败', code: 'DB_CONNECTION_ERROR' },
@@ -126,7 +128,7 @@ export async function withRetry<T>(
       // 如果是数据库连接错误，进行重试
       if (error && typeof error === 'object' && 'code' in error) {
         const prismaError = error as { code?: string };
-        if (['P1001', 'P1017', 'P2024'].includes(prismaError.code)) {
+        if (prismaError.code && ['P1001', 'P1017', 'P2024'].includes(prismaError.code)) {
           if (attempt < maxRetries) {
             console.warn(`数据库操作失败，第${attempt}次重试...`, error);
             await new Promise(resolve => setTimeout(resolve, delay * attempt));

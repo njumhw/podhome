@@ -56,7 +56,7 @@ export async function getRealTimeProgress(podcastId: string): Promise<RealTimePr
     let overallStatus: 'processing' | 'completed' | 'failed' = 'processing';
 
     // 按步骤类型分组任务日志
-    const stepGroups = new Map<string, Array<{ type: string; message: string; timestamp: Date }>>();
+    const stepGroups = new Map<string, typeof taskLogs>();
     taskLogs.forEach(log => {
       if (!stepGroups.has(log.type)) {
         stepGroups.set(log.type, []);
