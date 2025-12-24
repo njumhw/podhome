@@ -530,7 +530,10 @@ function getTwoStageAdditionalPrompt(language?: string): string {
  * 根据语言生成相应的提示词
  */
 function getSystemPromptByLanguage(language?: string, basePrompt?: string): string {
-  const isEnglish = language?.startsWith('en');
+  // 更宽松的英文检测：支持 "en", "en-US", "english" 等格式
+  const isEnglish = language?.startsWith('en') || 
+                   language?.includes('en') || 
+                   language?.toLowerCase() === 'english';
   console.log(`[getSystemPromptByLanguage] 语言检测: language=${language}, isEnglish=${isEnglish}`);
   
   if (isEnglish) {

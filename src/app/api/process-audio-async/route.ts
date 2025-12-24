@@ -67,6 +67,72 @@ export async function POST(req: NextRequest) {
     
     console.log(`开始异步处理播客链接: ${url}`);
     
+    // ========== 重复检查：在添加任务前检查是否已存在相同 URL 的播客 ==========
+    const existingPodcast = await db.podcast.findFirst({
+      where: {
+        sourceUrl: url,
+        status: 'READY', // 只检查已完成的播客
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+    
+    if (existingPodcast) {
+      console.log(`[process-audio-async] ⚠️ 播客已存在，跳过重复处理: url=${url.substring(0, 100)}..., existingId=${existingPodcast.id}`);
+      return Response.json({
+        success: true,
+        taskId: null,
+        podcastId: existingPodcast.id,
+        message: "播客已存在，无需重复处理",
+        fromCache: true,
+      });
+    }
+    
+    // 检查是否正在处理中（避免并发处理）
+    const processingPodcast = await db.podcast.findFirst({
+      where: {
+        sourceUrl: url,
+        status: 'PROCESSING',
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        processingStartedAt: true,
+      },
+      orderBy: {
+        processingStartedAt: 'desc',
+      },
+    });
+    
+    if (processingPodcast) {
+      const processingTime = processingPodcast.processingStartedAt 
+        ? Date.now() - new Date(processingPodcast.processingStartedAt).getTime()
+        : 0;
+      const processingMinutes = Math.floor(processingTime / 60000);
+      
+      // 如果处理时间超过30分钟，可能是卡住了，允许重新处理
+      if (processingMinutes < 30) {
+        console.log(`[process-audio-async] ⚠️ 播客正在处理中，跳过重复处理: url=${url.substring(0, 100)}..., processingId=${processingPodcast.id}, 已处理${processingMinutes}分钟`);
+        return Response.json({
+          success: true,
+          taskId: null,
+          podcastId: processingPodcast.id,
+          message: `播客正在处理中（已处理${processingMinutes}分钟），请稍候`,
+          fromCache: true,
+        });
+      } else {
+        console.log(`[process-audio-async] ⚠️ 播客处理时间过长（${processingMinutes}分钟），可能是卡住了，允许重新处理`);
+      }
+    }
+    // ========================================================================
+    
     // 添加任务到队列
     let taskId: string;
     try {

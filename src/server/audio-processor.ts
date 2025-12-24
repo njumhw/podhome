@@ -15,8 +15,13 @@ import { Prisma } from "@prisma/client";
 // 语言检测（基于 ASR 返回）
 function detectLanguage(asrResult: any): string {
 	const lang = (asrResult?.language || asrResult?.lang || asrResult?.languageCode || "").toLowerCase();
-	if (lang.startsWith("en")) return "en";
-	if (lang.startsWith("zh")) return "zh";
+	
+	// 更宽松的英文检测：支持 "en", "en-US", "english", "eng" 等格式
+	if (lang.includes("en") || lang === "english") return "en";
+	
+	// 更宽松的中文检测：支持 "zh", "zh-CN", "chinese", "中文" 等格式
+	if (lang.includes("zh") || lang === "chinese" || lang === "中文") return "zh";
+	
 	return lang || "unknown";
 }
 
@@ -93,6 +98,75 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 	
 	try {
 		console.log(`开始内部处理播客链接: ${url}`);
+		
+		// ========== 重复检查：在开始处理前检查是否已存在相同 URL 的播客 ==========
+		// 检查是否已存在相同 sourceUrl 的已完成播客
+		const existingPodcast = await db.podcast.findFirst({
+			where: {
+				sourceUrl: url,
+				status: 'READY', // 只检查已完成的播客
+			},
+			select: {
+				id: true,
+				title: true,
+				status: true,
+				updatedAt: true,
+			},
+			orderBy: {
+				updatedAt: 'desc', // 获取最新的
+			},
+		});
+		
+		if (existingPodcast) {
+			console.log(`⚠️ 播客已存在，跳过重复处理: sourceUrl=${url.substring(0, 100)}..., existingId=${existingPodcast.id}, status=${existingPodcast.status}`);
+			// 返回已存在的播客信息，而不是重新处理
+			return {
+				id: existingPodcast.id,
+				title: existingPodcast.title,
+				status: existingPodcast.status,
+				fromCache: true,
+				message: '播客已存在，跳过重复处理',
+			};
+		}
+		
+		// 检查是否正在处理中（避免并发处理）
+		const processingPodcast = await db.podcast.findFirst({
+			where: {
+				sourceUrl: url,
+				status: 'PROCESSING', // 检查正在处理的播客
+			},
+			select: {
+				id: true,
+				title: true,
+				status: true,
+				processingStartedAt: true,
+			},
+			orderBy: {
+				processingStartedAt: 'desc',
+			},
+		});
+		
+		if (processingPodcast) {
+			const processingTime = processingPodcast.processingStartedAt 
+				? Date.now() - new Date(processingPodcast.processingStartedAt).getTime()
+				: 0;
+			const processingMinutes = Math.floor(processingTime / 60000);
+			
+			// 如果处理时间超过30分钟，可能是卡住了，允许重新处理
+			if (processingMinutes < 30) {
+				console.log(`⚠️ 播客正在处理中，跳过重复处理: sourceUrl=${url.substring(0, 100)}..., processingId=${processingPodcast.id}, 已处理${processingMinutes}分钟`);
+				return {
+					id: processingPodcast.id,
+					title: processingPodcast.title,
+					status: processingPodcast.status,
+					fromCache: true,
+					message: `播客正在处理中（已处理${processingMinutes}分钟），请稍候`,
+				};
+			} else {
+				console.log(`⚠️ 播客处理时间过长（${processingMinutes}分钟），可能是卡住了，允许重新处理`);
+			}
+		}
+		// ========================================================================
 		
 		// 计算当前服务的 baseUrl
 		const apiBase = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
@@ -198,8 +272,23 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		}
 		
 		// 转换为API格式
-		const detectedLang = detectLanguage(asrResult);
+		let detectedLang = detectLanguage(asrResult);
 		console.log(`[语言检测] asrResult.language=${asrResult.language}, detectLanguage结果=${detectedLang}`);
+		
+		// 如果 ASR 没有返回语言信息，尝试通过 transcript 内容判断
+		if (detectedLang === 'unknown' && asrResult.transcript) {
+			const transcript = asrResult.transcript.substring(0, 1000); // 检查前1000个字符
+			const englishWords = (transcript.match(/\b(the|and|is|are|was|were|this|that|with|from|have|has|been|will|would|could|should|may|might|can|must|do|does|did|not|no|yes|you|we|they|he|she|it|I|me|my|your|our|their|his|her|its)\b/gi) || []).length;
+			const chineseChars = (transcript.match(/[\u4e00-\u9fa5]/g) || []).length;
+			
+			if (englishWords > 10 && chineseChars < 5) {
+				detectedLang = 'en';
+				console.log(`[语言检测] ASR未返回语言信息，通过内容分析判断为英文（英文单词: ${englishWords}, 中文字符: ${chineseChars}）`);
+			} else if (chineseChars > 10 && englishWords < 5) {
+				detectedLang = 'zh';
+				console.log(`[语言检测] ASR未返回语言信息，通过内容分析判断为中文（英文单词: ${englishWords}, 中文字符: ${chineseChars}）`);
+			}
+		}
 		
 		const asrData = {
 			success: asrResult.success,
@@ -216,7 +305,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 			language: detectedLang,
 		};
 		
-		console.log(`[ASR数据] 语言字段: ${asrData.language}, 是否为英文: ${asrData.language?.startsWith('en')}`);
+		console.log(`[ASR数据] 语言字段: ${asrData.language}, 是否为英文: ${asrData.language?.startsWith('en') || asrData.language?.includes('en') || asrData.language?.toLowerCase() === 'english'}`);
 		
 		// 更新ASR完成指标
 		if (taskId) {
@@ -429,7 +518,8 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		
 		// 4.5 翻译（仅当 ASR 语言为英文时）
 		const language = asrData.language || 'unknown';
-		const isEnglish = language.startsWith('en');
+		// 更宽松的英文检测：支持 "en", "en-US", "english" 等格式
+		const isEnglish = language.startsWith('en') || language.includes('en') || language.toLowerCase() === 'english';
 		console.log(`[语言检测] asrData.language=${asrData.language}, language=${language}, isEnglish=${isEnglish}`);
 		let translatedTranscript: string | null = null;
 		let translatedSummary: string | null = null;
