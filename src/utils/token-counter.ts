@@ -63,7 +63,7 @@ export function analyzeTokenUsage(text: string): TokenAnalysis {
   
   // 通义千问qwen-plus的限制
   const maxContextTokens = 128000;  // 128K tokens
-  const maxOutputTokens = 8000;     // 8K tokens
+  // const maxOutputTokens = 8000;     // 8K tokens (保留供将来使用)
   const safetyBoundary = 100000;    // 100K tokens (我们的安全边界)
   
   const canProcessAsWhole = estimatedTokens <= safetyBoundary;

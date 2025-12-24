@@ -34,10 +34,11 @@ export async function GET(request: NextRequest) {
     }
     
     // 对于hot类型，如果查询失败，尝试返回缓存（即使过期）
-    let fallbackCache: any = null;
+    let fallbackCache: unknown = null;
     if (type === 'hot' || type === 'hot_all') {
       try {
-        fallbackCache = await cache.get(cacheKey, { allowStale: true, staleTtl: 300000 }); // 允许使用过期5分钟的缓存
+        // 尝试获取缓存（即使可能已过期，也尝试获取）
+        fallbackCache = await cache.get(cacheKey);
       } catch (e) {
         // 忽略缓存错误
       }
@@ -181,7 +182,7 @@ export async function GET(request: NextRequest) {
         });
         
         // 如果有过期缓存，返回它
-        if (fallbackCache) {
+        if (fallbackCache && typeof fallbackCache === 'object') {
           console.log(`[API /api/public/list] 返回过期缓存作为降级方案`);
           return NextResponse.json(fallbackCache);
         }

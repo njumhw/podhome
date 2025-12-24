@@ -4,15 +4,15 @@ export interface ApiError {
   message: string;
   status: number;
   code?: string;
-  details?: any;
+  details?: unknown;
 }
 
 export class AppError extends Error {
   public status: number;
   public code?: string;
-  public details?: any;
+  public details?: unknown;
 
-  constructor(message: string, status: number = 500, code?: string, details?: any) {
+  constructor(message: string, status: number = 500, code?: string, details?: unknown) {
     super(message);
     this.status = status;
     this.code = code;
@@ -38,7 +38,7 @@ export function handleApiError(error: unknown): NextResponse {
 
   // 如果是Prisma错误
   if (error && typeof error === 'object' && 'code' in error) {
-    const prismaError = error as any;
+    const prismaError = error as { code?: string };
     
     switch (prismaError.code) {
       case 'P1001':
@@ -76,7 +76,7 @@ export function handleApiError(error: unknown): NextResponse {
 
   // 如果是网络错误
   if (error && typeof error === 'object' && 'name' in error) {
-    const networkError = error as any;
+    const networkError = error as { name?: string };
     if (networkError.name === 'HeadersTimeoutError' || networkError.name === 'TimeoutError') {
       return NextResponse.json(
         { error: '请求超时', code: 'TIMEOUT_ERROR' },
@@ -97,7 +97,7 @@ export function handleApiError(error: unknown): NextResponse {
 }
 
 // 包装API处理函数的装饰器
-export function withErrorHandler<T extends any[], R>(
+export function withErrorHandler<T extends unknown[], R>(
   handler: (...args: T) => Promise<R>
 ) {
   return async (...args: T): Promise<R> => {
@@ -125,7 +125,7 @@ export async function withRetry<T>(
       
       // 如果是数据库连接错误，进行重试
       if (error && typeof error === 'object' && 'code' in error) {
-        const prismaError = error as any;
+        const prismaError = error as { code?: string };
         if (['P1001', 'P1017', 'P2024'].includes(prismaError.code)) {
           if (attempt < maxRetries) {
             console.warn(`数据库操作失败，第${attempt}次重试...`, error);
