@@ -301,25 +301,55 @@ export async function GET(request: NextRequest) {
         
         // 使用查询超时，防止慢查询阻塞
         // 使用likeCount字段排序，提升性能（避免JOIN查询）
-        const hotItemsRaw = await withQueryTimeout(
-          () => prisma.podcast.findMany({
-            where: optimizedHotWhere,
-            select: hotSelectFields,
-            orderBy: [
-              { likeCount: 'desc' }, // 按点赞数降序
-              { updatedAt: 'desc' }  // 点赞数相同，按更新时间降序
-            ],
-            take: Math.min(200, Math.max(limit * 4, 60))
-          }),
-          15000, // 15秒超时
-          '热门播客查询超时'
-        ).catch((error) => {
-          console.error(`[API /api/public/list] 热门播客查询失败:`, error);
-          // 查询失败时返回空数组，避免整个API失败
-          return [];
-        });
-        
-        console.log(`[API /api/public/list] 热度排序（优化后）：获取到 ${hotItemsRaw.length} 条播客数据（最近${HOT_LOOKBACK_DAYS}天）`);
+        let hotItemsRaw: any[] = [];
+        try {
+          hotItemsRaw = await withQueryTimeout(
+            () => prisma.podcast.findMany({
+              where: optimizedHotWhere,
+              select: hotSelectFields,
+              orderBy: [
+                { likeCount: 'desc' }, // 按点赞数降序
+                { updatedAt: 'desc' }  // 点赞数相同，按更新时间降序
+              ],
+              take: Math.min(200, Math.max(limit * 4, 60))
+            }),
+            15000, // 15秒超时
+            '热门播客查询超时'
+          );
+          console.log(`[API /api/public/list] 热度排序（优化后）：获取到 ${hotItemsRaw.length} 条播客数据（最近${HOT_LOOKBACK_DAYS}天）`);
+        } catch (error: any) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorStack = error instanceof Error ? error.stack : undefined;
+          console.error(`[API /api/public/list] 热门播客查询失败:`, {
+            message: errorMessage,
+            stack: errorStack?.substring(0, 500),
+            where: JSON.stringify(optimizedHotWhere),
+            orderBy: 'likeCount desc, updatedAt desc'
+          });
+          // 如果likeCount字段查询失败，尝试回退到updatedAt排序
+          if (errorMessage.includes('likeCount') || errorMessage.includes('Unknown column')) {
+            console.warn(`[API /api/public/list] likeCount字段查询失败，回退到updatedAt排序`);
+            try {
+              hotItemsRaw = await withQueryTimeout(
+                () => prisma.podcast.findMany({
+                  where: optimizedHotWhere,
+                  select: hotSelectFields,
+                  orderBy: { updatedAt: 'desc' },
+                  take: Math.min(200, Math.max(limit * 4, 60))
+                }),
+                15000,
+                '热门播客查询超时（回退方案）'
+              );
+              console.log(`[API /api/public/list] 回退查询成功：获取到 ${hotItemsRaw.length} 条播客数据`);
+            } catch (fallbackError: any) {
+              console.error(`[API /api/public/list] 回退查询也失败:`, fallbackError);
+              hotItemsRaw = []; // 最终失败返回空数组
+            }
+          } else {
+            // 其他错误直接返回空数组
+            hotItemsRaw = [];
+          }
+        }
         
         // 类型定义：确保类型安全（使用likeCount字段而不是_count）
         type HotItem = {

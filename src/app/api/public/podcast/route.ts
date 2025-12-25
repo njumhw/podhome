@@ -115,42 +115,12 @@ export async function GET(request: NextRequest) {
       try {
         console.log(`[api/public/podcast] 查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
         
-        // 直接查询，不使用超时包装（Prisma本身有连接超时）
-        // 移除超时包装，避免干扰正常查询
-        podcast = await prisma.podcast.findFirst({
-          where: whereClause,
-          select: {
-            id: true,
-            title: true,
-            showAuthor: true,
-            publishedAt: true,
-            audioUrl: true,
-            sourceUrl: true,
-            summary: true,
-            translatedSummary: true, // 中文翻译总结
-            topic: { select: { name: true } },
-            transcript: true,
-            originalTranscript: true, // 添加ASR原文字段
-            translatedTranscript: true, // 中文翻译原文
-            reportOutline: true, // 报告大纲（如果字段存在）
-            updatedAt: true
-          }
-        });
+        // 优化：直接不查询reportOutline字段（避免字段不存在导致的查询失败和延迟）
+        // 添加查询超时保护，防止长时间阻塞（5秒超时，如果之前很快，5秒应该足够）
+        const { withQueryTimeout } = await import('@/utils/query-timeout');
         
-        // 如果找到播客且使用id查询，存入缓存（1小时TTL）
-        if (podcast && cacheKey) {
-          await cache.set(cacheKey, podcast, 60 * 60 * 1000); // 1小时
-          console.log(`[api/public/podcast] 播客数据已缓存: id=${id}`);
-        }
-      } catch (error: any) {
-        // 如果reportOutline字段不存在，尝试不查询该字段
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`[api/public/podcast] Podcast表查询错误:`, errorMessage);
-      
-      if (errorMessage.includes('reportOutline') || errorMessage.includes('Unknown column')) {
-        console.warn('reportOutline字段不存在，使用兼容查询');
-        try {
-          podcast = await prisma.podcast.findFirst({
+        podcast = await withQueryTimeout(
+          () => prisma.podcast.findFirst({
             where: whereClause,
             select: {
               id: true,
@@ -165,23 +135,29 @@ export async function GET(request: NextRequest) {
               transcript: true,
               originalTranscript: true,
               translatedTranscript: true,
+              // 不查询reportOutline字段，避免字段不存在导致的查询失败
+              // reportOutline会在返回时手动设置为null
               updatedAt: true
             }
-          });
-          // 手动设置reportOutline为null
-          if (podcast) {
-            podcast.reportOutline = null;
-            // 缓存兼容查询的结果
-            if (cacheKey) {
-              await cache.set(cacheKey, podcast, 60 * 60 * 1000); // 1小时
-              console.log(`[api/public/podcast] 兼容查询结果已缓存: id=${id}`);
-            }
-          }
-        } catch (retryError: any) {
-          console.error(`[api/public/podcast] 兼容查询也失败:`, retryError);
-          throw retryError; // 重新抛出错误
+          }),
+          5000, // 5秒超时（如果之前很快，5秒应该足够）
+          '播客详情查询超时'
+        );
+        
+        // 手动设置reportOutline为null（因为字段可能不存在）
+        if (podcast) {
+          (podcast as any).reportOutline = null;
         }
-      } else {
+        
+        // 如果找到播客且使用id查询，存入缓存（1小时TTL）
+        if (podcast && cacheKey) {
+          await cache.set(cacheKey, podcast, 60 * 60 * 1000); // 1小时
+          console.log(`[api/public/podcast] 播客数据已缓存: id=${id}`);
+        }
+      } catch (error: any) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[api/public/podcast] Podcast表查询错误:`, errorMessage);
+        
         // 检查是否是数据库连接错误或超时
         if (errorMessage.includes('Can\'t reach database server') || 
             errorMessage.includes('connection pool') ||
@@ -202,7 +178,6 @@ export async function GET(request: NextRequest) {
           { error: '查询播客失败，请稍后重试' },
           { status: 503 }
         );
-      }
       }
     }
 
