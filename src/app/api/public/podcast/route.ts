@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
   // 提前获取 id，以便在 catch 块中使用
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
+  const includeTranscript = searchParams.get('includeTranscript') === 'true'; // 是否包含transcript大字段
   
   try {
     const clientIp = getClientIp(request);
@@ -141,11 +142,11 @@ export async function GET(request: NextRequest) {
           '播客详情查询超时（基本信息）'
         );
         
-        // 如果找到播客，再查询大字段（transcript等）
-        // 使用Promise.allSettled，即使大字段查询失败也不影响基本信息
-        if (podcast) {
-          const largeFieldsResult = await Promise.allSettled([
-            withQueryTimeout(
+        // 如果找到播客且需要加载transcript，再查询大字段
+        // 优化：默认不加载大字段，只有在用户点击"看全文"时才加载（通过includeTranscript参数控制）
+        if (podcast && includeTranscript) {
+          try {
+            const largeFields = await withQueryTimeout(
               () => prisma.podcast.findFirst({
                 where: whereClause,
                 select: {
@@ -157,24 +158,30 @@ export async function GET(request: NextRequest) {
               }),
               15000, // 15秒超时
               '播客详情查询超时（大字段）'
-            )
-          ]);
-          
-          // 合并大字段到podcast对象
-          if (largeFieldsResult[0].status === 'fulfilled' && largeFieldsResult[0].value) {
-            const largeFields = largeFieldsResult[0].value;
-            (podcast as any).transcript = largeFields.transcript;
-            (podcast as any).originalTranscript = largeFields.originalTranscript;
-            (podcast as any).translatedTranscript = largeFields.translatedTranscript;
-          } else {
+            );
+            
+            // 合并大字段到podcast对象
+            if (largeFields) {
+              (podcast as any).transcript = largeFields.transcript;
+              (podcast as any).originalTranscript = largeFields.originalTranscript;
+              (podcast as any).translatedTranscript = largeFields.translatedTranscript;
+            }
+          } catch (largeFieldsError: any) {
             // 如果大字段查询失败，设置为null，不影响基本信息返回
-            console.warn(`[api/public/podcast] 大字段查询失败，继续返回基本信息`);
+            console.warn(`[api/public/podcast] 大字段查询失败，继续返回基本信息:`, largeFieldsError);
             (podcast as any).transcript = null;
             (podcast as any).originalTranscript = null;
             (podcast as any).translatedTranscript = null;
           }
-          
-          // 手动设置reportOutline为null（因为字段可能不存在）
+        } else if (podcast) {
+          // 如果不需要加载transcript，设置为null
+          (podcast as any).transcript = null;
+          (podcast as any).originalTranscript = null;
+          (podcast as any).translatedTranscript = null;
+        }
+        
+        // 手动设置reportOutline为null（因为字段可能不存在）
+        if (podcast) {
           (podcast as any).reportOutline = null;
         }
         
