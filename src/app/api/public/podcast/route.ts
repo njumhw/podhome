@@ -101,8 +101,9 @@ export async function GET(request: NextRequest) {
     try {
       console.log(`[api/public/podcast] 查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
       
-      // 添加查询超时（10秒）
-      const queryPromise = prisma.podcast.findFirst({
+      // 直接查询，不使用超时包装（Prisma本身有连接超时）
+      // 移除超时包装，避免干扰正常查询
+      podcast = await prisma.podcast.findFirst({
         where: whereClause,
         select: {
           id: true,
@@ -121,12 +122,6 @@ export async function GET(request: NextRequest) {
           updatedAt: true
         }
       });
-      
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('数据库查询超时（超过10秒）')), 10000);
-      });
-      
-      podcast = await Promise.race([queryPromise, timeoutPromise]);
       console.log(`[api/public/podcast] Podcast表查询结果: ${podcast ? '找到' : '未找到'}`);
     } catch (error: any) {
       // 如果reportOutline字段不存在，尝试不查询该字段
@@ -163,18 +158,26 @@ export async function GET(request: NextRequest) {
           throw retryError; // 重新抛出错误
         }
       } else {
-        // 检查是否是数据库连接错误
+        // 检查是否是数据库连接错误或超时
         if (errorMessage.includes('Can\'t reach database server') || 
             errorMessage.includes('connection pool') ||
             errorMessage.includes('P1001') ||
-            errorMessage.includes('P1017')) {
-          console.error(`[api/public/podcast] 数据库连接错误:`, errorMessage);
+            errorMessage.includes('P1017') ||
+            errorMessage.includes('超时') ||
+            errorMessage.includes('timeout') ||
+            errorMessage.includes('ETIMEDOUT')) {
+          console.error(`[api/public/podcast] 数据库连接或查询超时错误:`, errorMessage);
           return NextResponse.json(
             { error: '数据库连接问题，请稍后重试' },
             { status: 503 }
           );
         }
-        throw error; // 其他错误继续抛出
+        // 其他错误也返回503，避免500错误导致前端显示"播客不存在"
+        console.error(`[api/public/podcast] 查询错误:`, errorMessage);
+        return NextResponse.json(
+          { error: '查询播客失败，请稍后重试' },
+          { status: 503 }
+        );
       }
     }
 

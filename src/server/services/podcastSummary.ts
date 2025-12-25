@@ -36,7 +36,11 @@ export async function refreshSummaryCache(): Promise<void> {
 }
 
 async function generateSummary(): Promise<PodcastSummary> {
+	// 只查询READY状态的播客，减少查询数据量，提高性能
 	const podcasts = await db.podcast.findMany({
+		where: {
+			status: 'READY' // 只查询已完成的播客，减少数据量
+		},
 		select: {
 			id: true,
 			status: true,

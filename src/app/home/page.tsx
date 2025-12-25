@@ -49,13 +49,13 @@ export default function HomePage() {
   const { user } = useUser();
   const toast = useToast();
 
-  const LATEST_INITIAL_LIMIT = 30; // 一次性加载30个，避免先显示4个再显示9个的问题
+  const LATEST_INITIAL_LIMIT = 9; // 初始显示9个
   const LATEST_PREFETCH_LIMIT = 60;
   const [latest, setLatest] = useState<PodcastItem[]>([]);
   const [latestDisplayCount, setLatestDisplayCount] = useState(0); // 默认先不显示，数据返回后再设置
   const [latestHasMore, setLatestHasMore] = useState(false); // 是否还有更多数据
   const [latestPrefetched, setLatestPrefetched] = useState(false);
-  const MAX_DISPLAY_COUNT = 30; // 最大显示数量上限，避免性能问题
+  const MAX_DISPLAY_COUNT = 27; // 最大显示数量上限：9+9+9=27
   const latestPrefetchPromiseRef = useRef<Promise<PodcastItem[] | null> | null>(null);
   const [hot, setHot] = useState<PodcastItem[]>([]);
   const [hotMode, setHotMode] = useState<'30d' | 'all'>('30d');
@@ -235,9 +235,10 @@ export default function HomePage() {
       // 关键数据优先加载：latest列表和summary
       setLoading(prev => ({ ...prev, latest: true, hot: false })); // hot延迟加载
 
-      // 1. 优先加载latest列表（主页核心内容）- 一次性加载30个，避免分步加载
+      // 1. 优先加载latest列表（主页核心内容）- 初始加载27个（9+9+9），但先显示9个
       try {
-        const latestRes = await fetchWithRetry(`/api/public/list?type=latest&limit=${LATEST_INITIAL_LIMIT}&_t=${timestamp}`, { 
+        // 一次性加载27个数据，但初始只显示9个
+        const latestRes = await fetchWithRetry(`/api/public/list?type=latest&limit=${MAX_DISPLAY_COUNT}&_t=${timestamp}`, { 
           maxRetries: 3, 
           retryDelay: 2000 
         });
@@ -251,13 +252,13 @@ export default function HomePage() {
             hasNext: data.pagination?.hasNext
           });
           setLatest(items);
-          // 一次性显示所有数据（最多30个），避免先显示4个再显示9个的问题
-          const initialCount = Math.min(items.length, MAX_DISPLAY_COUNT);
+          // 初始只显示9个，点击More再显示9个，再点击More再显示9个
+          const initialCount = Math.min(LATEST_INITIAL_LIMIT, items.length);
           console.log('[首页] 设置显示数量:', initialCount, '实际数据:', items.length);
           setLatestDisplayCount(initialCount);
-          setLatestHasMore(data.pagination?.hasNext || items.length >= LATEST_INITIAL_LIMIT);
-          // 如果数据不足30个，后台预加载更多数据
-          if (items.length < LATEST_INITIAL_LIMIT) {
+          setLatestHasMore(data.pagination?.hasNext || items.length >= MAX_DISPLAY_COUNT);
+          // 后台预加载更多数据（如果还有更多）
+          if (data.pagination?.hasNext) {
             prefetchLatest();
           }
         } else {
@@ -425,7 +426,7 @@ export default function HomePage() {
 
   const handleLoadMoreLatest = async () => {
     const currentCount = latestDisplayCount;
-    const nextCount = Math.min(currentCount + 6, MAX_DISPLAY_COUNT); // 每次加载6个，但不超过上限
+    const nextCount = Math.min(currentCount + 9, MAX_DISPLAY_COUNT); // 每次加载9个，但不超过上限（27个）
     
     // 如果已达到上限，不再加载
     if (nextCount >= MAX_DISPLAY_COUNT && currentCount >= MAX_DISPLAY_COUNT) {
