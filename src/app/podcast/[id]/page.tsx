@@ -121,9 +121,9 @@ export default function PodcastDetailPage() {
 
   const loadPodcast = async (currentUser?: any, includeTranscript = false) => {
     try {
-      // 添加超时控制（15秒）
+      // 添加超时控制（8秒，基本信息查询应该很快）
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       
       let data: any = null;
       try {

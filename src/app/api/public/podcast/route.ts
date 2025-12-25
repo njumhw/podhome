@@ -113,15 +113,17 @@ export async function GET(request: NextRequest) {
     
     // 如果缓存未命中，查询数据库
     if (!podcast) {
+      const dbQueryStartTime = Date.now();
       try {
-        console.log(`[api/public/podcast] 查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
+        console.log(`[api/public/podcast] 开始查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
         
         // 优化：直接不查询reportOutline字段（避免字段不存在导致的查询失败和延迟）
         // 添加查询超时保护，防止长时间阻塞（5秒超时，如果之前很快，5秒应该足够）
         const { withQueryTimeout } = await import('@/utils/query-timeout');
         
-        // 优化：先查询基本信息（小字段），如果成功再查询大字段
+        // 优化：先查询基本信息（小字段），不包含topic关联查询，避免JOIN导致的性能问题
         // 这样可以确保即使大字段查询慢，基本信息也能快速返回
+        const queryStartTime = Date.now();
         podcast = await withQueryTimeout(
           () => prisma.podcast.findFirst({
             where: whereClause,
@@ -134,13 +136,39 @@ export async function GET(request: NextRequest) {
               sourceUrl: true,
               summary: true,
               translatedSummary: true,
-              topic: { select: { name: true } },
+              topicId: true, // 只查询topicId，不关联查询topic表
               updatedAt: true
             }
           }),
-          15000, // 15秒超时（只查询小字段，应该很快）
+          5000, // 5秒超时（只查询小字段，应该很快，如果5秒还查不出来说明有问题）
           '播客详情查询超时（基本信息）'
         );
+        const queryDuration = Date.now() - queryStartTime;
+        console.log(`[api/public/podcast] 基本信息查询完成: id=${id}, 耗时=${queryDuration}ms`);
+        
+        // 如果找到播客，再查询topic信息（如果需要）
+        if (podcast && (podcast as any).topicId) {
+          try {
+            const topicStartTime = Date.now();
+            const topic = await withQueryTimeout(
+              () => prisma.topic.findUnique({
+                where: { id: (podcast as any).topicId },
+                select: { name: true }
+              }),
+              3000, // 3秒超时
+              '播客详情查询超时（topic）'
+            );
+            const topicDuration = Date.now() - topicStartTime;
+            console.log(`[api/public/podcast] Topic查询完成: id=${id}, topicId=${(podcast as any).topicId}, 耗时=${topicDuration}ms`);
+            (podcast as any).topic = topic;
+          } catch (topicError: any) {
+            // 如果topic查询失败，设置为null，不影响基本信息返回
+            console.warn(`[api/public/podcast] Topic查询失败: id=${id}, topicId=${(podcast as any).topicId}`, topicError);
+            (podcast as any).topic = null;
+          }
+        } else if (podcast) {
+          (podcast as any).topic = null;
+        }
         
         // 如果找到播客且需要加载transcript，再查询大字段
         // 优化：默认不加载大字段，只有在用户点击"看全文"时才加载（通过includeTranscript参数控制）
@@ -185,10 +213,8 @@ export async function GET(request: NextRequest) {
           (podcast as any).reportOutline = null;
         }
         
-        // 手动设置reportOutline为null（因为字段可能不存在）
-        if (podcast) {
-          (podcast as any).reportOutline = null;
-        }
+        const totalDbQueryDuration = Date.now() - dbQueryStartTime;
+        console.log(`[api/public/podcast] 数据库查询总耗时: id=${id}, 耗时=${totalDbQueryDuration}ms`);
         
         // 如果找到播客且使用id查询，存入缓存（1小时TTL）
         if (podcast && cacheKey) {
