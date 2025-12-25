@@ -24,19 +24,15 @@ export async function GET(request: NextRequest) {
     const startTime = Date.now();
 
     // 检查缓存
-    // latest类型不缓存，确保主页数据实时性
+    // latest类型使用30秒短期缓存，平衡实时性和性能
     // hot类型使用短期缓存（5分钟），因为排序计算较慢
     const cacheKey = `${cacheKeys.podcastList(type, topic || undefined, page, limit)}:${includeSummary ? 'summary' : 'basic'}`;
     
-    // latest类型不缓存，直接查询数据库，确保主页数据实时
-    if (type !== 'latest') {
-      const cached = await cache.get(cacheKey);
-      if (cached) {
-        console.log(`[API /api/public/list] 使用缓存: type=${type}, 缓存命中`);
-        return NextResponse.json(cached);
-      }
-    } else {
-      console.log(`[API /api/public/list] latest类型跳过缓存，确保数据实时性`);
+    // 所有类型都使用缓存，但latest类型使用更短的TTL（30秒）
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      console.log(`[API /api/public/list] 使用缓存: type=${type}, 缓存命中`);
+      return NextResponse.json(cached);
     }
     
     // 对于hot类型，如果查询失败，尝试返回缓存（即使过期）
@@ -408,14 +404,15 @@ export async function GET(request: NextRequest) {
     
     console.log(`[API /api/public/list] 响应数据: items=${response.items.length}, pagination.total=${response.pagination.total}, hasNext=${response.pagination.hasNext}`);
 
-    // 缓存策略：latest 类型不缓存，确保主页数据实时性
+    // 缓存策略：latest 类型使用30秒短期缓存，平衡实时性和性能
     let ttl: number;
     let cacheControl: string;
     
     if (type === 'latest') {
-      // latest类型不缓存，确保主页数据实时
-      cacheControl = 'no-cache, no-store, must-revalidate';
-      // 不设置缓存
+      // latest类型使用30秒短期缓存，平衡实时性和性能
+      ttl = 30 * 1000; // 30秒
+      cacheControl = 'public, max-age=30, s-maxage=30, stale-while-revalidate=10';
+      await cache.set(cacheKey, response, ttl);
     } else if (type === 'hot') {
       ttl = 5 * 60 * 1000; // 5分钟
       cacheControl = 'public, max-age=300, s-maxage=300, stale-while-revalidate=60';

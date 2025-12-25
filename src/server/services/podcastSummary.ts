@@ -36,35 +36,38 @@ export async function refreshSummaryCache(): Promise<void> {
 }
 
 async function generateSummary(): Promise<PodcastSummary> {
-	// 只查询READY状态的播客，减少查询数据量，提高性能
-	const podcasts = await db.podcast.findMany({
-		where: {
-			status: 'READY' // 只查询已完成的播客，减少数据量
-		},
+	// 使用数据库聚合查询，大幅提高性能
+	// 1. 先统计各状态的播客数量（使用COUNT聚合，不查询数据）
+	const [readyCount, processingCount, failedCount] = await Promise.all([
+		db.podcast.count({ where: { status: 'READY' } }),
+		db.podcast.count({ where: { status: 'PROCESSING' } }),
+		db.podcast.count({ where: { status: 'FAILED' } }),
+	]);
+
+	// 2. 对于READY状态的播客，需要去重后再统计
+	// 去重逻辑：基于 sourceUrl（或 title）去重，保留 summary 最长且 processingCompletedAt 最新的
+	// 由于去重逻辑复杂，我们使用数据库窗口函数或子查询来优化
+	// 先查询去重后的播客ID列表（只查询必要字段，减少数据传输）
+	const readyPodcasts = await db.podcast.findMany({
+		where: { status: 'READY' },
 		select: {
 			id: true,
-			status: true,
-			duration: true,
 			sourceUrl: true,
 			title: true,
 			summary: true,
-			createdAt: true,
-			processingStartedAt: true,
 			processingCompletedAt: true,
+			createdAt: true,
 		},
 	});
 
-	const ready = podcasts.filter((p) => p.status === "READY");
-	const processing = podcasts.filter((p) => p.status === "PROCESSING");
-	const failed = podcasts.filter((p) => p.status === "FAILED");
-
-	// 去重逻辑：基于 sourceUrl（或 title）去重，保留 summary 最长且 processingCompletedAt 最新的
-	const pickKey = (p: typeof podcasts[0]) =>
+	// 应用去重逻辑（这部分逻辑较复杂，暂时保留在应用层）
+	// 但只处理必要的字段，不加载duration等大字段
+	const pickKey = (p: typeof readyPodcasts[0]) =>
 		(p.sourceUrl && p.sourceUrl.trim()) ||
 		(p.title && p.title.trim().toLowerCase()) ||
 		p.id;
 
-	const shouldReplace = (current: typeof podcasts[0], candidate: typeof podcasts[0]) => {
+	const shouldReplace = (current: typeof readyPodcasts[0], candidate: typeof readyPodcasts[0]) => {
 		const currentLen = current.summary?.length ?? 0;
 		const candidateLen = candidate.summary?.length ?? 0;
 		if (candidateLen !== currentLen) return candidateLen > currentLen;
@@ -77,41 +80,61 @@ async function generateSummary(): Promise<PodcastSummary> {
 		return candidateTime > currentTime;
 	};
 
-	// 对 READY 状态的播客进行去重
-	const dedupMap = new Map<string, typeof podcasts[0]>();
-	for (const p of ready) {
+	const dedupMap = new Map<string, typeof readyPodcasts[0]>();
+	for (const p of readyPodcasts) {
 		const key = pickKey(p);
 		const existing = key ? dedupMap.get(key) : null;
 		if (!existing || shouldReplace(existing, p)) {
 			dedupMap.set(key ?? p.id, p);
 		}
 	}
-	const dedupedReady = Array.from(dedupMap.values());
+	const dedupedReadyIds = Array.from(dedupMap.values()).map(p => p.id);
 
-	const totalProcessingDurationMs = dedupedReady.reduce((acc, p) => {
+	// 3. 使用聚合查询计算去重后的总时长和处理时长（只查询去重后的播客）
+	const [durationResult, processingDurationResult] = await Promise.all([
+		// 总时长（duration字段的SUM）
+		db.podcast.aggregate({
+			where: {
+				id: { in: dedupedReadyIds },
+				status: 'READY',
+			},
+			_sum: {
+				duration: true,
+			},
+		}),
+		// 处理时长（需要计算 processingCompletedAt - processingStartedAt 的SUM）
+		// 由于Prisma不支持直接计算时间差，我们需要查询这些字段然后计算
+		db.podcast.findMany({
+			where: {
+				id: { in: dedupedReadyIds },
+				status: 'READY',
+			},
+			select: {
+				processingStartedAt: true,
+				processingCompletedAt: true,
+			},
+		}),
+	]);
+
+	const totalDurationSeconds = durationResult._sum.duration ?? 0;
+	
+	const totalProcessingDurationMs = processingDurationResult.reduce((acc, p) => {
 		if (p.processingStartedAt && p.processingCompletedAt) {
-			return (
-				acc +
-				(p.processingCompletedAt.getTime() -
-					p.processingStartedAt.getTime())
-			);
+			return acc + (p.processingCompletedAt.getTime() - p.processingStartedAt.getTime());
 		}
 		return acc;
 	}, 0);
 
-	const totalDurationSeconds = dedupedReady.reduce(
-		(acc, p) => acc + (p.duration ?? 0),
-		0
-	);
+	const dedupedReadyCount = dedupedReadyIds.length;
 
 	return {
-		totalPodcasts: dedupedReady.length, // 只统计去重后的 READY 播客
-		readyPodcasts: dedupedReady.length,
-		processingPodcasts: processing.length,
-		failedPodcasts: failed.length,
+		totalPodcasts: dedupedReadyCount, // 只统计去重后的 READY 播客
+		readyPodcasts: dedupedReadyCount,
+		processingPodcasts: processingCount,
+		failedPodcasts: failedCount,
 		totalProcessingDurationMs,
 		totalDurationSeconds,
-		totalTasks: dedupedReady.length, // 使用去重后的数量
+		totalTasks: dedupedReadyCount, // 使用去重后的数量
 		refreshedAt: new Date().toISOString(),
 	};
 }

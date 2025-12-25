@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/server/db';
 import { getSessionUser } from '@/server/auth';
 import { buildVisitorInfo, getVisitorUsage, recordVisitorAccess } from '@/server/visitorLimit';
+import { cache, cacheKeys } from '@/utils/cache';
 
 // 获取客户端 IP 地址
 function getClientIp(req: NextRequest): string {
@@ -98,35 +99,53 @@ export async function GET(request: NextRequest) {
     // 注意：reportOutline字段可能还不存在（如果迁移未执行），使用findMany+select来避免字段不存在错误
     // 添加查询超时，避免长时间阻塞
     let podcast: any = null;
-    try {
-      console.log(`[api/public/podcast] 查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
-      
-      // 直接查询，不使用超时包装（Prisma本身有连接超时）
-      // 移除超时包装，避免干扰正常查询
-      podcast = await prisma.podcast.findFirst({
-        where: whereClause,
-        select: {
-          id: true,
-          title: true,
-          showAuthor: true,
-          publishedAt: true,
-          audioUrl: true,
-          sourceUrl: true,
-          summary: true,
-          translatedSummary: true, // 中文翻译总结
-          topic: { select: { name: true } },
-          transcript: true,
-          originalTranscript: true, // 添加ASR原文字段
-          translatedTranscript: true, // 中文翻译原文
-          reportOutline: true, // 报告大纲（如果字段存在）
-          updatedAt: true
+    
+    // 尝试从缓存获取（只对id查询使用缓存，url查询不使用缓存）
+    const cacheKey = id ? cacheKeys.podcast(id) : null;
+    if (cacheKey) {
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        console.log(`[api/public/podcast] 从缓存获取播客: id=${id}`);
+        podcast = cached;
+      }
+    }
+    
+    // 如果缓存未命中，查询数据库
+    if (!podcast) {
+      try {
+        console.log(`[api/public/podcast] 查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
+        
+        // 直接查询，不使用超时包装（Prisma本身有连接超时）
+        // 移除超时包装，避免干扰正常查询
+        podcast = await prisma.podcast.findFirst({
+          where: whereClause,
+          select: {
+            id: true,
+            title: true,
+            showAuthor: true,
+            publishedAt: true,
+            audioUrl: true,
+            sourceUrl: true,
+            summary: true,
+            translatedSummary: true, // 中文翻译总结
+            topic: { select: { name: true } },
+            transcript: true,
+            originalTranscript: true, // 添加ASR原文字段
+            translatedTranscript: true, // 中文翻译原文
+            reportOutline: true, // 报告大纲（如果字段存在）
+            updatedAt: true
+          }
+        });
+        
+        // 如果找到播客且使用id查询，存入缓存（1小时TTL）
+        if (podcast && cacheKey) {
+          await cache.set(cacheKey, podcast, 60 * 60 * 1000); // 1小时
+          console.log(`[api/public/podcast] 播客数据已缓存: id=${id}`);
         }
-      });
-      console.log(`[api/public/podcast] Podcast表查询结果: ${podcast ? '找到' : '未找到'}`);
-    } catch (error: any) {
-      // 如果reportOutline字段不存在，尝试不查询该字段
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[api/public/podcast] Podcast表查询错误:`, errorMessage);
+      } catch (error: any) {
+        // 如果reportOutline字段不存在，尝试不查询该字段
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[api/public/podcast] Podcast表查询错误:`, errorMessage);
       
       if (errorMessage.includes('reportOutline') || errorMessage.includes('Unknown column')) {
         console.warn('reportOutline字段不存在，使用兼容查询');
@@ -152,6 +171,11 @@ export async function GET(request: NextRequest) {
           // 手动设置reportOutline为null
           if (podcast) {
             podcast.reportOutline = null;
+            // 缓存兼容查询的结果
+            if (cacheKey) {
+              await cache.set(cacheKey, podcast, 60 * 60 * 1000); // 1小时
+              console.log(`[api/public/podcast] 兼容查询结果已缓存: id=${id}`);
+            }
           }
         } catch (retryError: any) {
           console.error(`[api/public/podcast] 兼容查询也失败:`, retryError);
@@ -178,6 +202,7 @@ export async function GET(request: NextRequest) {
           { error: '查询播客失败，请稍后重试' },
           { status: 503 }
         );
+      }
       }
     }
 
