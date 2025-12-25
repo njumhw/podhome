@@ -119,6 +119,8 @@ export async function GET(request: NextRequest) {
         // 添加查询超时保护，防止长时间阻塞（5秒超时，如果之前很快，5秒应该足够）
         const { withQueryTimeout } = await import('@/utils/query-timeout');
         
+        // 优化：先查询基本信息（小字段），如果成功再查询大字段
+        // 这样可以确保即使大字段查询慢，基本信息也能快速返回
         podcast = await withQueryTimeout(
           () => prisma.podcast.findFirst({
             where: whereClause,
@@ -132,17 +134,49 @@ export async function GET(request: NextRequest) {
               summary: true,
               translatedSummary: true,
               topic: { select: { name: true } },
-              transcript: true,
-              originalTranscript: true,
-              translatedTranscript: true,
-              // 不查询reportOutline字段，避免字段不存在导致的查询失败
-              // reportOutline会在返回时手动设置为null
               updatedAt: true
             }
           }),
-          5000, // 5秒超时（如果之前很快，5秒应该足够）
-          '播客详情查询超时'
+          15000, // 15秒超时（只查询小字段，应该很快）
+          '播客详情查询超时（基本信息）'
         );
+        
+        // 如果找到播客，再查询大字段（transcript等）
+        // 使用Promise.allSettled，即使大字段查询失败也不影响基本信息
+        if (podcast) {
+          const largeFieldsResult = await Promise.allSettled([
+            withQueryTimeout(
+              () => prisma.podcast.findFirst({
+                where: whereClause,
+                select: {
+                  id: true,
+                  transcript: true,
+                  originalTranscript: true,
+                  translatedTranscript: true,
+                }
+              }),
+              15000, // 15秒超时
+              '播客详情查询超时（大字段）'
+            )
+          ]);
+          
+          // 合并大字段到podcast对象
+          if (largeFieldsResult[0].status === 'fulfilled' && largeFieldsResult[0].value) {
+            const largeFields = largeFieldsResult[0].value;
+            (podcast as any).transcript = largeFields.transcript;
+            (podcast as any).originalTranscript = largeFields.originalTranscript;
+            (podcast as any).translatedTranscript = largeFields.translatedTranscript;
+          } else {
+            // 如果大字段查询失败，设置为null，不影响基本信息返回
+            console.warn(`[api/public/podcast] 大字段查询失败，继续返回基本信息`);
+            (podcast as any).transcript = null;
+            (podcast as any).originalTranscript = null;
+            (podcast as any).translatedTranscript = null;
+          }
+          
+          // 手动设置reportOutline为null（因为字段可能不存在）
+          (podcast as any).reportOutline = null;
+        }
         
         // 手动设置reportOutline为null（因为字段可能不存在）
         if (podcast) {
