@@ -121,19 +121,35 @@ export default function PodcastDetailPage() {
 
   const loadPodcast = async (currentUser?: any) => {
     try {
-      // 添加时间戳防止缓存
-      const res = await fetch(`/api/public/podcast?id=${id}&t=${Date.now()}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error('播客不存在');
-        } else if (res.status === 503) {
-          throw new Error('数据库连接问题，请稍后重试');
-        } else {
-          throw new Error(`服务器错误 (${res.status})`);
+      // 添加超时控制（15秒）
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      
+      try {
+        // 添加时间戳防止缓存
+        const res = await fetch(`/api/public/podcast?id=${id}&t=${Date.now()}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!res.ok) {
+          if (res.status === 404) {
+            throw new Error('播客不存在');
+          } else if (res.status === 503) {
+            throw new Error('数据库连接问题，请稍后重试');
+          } else {
+            throw new Error(`服务器错误 (${res.status})`);
+          }
         }
+        const data = await res.json();
+        setPodcast(data);
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('请求超时：播客详情加载时间过长，请刷新页面重试');
+        }
+        throw fetchError;
       }
-      const data = await res.json();
-      setPodcast(data);
       
       // 如果有翻译字段（说明是英文播客），默认显示英文总结
       if (data.translatedSummary || data.translatedTranscript) {

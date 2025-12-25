@@ -96,10 +96,13 @@ export async function GET(request: NextRequest) {
 
     // 先查Podcast表
     // 注意：reportOutline字段可能还不存在（如果迁移未执行），使用findMany+select来避免字段不存在错误
+    // 添加查询超时，避免长时间阻塞
     let podcast: any = null;
     try {
       console.log(`[api/public/podcast] 查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
-      podcast = await prisma.podcast.findFirst({
+      
+      // 添加查询超时（10秒）
+      const queryPromise = prisma.podcast.findFirst({
         where: whereClause,
         select: {
           id: true,
@@ -118,6 +121,12 @@ export async function GET(request: NextRequest) {
           updatedAt: true
         }
       });
+      
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('数据库查询超时（超过10秒）')), 10000);
+      });
+      
+      podcast = await Promise.race([queryPromise, timeoutPromise]);
       console.log(`[api/public/podcast] Podcast表查询结果: ${podcast ? '找到' : '未找到'}`);
     } catch (error: any) {
       // 如果reportOutline字段不存在，尝试不查询该字段

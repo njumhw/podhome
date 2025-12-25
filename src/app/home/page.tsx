@@ -49,7 +49,7 @@ export default function HomePage() {
   const { user } = useUser();
   const toast = useToast();
 
-  const LATEST_INITIAL_LIMIT = 9;
+  const LATEST_INITIAL_LIMIT = 30; // 一次性加载30个，避免先显示4个再显示9个的问题
   const LATEST_PREFETCH_LIMIT = 60;
   const [latest, setLatest] = useState<PodcastItem[]>([]);
   const [latestDisplayCount, setLatestDisplayCount] = useState(0); // 默认先不显示，数据返回后再设置
@@ -235,7 +235,7 @@ export default function HomePage() {
       // 关键数据优先加载：latest列表和summary
       setLoading(prev => ({ ...prev, latest: true, hot: false })); // hot延迟加载
 
-      // 1. 优先加载latest列表（主页核心内容）
+      // 1. 优先加载latest列表（主页核心内容）- 一次性加载30个，避免分步加载
       try {
         const latestRes = await fetchWithRetry(`/api/public/list?type=latest&limit=${LATEST_INITIAL_LIMIT}&_t=${timestamp}`, { 
           maxRetries: 3, 
@@ -251,13 +251,15 @@ export default function HomePage() {
             hasNext: data.pagination?.hasNext
           });
           setLatest(items);
-          // 确保初始显示数量为9（如果数据足够）
-          const initialCount = items.length >= LATEST_INITIAL_LIMIT ? LATEST_INITIAL_LIMIT : items.length;
+          // 一次性显示所有数据（最多30个），避免先显示4个再显示9个的问题
+          const initialCount = Math.min(items.length, MAX_DISPLAY_COUNT);
           console.log('[首页] 设置显示数量:', initialCount, '实际数据:', items.length);
           setLatestDisplayCount(initialCount);
           setLatestHasMore(data.pagination?.hasNext || items.length >= LATEST_INITIAL_LIMIT);
-          // 背景预加载更多数据
-          prefetchLatest();
+          // 如果数据不足30个，后台预加载更多数据
+          if (items.length < LATEST_INITIAL_LIMIT) {
+            prefetchLatest();
+          }
         } else {
           const errorText = await latestRes.text();
           console.error('[首页] 获取最新播客失败:', latestRes.status, errorText);
@@ -313,15 +315,16 @@ export default function HomePage() {
     });
   }, []);
 
-  // 优先加载summary（主页关键数据）
+  // 优先加载summary（主页关键数据）- 不使用force，直接读取缓存（后端会在播客处理完成后自动更新）
   useEffect(() => {
     const loadSummary = async () => {
       try {
-        // 使用 force=true 强制刷新缓存，添加时间戳避免缓存
-        const res = await fetchWithRetry(`/api/public/summary?force=true&_t=${Date.now()}`, { 
-          maxRetries: 3, 
+        // 不使用force，直接读取缓存（后端会在播客处理完成后自动更新统计）
+        // 添加时间戳避免浏览器缓存，但后端会返回缓存数据（如果可用）
+        const res = await fetchWithRetry(`/api/public/summary?_t=${Date.now()}`, { 
+          maxRetries: 2, // 减少重试次数，因为这是非关键数据
           retryDelay: 1000,
-          timeout: 10000 // 10秒超时
+          timeout: 5000 // 5秒超时（减少超时时间，因为应该很快）
         });
         if (!res.ok) {
           console.error('[首页] 加载目录摘要失败: HTTP', res.status);
@@ -580,25 +583,15 @@ export default function HomePage() {
               <PodcastCard key={item.id} item={item} />
             ))}
           </div>
-          {((latestDisplayCount < latest.length || latestHasMore) || latestDisplayCount > 9) && (
+          {(latestDisplayCount < latest.length || latestHasMore) && latestDisplayCount < MAX_DISPLAY_COUNT && (
             <div className="mt-6 flex justify-center gap-3">
-              {(latestDisplayCount < latest.length || latestHasMore) && latestDisplayCount < MAX_DISPLAY_COUNT && (
-                <button
-                  onClick={handleLoadMoreLatest}
-                  disabled={loading.latest}
-                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading.latest ? 'Loading...' : 'More'}
-                </button>
-              )}
-              {latestDisplayCount > 9 && (
-                <button
-                  onClick={() => setLatestDisplayCount(9)}
-                  className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm"
-                >
-                  Less
-                </button>
-              )}
+              <button
+                onClick={handleLoadMoreLatest}
+                disabled={loading.latest}
+                className="px-6 py-2 bg-zinc-900/40 dark:bg-zinc-900/40 [data-theme='light']:bg-card-surface backdrop-blur-sm border border-white/10 dark:border-white/10 [data-theme='light']:border-card-border hover:border-white/20 dark:hover:border-white/20 [data-theme='light']:hover:border-slate-300 hover:bg-zinc-900/60 dark:hover:bg-zinc-900/60 [data-theme='light']:hover:bg-slate-50 hover:shadow-lg hover:-translate-y-0.5 text-white dark:text-white [data-theme='light']:text-foreground rounded-lg transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading.latest ? 'Loading...' : 'More'}
+              </button>
             </div>
           )}
           {latestDisplayCount >= MAX_DISPLAY_COUNT && (
@@ -1783,7 +1776,7 @@ export default function HomePage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Paste Podcast Url or Title here…"
+                placeholder="Paste Podcast Url or Title here... (Xiaoyuzhou & Apple Podcasts)"
                 className="flex-1 bg-transparent px-2 py-3 text-lg text-white dark:text-white [data-theme='light']:text-foreground placeholder-zinc-600 dark:placeholder-zinc-600 [data-theme='light']:placeholder-slate-400 outline-none font-light"
                 disabled={isSearching}
               />

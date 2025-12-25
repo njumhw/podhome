@@ -7,6 +7,8 @@ export async function GET(request: NextRequest) {
 		const force = searchParams.get('force') === 'true';
 		
 		console.log(`[api/public/summary] 开始获取摘要数据... (force=${force})`);
+		// 默认不使用force，直接读取缓存（后端会在播客处理完成后自动更新）
+		// 只有在明确要求时才强制刷新
 		const summary = await getPodcastSummary(force);
 		const totalDurationMinutes = Math.round(
 			(summary.totalDurationSeconds ?? 0) / 60

@@ -869,28 +869,66 @@ export async function generateReportWhole(input: ReportGenerationInput, fromChun
 }
 
 /**
- * 单轮生成（回退方案）
- * 当两轮生成失败时使用
- * 如果遇到内容审核错误，会自动切换到分块处理模式
+ * 根据语言生成单轮生成的用户提示词
  */
-async function generateReportWholeFallback(
-  input: ReportGenerationInput,
-  systemPrompt: string,
-  fromChunked: boolean = false
-): Promise<ReportGenerationOutput> {
-  const { transcript, title } = input;
-  const startTime = Date.now();
+function getSingleStageUserPrompt(language?: string, title?: string, transcript?: string): string {
+  const isEnglish = language?.startsWith('en') || 
+                   language?.includes('en') || 
+                   language?.toLowerCase() === 'english';
   
-  console.log('使用单轮生成模式（回退方案）');
-  
-  const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content: systemPrompt
-    },
-    {
-      role: "user",
-      content: `请基于ASR原文生成最详尽的播客总结/报告（不得引入外部信息）：
+  if (isEnglish) {
+    return `Please generate a comprehensive and detailed podcast summary/report based on the ASR transcript (do not introduce external information):
+
+**Podcast Title**: ${title || 'Not provided'}
+
+**ASR Transcript (sole source, generate report based on this)**:
+${transcript}
+
+**Report Structure Requirements (Must Strictly Follow):**
+
+1. **Report must begin with overall content summary (Executive Summary)**
+   - At the very beginning of the report, you must add a "**Report Overview**" or "**Executive Summary**" section
+   - Use 2-3 complete paragraphs to highly summarize the core theme, main viewpoints, key findings, and overall value of the entire podcast
+   - This overview should allow readers to fully understand the overall framework and core content of the podcast before reading the detailed content
+   - The overview should cover all main themes, but in a highly summarized manner
+
+2. **Fully expand each section (Based on ASR transcript, provide detailed arguments, cases, and data)**
+   - For **each** main viewpoint in the ASR transcript, **must** provide detailed expansion, including:
+     * **Complete argumentation**: Detailed description based on ASR transcript, do not only write viewpoint titles
+     * **Detailed arguments**: Find all arguments supporting each viewpoint from the ASR transcript, detail the logical chain of each argument
+     * **Specific cases**: Find all related cases, stories, examples from the ASR transcript, provide complete case descriptions (including background, process, results)
+     * **Accurate data**: Find all data, numbers, statistical information, research results from the ASR transcript, ensure numerical accuracy
+     * **Complete information**: Find all names, company names, organization names, place names, times, citations, etc. from the ASR transcript
+     * **Important quote excerpts**: Extract 1-2 quotes from the ASR transcript that best reflect the viewpoint, use Markdown quote format (> quote content) to highlight, increasing the report's authenticity and persuasiveness
+   - **Important**: Do not only list viewpoints, expand in depth. For each main viewpoint, provide at least 2-3 detailed arguments or cases, and 1-2 important quote excerpts
+   - Use long sentences and coherent paragraphs, avoid scattered listings
+
+**Output Length Requirements (Extremely Important!):**
+- **Must fully utilize the 32,000 token output limit**, generate as long and detailed a report as possible
+- **Target output length should be at least 25% of ASR transcript length** (if ASR transcript is 100,000 characters, target should be 25,000 characters or more)
+- **Do not compress content for fear of being too long**, within the 32K token limit, generate the most detailed report possible
+- **If report length is far below target (e.g., below 20% of ASR transcript), it means content expansion is insufficient and needs regeneration**
+
+**Content Quality Requirements:**
+- **Must cover all main viewpoints, secondary viewpoints, related arguments, specific cases, data, citations, and details**
+- **For each main viewpoint, provide a complete logical chain, argumentation process, supporting arguments, and specific cases**
+- **Each main viewpoint must have at least 2-3 detailed arguments or case support, and 1-2 important quote excerpts**
+- **Important quote excerpt requirements**:
+  * Extract quotes from ASR transcript that best reflect the core of the viewpoint (can be complete sentences or key fragments)
+  * Use Markdown quote format (> quote content) to highlight
+  * Quotes should be representative, persuasive, and enhance the report's authenticity
+  * Quote excerpts should naturally integrate into the argumentation, not exist in isolation
+- **All arguments, cases, data, quotes must come from the ASR transcript, do not fabricate or speculate**
+- Use long sentences and coherent paragraphs, maintain logical coherence, form complete argumentation chains
+- Do not over-compress, prefer longer reports to ensure completeness and comprehensiveness
+
+**Special Reminders:**
+- **Remember: Fully utilize the 32K token limit, generate as detailed a report as possible, do not worry about the report being too long**
+- Goal: Let readers fully understand the core content of the podcast through the report, without needing to listen to the original audio
+
+Please generate a complete, coherent, professional, detailed, and comprehensive report.`;
+  } else {
+    return `请基于ASR原文生成最详尽的播客总结/报告（不得引入外部信息）：
 
 **播客标题**: ${title || '未提供'}
 
@@ -939,7 +977,34 @@ ${transcript}
 - **记住：充分利用32K token限制，生成尽可能详尽的报告，不要担心报告太长**
 - 目标是让读者通过报告就能全面了解播客的核心内容，而不需要去听原音频
 
-请生成一份完整、连贯、专业、详尽且全面的报告。`
+请生成一份完整、连贯、专业、详尽且全面的报告。`;
+  }
+}
+
+/**
+ * 单轮生成（回退方案）
+ * 当两轮生成失败时使用
+ * 如果遇到内容审核错误，会自动切换到分块处理模式
+ */
+async function generateReportWholeFallback(
+  input: ReportGenerationInput,
+  systemPrompt: string,
+  fromChunked: boolean = false
+): Promise<ReportGenerationOutput> {
+  const { transcript, title, language } = input;
+  const startTime = Date.now();
+  
+  console.log('使用单轮生成模式（回退方案）');
+  console.log(`[单轮生成] 语言参数: language=${language}`);
+  
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: systemPrompt
+    },
+    {
+      role: "user",
+      content: getSingleStageUserPrompt(language, title, transcript)
     }
   ];
   
@@ -1035,13 +1100,15 @@ export async function generateReportChunked(input: ReportGenerationInput): Promi
   
   console.log(`文本分成 ${chunks.length} 个块进行处理`);
   
-  // 获取系统提示词
+  // 获取系统提示词（根据语言）
+  const { language } = input;
   let systemPrompt: string;
   try {
-    systemPrompt = await getPrompt('report_generation_whole');
+    const basePrompt = await getPrompt('report_generation_whole');
+    systemPrompt = getSystemPromptByLanguage(language, basePrompt);
   } catch (error) {
-    systemPrompt = `你是专业的播客访谈报告撰写专家。请基于播客内容片段生成报告摘要。
-要求：保留核心观点、逻辑清晰、客观表达、使用Markdown格式。`;
+    // 回退到根据语言生成默认提示词
+    systemPrompt = getSystemPromptByLanguage(language);
   }
   
   // 分别处理每个块，记录成功和失败的块索引
@@ -1049,12 +1116,32 @@ export async function generateReportChunked(input: ReportGenerationInput): Promi
   const successfulChunkIndices: number[] = []; // 记录成功块的索引
   
   console.log(`开始逐个处理 ${chunks.length} 个块，这可能需要较长时间...`);
+  console.log(`[分块处理] 语言参数: language=${language}`);
+  
+  // 根据语言生成分块处理的用户提示词
+  const isEnglish = language?.startsWith('en') || 
+                   language?.includes('en') || 
+                   language?.toLowerCase() === 'english';
   
   for (let i = 0; i < chunks.length; i++) {
     const chunkStartTime = Date.now();
     try {
-      // 改进分块处理的提示词，要求详细展开
-      const chunkPrompt = `请基于以下播客内容片段生成详细的报告摘要：
+      // 根据语言生成分块处理的提示词
+      const chunkPrompt = isEnglish 
+        ? `Please generate a detailed report summary based on the following podcast content segment:
+
+${chunks[i]}
+
+**Requirements (Important!):**
+1. **Detailed expansion**: Do not only list viewpoint titles, expand each viewpoint in depth, provide complete logical chains, argumentation processes, supporting arguments, and specific cases
+2. **Retain all key information**: Include all main viewpoints, secondary viewpoints, related arguments, specific cases, data, citations, and details
+3. **Full expansion**: For each main viewpoint, provide at least 2-3 detailed arguments or case support
+4. **Use long sentences and coherent paragraphs**: Avoid scattered listings, use complete long sentences for in-depth elaboration
+5. **Target length**: Each chunk's summary should be fully expanded, do not over-compress, target length should reach 20-30% of input content
+6. **Markdown format**: Use titles, paragraphs, bold, etc. Markdown format to organize content
+
+Please generate a detailed, coherent, and professional report summary.`
+        : `请基于以下播客内容片段生成详细的报告摘要：
 
 ${chunks[i]}
 
@@ -1173,7 +1260,27 @@ ${chunks[i]}
   let finalSummary = combinedReport;
   if (reportChunks.length > 1) {
     try {
-      const finalPrompt = `请将以下多个报告片段整合成一份完整、连贯、详尽的播客总结报告：
+      const finalPrompt = isEnglish
+        ? `Please integrate the following multiple report segments into a complete, coherent, and comprehensive podcast summary report:
+
+${combinedReport}
+
+**Integration Requirements (Important!):**
+1. **Full expansion rather than compression**: Do not delete important information for the sake of brevity, fully expand each section, provide detailed arguments, cases, and data
+2. **Maintain logical coherence**: Ensure smooth logical connections between segments, use transition words and connectors
+3. **Remove duplicate content**: Identify and remove duplicate viewpoints and expressions, but do not over-compress
+4. **Detailed expansion**: For each main viewpoint, provide a complete logical chain, argumentation process, supporting arguments, and specific cases
+5. **Target length**: Fully utilize the 32K token output limit, generate as detailed and comprehensive a report as possible. Target length should reach 20-30% of original podcast content
+6. **Use long sentences and coherent paragraphs**: Avoid scattered listings, use complete long sentences for in-depth elaboration
+7. **Markdown format**: Use titles, paragraphs, bold, etc. Markdown format to organize content
+
+**Important Reminders:**
+- The goal of integration is to generate a detailed and comprehensive report, not a compressed summary
+- Fully expand each section, do not compress content for fear of being too long
+- Within the 32K token limit, generate the most detailed report possible
+
+Please generate a complete, coherent, professional, detailed, and comprehensive report.`
+        : `请将以下多个报告片段整合成一份完整、连贯、详尽的播客总结报告：
 
 ${combinedReport}
 

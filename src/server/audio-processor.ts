@@ -825,6 +825,18 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				});
 				console.log(`播客已保存到数据库: ${podcast.id}${reportGenerationFailed ? '（报告生成失败，但ASR和清洗数据已保存）' : ''}`);
 				
+				// 异步刷新summary缓存（不阻塞主流程）
+				if (!reportGenerationFailed && podcast.status === 'READY') {
+					setImmediate(async () => {
+						try {
+							const { refreshSummaryCache } = await import('./services/podcastSummary');
+							await refreshSummaryCache();
+						} catch (error) {
+							console.warn('[processAudioInternal] 刷新summary缓存失败（不影响主流程）:', error);
+						}
+					});
+				}
+				
 				// 返回结果，包含播客ID以便前端跳转
 				const isPartialSuccess = reportGenerationFailed;
 				console.log(`播客处理完成，总耗时: ${Date.now() - startTime}ms`);
@@ -1000,6 +1012,18 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				
 				const isPartialSuccess = reportGenerationFailed;
 				console.log(`播客已保存到数据库: ${podcast.id}${isPartialSuccess ? '（报告生成失败，但ASR和清洗数据已保存）' : ''}`);
+				
+				// 异步刷新summary缓存（不阻塞主流程）
+				if (!reportGenerationFailed && podcast.status === 'READY') {
+					setImmediate(async () => {
+						try {
+							const { refreshSummaryCache } = await import('./services/podcastSummary');
+							await refreshSummaryCache();
+						} catch (error) {
+							console.warn('[processAudioInternal] 刷新summary缓存失败（不影响主流程）:', error);
+						}
+					});
+				}
 				
 				return {
 					success: !isPartialSuccess,

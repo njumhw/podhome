@@ -15,6 +15,26 @@ const SUMMARY_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 let cache: { summary: PodcastSummary; expiresAt: number } | null = null;
 
+/**
+ * 强制刷新summary缓存（在播客处理完成后调用）
+ * 异步执行，不阻塞主流程
+ */
+export async function refreshSummaryCache(): Promise<void> {
+	try {
+		console.log('[refreshSummaryCache] 开始刷新summary缓存...');
+		const summary = await generateSummary();
+		cache = {
+			summary,
+			expiresAt: Date.now() + SUMMARY_TTL_MS,
+		};
+		console.log(`[refreshSummaryCache] summary缓存刷新成功: ${summary.totalPodcasts} 个播客`);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		console.error('[refreshSummaryCache] 刷新summary缓存失败:', errorMessage);
+		// 刷新失败不影响主流程，只记录错误
+	}
+}
+
 async function generateSummary(): Promise<PodcastSummary> {
 	const podcasts = await db.podcast.findMany({
 		select: {
