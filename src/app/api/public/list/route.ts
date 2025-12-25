@@ -292,7 +292,7 @@ export async function GET(request: NextRequest) {
           sourceUrl: true,
           updatedAt: true,
           topic: { select: { name: true } },
-          _count: { select: { likes: true } }
+          likeCount: true // 使用缓存的likeCount字段，避免JOIN查询
         };
         
         if (includeSummary) {
@@ -317,12 +317,12 @@ export async function GET(request: NextRequest) {
         
         console.log(`[API /api/public/list] 热度排序（优化后）：获取到 ${hotItemsRaw.length} 条播客数据（最近${HOT_LOOKBACK_DAYS}天）`);
         
-        // 类型定义：确保类型安全
+        // 类型定义：确保类型安全（使用likeCount字段而不是_count）
         type HotItem = {
           id: string;
           sourceUrl: string | null;
           updatedAt: Date;
-          _count: { likes: number } | undefined;
+          likeCount: number; // 使用likeCount字段
           [key: string]: any; // 允许其他字段
         };
         
@@ -336,8 +336,9 @@ export async function GET(request: NextRequest) {
           if (!prev) {
             seen.set(key, itemAsHotItem);
           } else {
-            const prevLikes = (prev._count as { likes?: number })?.likes || 0;
-            const currLikes = (itemAsHotItem._count as { likes?: number })?.likes || 0;
+            // 使用likeCount字段进行比较
+            const prevLikes = prev.likeCount || 0;
+            const currLikes = itemAsHotItem.likeCount || 0;
             const prevUpdatedAt = prev.updatedAt instanceof Date ? prev.updatedAt : new Date(prev.updatedAt);
             const itemUpdatedAt = itemAsHotItem.updatedAt instanceof Date ? itemAsHotItem.updatedAt : new Date(itemAsHotItem.updatedAt);
             if (currLikes > prevLikes || 
@@ -349,14 +350,15 @@ export async function GET(request: NextRequest) {
         
         const hotItemsUnique = Array.from(seen.values());
         hotItemsUnique.sort((a, b) => {
-          const aLikes = (a._count as { likes?: number })?.likes || 0;
-          const bLikes = (b._count as { likes?: number })?.likes || 0;
+          // 使用likeCount字段进行排序
+          const aLikes = a.likeCount || 0;
+          const bLikes = b.likeCount || 0;
           const aUpdatedAt = a.updatedAt instanceof Date ? a.updatedAt : new Date(a.updatedAt);
           const bUpdatedAt = b.updatedAt instanceof Date ? b.updatedAt : new Date(b.updatedAt);
           if (aLikes !== bLikes) {
-            return bLikes - aLikes;
+            return bLikes - aLikes; // 按点赞数降序
           }
-          return bUpdatedAt.getTime() - aUpdatedAt.getTime();
+          return bUpdatedAt.getTime() - aUpdatedAt.getTime(); // 点赞数相同，按更新时间降序
         });
 
         items = hotItemsUnique.slice(0, limit).map(i => ({
@@ -370,7 +372,7 @@ export async function GET(request: NextRequest) {
           summary: includeSummary ? (i as any).summary : null,
           updatedAt: i.updatedAt,
           topic: i.topic,
-          likeCount: (i._count as { likes?: number })?.likes || 0
+          likeCount: i.likeCount || 0 // 直接使用likeCount字段
         }));
         
         total = hotItemsUnique.length;

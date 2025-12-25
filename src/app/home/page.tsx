@@ -232,11 +232,14 @@ export default function HomePage() {
     const loadInitialData = async () => {
       const timestamp = Date.now();
 
-      // 关键数据优先加载：latest列表和summary
+      // 关键数据并行加载：latest列表和summary同时加载，提升首屏速度
       setLoading(prev => ({ ...prev, latest: true, hot: false })); // hot延迟加载
 
-      // 1. 优先加载latest列表（主页核心内容）- 初始加载27个（9+9+9），但先显示9个
-      try {
+      // 并行加载latest列表和summary（优化：同时加载，减少总等待时间）
+      const [latestResult, summaryResult] = await Promise.allSettled([
+        // 1. 加载latest列表（主页核心内容）- 初始加载27个（9+9+9），但先显示9个
+        (async () => {
+          try {
         // 一次性加载27个数据，但初始只显示9个
         const latestRes = await fetchWithRetry(`/api/public/list?type=latest&limit=${MAX_DISPLAY_COUNT}&_t=${timestamp}`, { 
           maxRetries: 3, 
@@ -276,8 +279,48 @@ export default function HomePage() {
       } finally {
         setLoading(prev => ({ ...prev, latest: false }));
       }
+        })(),
+        // 2. 加载summary（主页关键数据）- 不使用force，直接读取缓存
+        (async () => {
+          try {
+            const res = await fetchWithRetry(`/api/public/summary?_t=${Date.now()}`, { 
+              maxRetries: 2,
+              retryDelay: 1000,
+              timeout: 5000
+            });
+            if (!res.ok) {
+              console.error('[首页] 加载目录摘要失败: HTTP', res.status);
+              setCatalogSummary({
+                totalPodcasts: 0,
+                totalMinutes: 0,
+              });
+              return;
+            }
+            const data = await res.json();
+            console.log('[首页] 目录摘要数据:', data);
+            setCatalogSummary({
+              totalPodcasts: data.totalPodcasts ?? 0,
+              totalMinutes: data.totalDurationMinutes ?? Math.round((data.totalDurationSeconds ?? 0) / 60),
+            });
+          } catch (error) {
+            console.error('[首页] 加载目录摘要失败:', error);
+            setCatalogSummary({
+              totalPodcasts: 0,
+              totalMinutes: 0,
+            });
+          }
+        })()
+      ]);
 
-      // 2. 延迟加载hot列表（非关键数据）
+      // 处理并行加载结果（Promise.allSettled确保即使一个失败，另一个也会执行）
+      if (latestResult.status === 'rejected') {
+        console.error('[首页] latest列表加载失败:', latestResult.reason);
+      }
+      if (summaryResult.status === 'rejected') {
+        console.error('[首页] summary加载失败:', summaryResult.reason);
+      }
+
+      // 3. 延迟加载hot列表（非关键数据，在latest和summary加载完成后）
       setLoading(prev => ({ ...prev, hot: true }));
       try {
         const hotRes = await fetchWithRetry(`/api/public/list?type=hot&limit=15&_t=${timestamp}`, { 
@@ -313,46 +356,12 @@ export default function HomePage() {
       setLatestDisplayCount(0);
       setLatestHasMore(false);
       setHotHasMore(false);
+      // 确保summary也有默认值
+      setCatalogSummary({
+        totalPodcasts: 0,
+        totalMinutes: 0,
+      });
     });
-  }, []);
-
-  // 优先加载summary（主页关键数据）- 不使用force，直接读取缓存（后端会在播客处理完成后自动更新）
-  useEffect(() => {
-    const loadSummary = async () => {
-      try {
-        // 不使用force，直接读取缓存（后端会在播客处理完成后自动更新统计）
-        // 添加时间戳避免浏览器缓存，但后端会返回缓存数据（如果可用）
-        const res = await fetchWithRetry(`/api/public/summary?_t=${Date.now()}`, { 
-          maxRetries: 2, // 减少重试次数，因为这是非关键数据
-          retryDelay: 1000,
-          timeout: 5000 // 5秒超时（减少超时时间，因为应该很快）
-        });
-        if (!res.ok) {
-          console.error('[首页] 加载目录摘要失败: HTTP', res.status);
-          // 即使失败也设置默认值，避免显示异常
-          setCatalogSummary({
-            totalPodcasts: 0,
-            totalMinutes: 0,
-          });
-          return;
-        }
-        const data = await res.json();
-        console.log('[首页] 目录摘要数据:', data);
-        setCatalogSummary({
-          totalPodcasts: data.totalPodcasts ?? 0,
-          totalMinutes: data.totalDurationMinutes ?? Math.round((data.totalDurationSeconds ?? 0) / 60),
-        });
-      } catch (error) {
-        console.error('[首页] 加载目录摘要失败:', error);
-        // 即使失败也设置默认值
-        setCatalogSummary({
-          totalPodcasts: 0,
-          totalMinutes: 0,
-        });
-      }
-    };
-    // 立即加载summary，不等待其他数据
-    loadSummary();
   }, []);
 
   useEffect(() => {

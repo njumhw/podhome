@@ -18,15 +18,16 @@ export async function buildHotAllResponse(limit = HOT_ALL_LIMIT_DEFAULT, include
       audioUrl: true,
       sourceUrl: true,
       updatedAt: true,
-      topic: { select: { name: true } },
+      topic: { 
+        select: { name: true } 
+      },
       ...(includeSummary ? { summary: true } : {}),
-      _count: { select: { likes: true } }
+      likeCount: true // 使用缓存的likeCount字段，避免JOIN查询
     },
-    orderBy: {
-      likes: {
-        _count: 'desc'
-      }
-    },
+    orderBy: [
+      { likeCount: 'desc' }, // 按点赞数降序
+      { updatedAt: 'desc' }  // 点赞数相同，按更新时间降序
+    ],
     take: Math.max(limit, 50)
   });
 
@@ -40,7 +41,7 @@ export async function buildHotAllResponse(limit = HOT_ALL_LIMIT_DEFAULT, include
     summary: includeSummary ? (item as any).summary ?? null : null,
     topic: item.topic?.name || null,
     updatedAt: item.updatedAt,
-    likeCount: item._count?.likes || 0
+    likeCount: item.likeCount || 0 // 直接使用likeCount字段
   }));
 
   return {

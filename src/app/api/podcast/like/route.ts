@@ -24,44 +24,66 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    if (existingLike) {
-      // 如果已经点赞，则取消点赞
-      await db.podcastLike.delete({
-        where: { id: existingLike.id }
-      });
+    // 使用事务确保数据一致性：同时更新PodcastLike表和Podcast.likeCount字段
+    const result = await db.$transaction(async (tx) => {
+      if (existingLike) {
+        // 如果已经点赞，则取消点赞
+        await tx.podcastLike.delete({
+          where: { id: existingLike.id }
+        });
 
-      // 获取更新后的点赞数
-      const likeCount = await db.podcastLike.count({
-        where: { podcastId }
-      });
+        // 原子性更新likeCount（减1，但不低于0）
+        const updatedPodcast = await tx.podcast.update({
+          where: { id: podcastId },
+          data: {
+            likeCount: {
+              decrement: 1
+            }
+          },
+          select: {
+            likeCount: true
+          }
+        });
 
-      return NextResponse.json({ 
-        success: true, 
-        liked: false, 
-        likeCount,
-        message: '已取消点赞' 
-      });
-    } else {
-      // 如果没有点赞，则添加点赞
-      await db.podcastLike.create({
-        data: {
-          podcastId,
-          userId: user.id,
-        }
-      });
+        return {
+          liked: false,
+          likeCount: Math.max(0, updatedPodcast.likeCount), // 确保不为负数
+          message: '已取消点赞'
+        };
+      } else {
+        // 如果没有点赞，则添加点赞
+        await tx.podcastLike.create({
+          data: {
+            podcastId,
+            userId: user.id,
+          }
+        });
 
-      // 获取更新后的点赞数
-      const likeCount = await db.podcastLike.count({
-        where: { podcastId }
-      });
+        // 原子性更新likeCount（加1）
+        const updatedPodcast = await tx.podcast.update({
+          where: { id: podcastId },
+          data: {
+            likeCount: {
+              increment: 1
+            }
+          },
+          select: {
+            likeCount: true
+          }
+        });
 
-      return NextResponse.json({ 
-        success: true, 
-        liked: true, 
-        likeCount,
-        message: '点赞成功' 
-      });
-    }
+        return {
+          liked: true,
+          likeCount: updatedPodcast.likeCount,
+          message: '点赞成功'
+        };
+      }
+    });
+
+    return NextResponse.json({ 
+      success: true, 
+      ...result
+    });
 
   } catch (error) {
     console.error('点赞操作失败:', error);
@@ -89,10 +111,21 @@ export async function GET(req: NextRequest) {
       // 忽略认证错误，Visitor 可以查看点赞数，但不能点赞
     }
 
-    // 获取点赞总数
-    const likeCount = await db.podcastLike.count({
-      where: { podcastId }
-    });
+    // 优先使用likeCount字段（已优化），如果字段不存在则回退到count查询
+    let likeCount = 0;
+    try {
+      const podcast = await db.podcast.findUnique({
+        where: { id: podcastId },
+        select: { likeCount: true }
+      });
+      likeCount = podcast?.likeCount ?? 0;
+    } catch (error) {
+      // 如果likeCount字段不存在（兼容旧数据），回退到count查询
+      console.warn('[点赞API] likeCount字段不存在，使用count查询作为回退:', error);
+      likeCount = await db.podcastLike.count({
+        where: { podcastId }
+      });
+    }
 
     // 检查当前用户是否已点赞（仅检查登录用户）
     const userLiked = user ? await db.podcastLike.findFirst({

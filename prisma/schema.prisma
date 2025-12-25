@@ -79,6 +79,7 @@ model Podcast {
   fileSize              BigInt?
   language              String?               @default("zh")
   status                PodcastStatus         @default(PROCESSING)
+  likeCount             Int                   @default(0) // 点赞数缓存字段，用于优化hot列表查询
   originalTranscript    String?
   transcript            String?
   summary               String?
@@ -103,6 +104,10 @@ model Podcast {
   chunks                TranscriptChunk[]
 
   @@index([status, updatedAt])
+  @@index([status, createdAt]) // 用于latest查询优化
+  @@index([topicId, status, updatedAt]) // 用于主题筛选优化
+  @@index([sourceUrl, status]) // 用于去重查询优化
+  @@index([likeCount]) // 用于hot列表排序优化（已在迁移文件中创建，这里确保schema一致）
 }
 
 model TranscriptChunk {
