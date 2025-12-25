@@ -516,38 +516,80 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
             }
         }
 		
-		// 4.5 翻译（仅当 ASR 语言为英文时）
+		// 4.5 并行生成英文和中文总结（仅当 ASR 语言为英文时）
 		const language = asrData.language || 'unknown';
 		// 更宽松的英文检测：支持 "en", "en-US", "english" 等格式
 		const isEnglish = language.startsWith('en') || language.includes('en') || language.toLowerCase() === 'english';
 		console.log(`[语言检测] asrData.language=${asrData.language}, language=${language}, isEnglish=${isEnglish}`);
+		
+		let englishSummary: string | null = null;
+		let chineseSummary: string | null = null;
 		let translatedTranscript: string | null = null;
-		let translatedSummary: string | null = null;
 
 		if (isEnglish) {
-			console.log(`✅ 检测到 ASR 语言为英文(${language})，开始中文翻译...`);
-			try {
-				translatedTranscript = await translateToChineseLarge(asrData.transcript, 'transcript');
-				console.log(`✅ 转写翻译完成，长度: ${translatedTranscript.length} 字符`);
-			} catch (e) {
-				console.warn('⚠️ 转写翻译失败（继续流程，保留英文原文）:', e);
-			}
+			console.log(`✅ 检测到 ASR 语言为英文(${language})，开始并行生成英文和中文总结...`);
+			
+			// 如果已有英文总结（从 reportData），保存它
 			if (reportData?.summary) {
-				try {
-					translatedSummary = await translateToChineseLarge(reportData.summary, 'summary');
-					console.log(`✅ 总结翻译完成，长度: ${translatedSummary.length} 字符`);
-				} catch (e) {
-					console.warn('⚠️ 总结翻译失败（继续流程，保留英文原文）:', e);
+				englishSummary = reportData.summary;
+				console.log(`✅ 英文总结已生成，长度: ${englishSummary?.length || 0} 字符`);
+			}
+			
+			// 并行生成中文总结和翻译转写
+			try {
+				const [chineseSummaryResult, translatedTranscriptResult] = await Promise.all([
+					// 生成中文总结（使用中文提示词）
+					(async () => {
+						try {
+							console.log('开始并行生成中文总结...');
+							const chineseReportBody = {
+								transcript: asrData.transcript,
+								segments: asrData.segmentTexts && asrData.segmentTexts.length > 0 ? asrData.segmentTexts : undefined,
+								title: meta.title || undefined,
+								audioUrl: meta.audioUrl,
+								language: 'zh' // 强制使用中文提示词
+							};
+							const chineseReportResult = await generateReportWhole(chineseReportBody);
+							console.log(`✅ 中文总结生成完成，长度: ${chineseReportResult.summary.length} 字符`);
+							return chineseReportResult.summary;
+						} catch (e) {
+							console.warn('⚠️ 中文总结生成失败:', e);
+							return null;
+						}
+					})(),
+					// 翻译转写（异步进行，不阻塞）
+					translateToChineseLarge(asrData.transcript, 'transcript').catch(e => {
+						console.warn('⚠️ 转写翻译失败（继续流程，保留英文原文）:', e);
+						return null;
+					})
+				]);
+				
+				chineseSummary = chineseSummaryResult;
+				translatedTranscript = translatedTranscriptResult;
+				
+				if (chineseSummary) {
+					console.log(`✅ 中文总结生成完成，长度: ${chineseSummary.length} 字符`);
 				}
+				if (translatedTranscript) {
+					console.log(`✅ 转写翻译完成，长度: ${translatedTranscript.length} 字符`);
+				}
+			} catch (e) {
+				console.warn('⚠️ 并行生成失败（继续流程，保留英文原文）:', e);
+			}
+		} else {
+			// 中文播客：只生成中文总结
+			if (reportData?.summary) {
+				chineseSummary = reportData.summary;
+				console.log(`✅ 中文总结已生成，长度: ${chineseSummary?.length || 0} 字符`);
 			}
 		}
 
 		// 将报告与翻译写入缓存（如果生成成功）
 		try {
 			await setCachedAudio(meta.audioUrl, {
-				summary: reportData?.summary || undefined,
+				summary: isEnglish ? englishSummary || undefined : chineseSummary || undefined,
 				translatedTranscript: translatedTranscript || undefined,
-				translatedSummary: translatedSummary || undefined,
+				translatedSummary: isEnglish ? chineseSummary || undefined : undefined,
 			});
 		} catch (e) {
 			console.warn('写入报告缓存失败（可忽略）:', e);
@@ -604,8 +646,12 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					
 					// 构建数据对象，如果reportOutline字段不存在则忽略
 					// 确保所有字段都符合schema要求
-					const transcriptToStore = asrData.transcript || null; // 英文原文保留
-					const summaryToStore = reportData?.summary || null;    // 英文原文保留
+					// 字段映射逻辑：
+					// - 英文播客：summary=英文总结，translatedSummary=中文总结
+					// - 中文播客：summary=中文总结，translatedSummary=null
+					const transcriptToStore = asrData.transcript || null;
+					const summaryToStore = isEnglish ? (englishSummary || null) : (chineseSummary || null);
+					const translatedSummaryToStore = isEnglish ? (chineseSummary || null) : null;
 
 					const podcastData: any = {
 						title: (meta.title || '未命名播客').substring(0, 500).trim(), // 限制title长度，避免过长，并去除首尾空格
@@ -616,10 +662,10 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 						duration: asrData.duration ? Math.floor(asrData.duration) : null, // 确保是整数或null
 						status: 'READY' as const, // PodcastStatus枚举值
 						originalTranscript: asrData.transcript || null, // 确保不是undefined
-						transcript: transcriptToStore, // 英文原文
-						summary: summaryToStore, // 英文原文
+						transcript: transcriptToStore,
+						summary: summaryToStore, // 英文播客=英文总结，中文播客=中文总结
 						translatedTranscript: translatedTranscript || null,
-						translatedSummary: translatedSummary || null,
+						translatedSummary: translatedSummaryToStore, // 英文播客=中文总结，中文播客=null
 						showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null, // 限制author长度，并去除首尾空格
 						processingStartedAt: new Date(startTime),
 						processingCompletedAt: new Date(),
@@ -879,9 +925,13 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					console.warn('⚠️ 自动标注主题失败:', tagError);
 				}
 				
-				// 构建数据对象（英文原文保留，翻译写入 translated*）
+				// 构建数据对象
+				// 字段映射逻辑：
+				// - 英文播客：summary=英文总结，translatedSummary=中文总结
+				// - 中文播客：summary=中文总结，translatedSummary=null
 				const transcriptToStore = asrData.transcript || null;
-				const summaryToStore = reportData?.summary || null;
+				const summaryToStore = isEnglish ? (englishSummary || null) : (chineseSummary || null);
+				const translatedSummaryToStore = isEnglish ? (chineseSummary || null) : null;
 
 				const podcastData: any = {
 					title: (meta.title || '未命名播客').substring(0, 500).trim(),
@@ -894,8 +944,8 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					originalTranscript: asrData.transcript || null,
 					transcript: transcriptToStore,
 					translatedTranscript: translatedTranscript || null,
-					summary: summaryToStore,
-					translatedSummary: translatedSummary || null,
+					summary: summaryToStore, // 英文播客=英文总结，中文播客=中文总结
+					translatedSummary: translatedSummaryToStore, // 英文播客=中文总结，中文播客=null
 					showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null,
 					processingStartedAt: new Date(startTime),
 					processingCompletedAt: new Date(),

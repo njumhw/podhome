@@ -24,13 +24,19 @@ export async function GET(request: NextRequest) {
     const startTime = Date.now();
 
     // 检查缓存
-    // latest和hot类型都使用短期缓存，减少数据库查询压力
-    // hot类型使用更长的缓存时间（5分钟），因为排序计算较慢
+    // latest类型不缓存，确保主页数据实时性
+    // hot类型使用短期缓存（5分钟），因为排序计算较慢
     const cacheKey = `${cacheKeys.podcastList(type, topic || undefined, page, limit)}:${includeSummary ? 'summary' : 'basic'}`;
-    const cached = await cache.get(cacheKey);
-    if (cached) {
-      console.log(`[API /api/public/list] 使用缓存: type=${type}, 缓存命中`);
-      return NextResponse.json(cached);
+    
+    // latest类型不缓存，直接查询数据库，确保主页数据实时
+    if (type !== 'latest') {
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        console.log(`[API /api/public/list] 使用缓存: type=${type}, 缓存命中`);
+        return NextResponse.json(cached);
+      }
+    } else {
+      console.log(`[API /api/public/list] latest类型跳过缓存，确保数据实时性`);
     }
     
     // 对于hot类型，如果查询失败，尝试返回缓存（即使过期）
@@ -71,6 +77,7 @@ export async function GET(request: NextRequest) {
     let optimizedWhere = podcastWhere;
     
     if (type === 'latest') {
+      // 优先查询最近7天的数据，如果不足则fallback到全部数据
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - LATEST_LOOKBACK_DAYS);
       optimizedWhere = {
@@ -79,6 +86,7 @@ export async function GET(request: NextRequest) {
           gte: sevenDaysAgo
         }
       };
+      console.log(`[API /api/public/list] latest类型：优先查询最近${LATEST_LOOKBACK_DAYS}天的数据`);
     }
     
     // 为查询添加超时保护（25秒，给数据库更多时间）
@@ -143,16 +151,25 @@ export async function GET(request: NextRequest) {
       podcastTotal = total;
 
       if (type === 'latest' && items.length < limit) {
-        console.warn(`[API /api/public/list] latest 近 ${LATEST_LOOKBACK_DAYS} 天数据不足（${items.length}/${limit}），执行回退查询`);
-        const fallbackItems = await prisma.podcast.findMany({
-          where: podcastWhere,
-          select: selectFields,
-          orderBy,
-          skip: offset,
-          take: limit
+        console.log(`[API /api/public/list] latest 近 ${LATEST_LOOKBACK_DAYS} 天数据不足（${items.length}/${limit}），执行回退查询全部数据`);
+        const fallbackItems = await withQueryTimeout(
+          () => prisma.podcast.findMany({
+            where: podcastWhere,
+            select: selectFields,
+            orderBy,
+            skip: offset,
+            take: limit
+          }),
+          15000,
+          'latest回退查询超时'
+        ).catch((error) => {
+          console.error(`[API /api/public/list] latest回退查询失败:`, error);
+          return items; // 如果回退查询失败，使用原始结果
         });
         podcastItemsRaw = fallbackItems;
-        podcastTotal = limit * 10;
+        // 使用实际查询结果的数量作为总数估算
+        podcastTotal = Math.max(fallbackItems.length, limit * 2);
+        console.log(`[API /api/public/list] latest回退查询完成: 返回${fallbackItems.length}条数据`);
       }
     } catch (dbError: any) {
       const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
@@ -364,7 +381,7 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    console.log(`[API /api/public/list] 最终返回数量: ${items.length}`);
+    console.log(`[API /api/public/list] 最终返回数量: ${items.length}, 总数: ${total}, 类型: ${type}`);
 
     const response = {
       items: items.map(item => ({
@@ -382,21 +399,23 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasNext: offset + limit < total,
+        total: total || items.length, // 确保total不为0（如果查询失败，使用items.length作为fallback）
+        totalPages: Math.ceil((total || items.length) / limit),
+        hasNext: offset + limit < (total || items.length),
         hasPrev: page > 1
       }
     };
+    
+    console.log(`[API /api/public/list] 响应数据: items=${response.items.length}, pagination.total=${response.pagination.total}, hasNext=${response.pagination.hasNext}`);
 
-    // 缓存策略：latest 类型不缓存，其他类型使用缓存
+    // 缓存策略：latest 类型不缓存，确保主页数据实时性
     let ttl: number;
     let cacheControl: string;
     
     if (type === 'latest') {
-      ttl = 30 * 1000; // 30秒
-      cacheControl = 'public, max-age=30, s-maxage=30, stale-while-revalidate=10';
-      await cache.set(cacheKey, response, ttl);
+      // latest类型不缓存，确保主页数据实时
+      cacheControl = 'no-cache, no-store, must-revalidate';
+      // 不设置缓存
     } else if (type === 'hot') {
       ttl = 5 * 60 * 1000; // 5分钟
       cacheControl = 'public, max-age=300, s-maxage=300, stale-while-revalidate=60';

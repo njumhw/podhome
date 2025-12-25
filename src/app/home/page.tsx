@@ -227,117 +227,127 @@ export default function HomePage() {
     return wrappedPromise;
   };
 
-  // 加载首页数据 - 优化并行加载
+  // 加载首页数据 - 优化加载顺序：关键数据优先
   useEffect(() => {
     const loadInitialData = async () => {
       const timestamp = Date.now();
 
-      setLoading(prev => ({ ...prev, latest: true, hot: true }));
+      // 关键数据优先加载：latest列表和summary
+      setLoading(prev => ({ ...prev, latest: true, hot: false })); // hot延迟加载
 
-      const [latestRes, hotRes] = await Promise.allSettled([
-        fetchWithRetry(`/api/public/list?type=latest&limit=${LATEST_INITIAL_LIMIT}`, { maxRetries: 3, retryDelay: 2000 }),
-        fetchWithRetry(`/api/public/list?type=hot&limit=15&_t=${timestamp}`, { maxRetries: 3, retryDelay: 2000 })
-      ]);
-
-      // 最新
-      if (latestRes.status === 'fulfilled') {
-        try {
-          if (latestRes.value.ok) {
-            const data = await latestRes.value.json();
-            const items = data.items || [];
-            setLatest(items);
-            // 确保初始显示数量为9（如果数据足够）
-            const initialCount = items.length >= LATEST_INITIAL_LIMIT ? LATEST_INITIAL_LIMIT : items.length;
-            setLatestDisplayCount(initialCount);
-            setLatestHasMore(data.pagination?.hasNext || items.length >= LATEST_INITIAL_LIMIT);
-            // 背景预加载更多数据
-            prefetchLatest();
-          } else {
-            const errorText = await latestRes.value.text();
-            console.error('[首页] 获取最新播客失败:', latestRes.value.status, errorText);
-            // 不设置为空数组，保留之前的数据（如果有）
-            // setLatest([]);
-            setLatestHasMore(false);
-          }
-        } catch (error) {
-          console.error('[首页] 解析最新播客失败:', error);
-          // 不设置为空数组，保留之前的数据（如果有）
-          // setLatest([]);
+      // 1. 优先加载latest列表（主页核心内容）
+      try {
+        const latestRes = await fetchWithRetry(`/api/public/list?type=latest&limit=${LATEST_INITIAL_LIMIT}&_t=${timestamp}`, { 
+          maxRetries: 3, 
+          retryDelay: 2000 
+        });
+        
+        if (latestRes.ok) {
+          const data = await latestRes.json();
+          const items = data.items || [];
+          console.log('[首页] 获取最新播客数据:', {
+            itemsCount: items.length,
+            pagination: data.pagination,
+            hasNext: data.pagination?.hasNext
+          });
+          setLatest(items);
+          // 确保初始显示数量为9（如果数据足够）
+          const initialCount = items.length >= LATEST_INITIAL_LIMIT ? LATEST_INITIAL_LIMIT : items.length;
+          console.log('[首页] 设置显示数量:', initialCount, '实际数据:', items.length);
+          setLatestDisplayCount(initialCount);
+          setLatestHasMore(data.pagination?.hasNext || items.length >= LATEST_INITIAL_LIMIT);
+          // 背景预加载更多数据
+          prefetchLatest();
+        } else {
+          const errorText = await latestRes.text();
+          console.error('[首页] 获取最新播客失败:', latestRes.status, errorText);
+          setLatest([]);
+          setLatestDisplayCount(0);
           setLatestHasMore(false);
         }
-      } else {
-        console.error('[首页] 最新播客请求失败:', latestRes.reason);
-        // 不设置为空数组，保留之前的数据（如果有）
-        // setLatest([]);
+      } catch (error) {
+        console.error('[首页] 最新播客请求失败:', error);
+        setLatest([]);
+        setLatestDisplayCount(0);
         setLatestHasMore(false);
+      } finally {
+        setLoading(prev => ({ ...prev, latest: false }));
       }
-      setLoading(prev => ({ ...prev, latest: false }));
 
-      // 最热
-      if (hotRes.status === 'fulfilled') {
-        try {
-          if (hotRes.value.ok) {
-            const data = await hotRes.value.json();
-            const items = data.items || [];
-            setHot(items);
-            const defaultCount = items.length === 0 ? 0 : Math.min(9, items.length);
-            setHotDisplayCount(defaultCount);
-            setHotHasMore(data.pagination?.hasNext || items.length >= 15);
-            setHotMode('30d');
-          } else {
-            const errorText = await hotRes.value.text();
-            console.error('[首页] 获取热门播客失败:', hotRes.value.status, errorText);
-            // 不设置为空数组，保留之前的数据（如果有）
-            // setHot([]);
-            setHotHasMore(false);
-            // setHotDisplayCount(0);
-          }
-        } catch (error) {
-          console.error('[首页] 解析热门播客失败:', error);
-          // 不设置为空数组，保留之前的数据（如果有）
-          // setHot([]);
+      // 2. 延迟加载hot列表（非关键数据）
+      setLoading(prev => ({ ...prev, hot: true }));
+      try {
+        const hotRes = await fetchWithRetry(`/api/public/list?type=hot&limit=15&_t=${timestamp}`, { 
+          maxRetries: 2, 
+          retryDelay: 2000 
+        });
+        
+        if (hotRes.ok) {
+          const data = await hotRes.json();
+          const items = data.items || [];
+          setHot(items);
+          const defaultCount = items.length === 0 ? 0 : Math.min(9, items.length);
+          setHotDisplayCount(defaultCount);
+          setHotHasMore(data.pagination?.hasNext || items.length >= 15);
+          setHotMode('30d');
+        } else {
+          const errorText = await hotRes.text();
+          console.error('[首页] 获取热门播客失败:', hotRes.status, errorText);
           setHotHasMore(false);
-          // setHotDisplayCount(0);
         }
-      } else {
-        console.error('[首页] 获取热门播客请求失败:', hotRes.reason);
-        // 不设置为空数组，保留之前的数据（如果有）
-        // setHot([]);
+      } catch (error) {
+        console.error('[首页] 获取热门播客失败:', error);
         setHotHasMore(false);
-        // setHotDisplayCount(0);
+      } finally {
+        setLoading(prev => ({ ...prev, hot: false }));
       }
-      setLoading(prev => ({ ...prev, hot: false }));
+
     };
 
     loadInitialData().catch((error) => {
-      console.error('加载首页初始数据失败:', error);
-      // 不设置为空数组，保留之前的数据（如果有）
-      // setLatest([]);
-      // setHot([]);
+      console.error('[首页] 加载首页初始数据失败:', error);
+      setLatest([]);
+      setLatestDisplayCount(0);
       setLatestHasMore(false);
       setHotHasMore(false);
     });
   }, []);
 
+  // 优先加载summary（主页关键数据）
   useEffect(() => {
     const loadSummary = async () => {
       try {
-        // 使用 force=true 强制刷新缓存
-        const res = await fetch('/api/public/summary?force=true', { cache: 'no-store' });
+        // 使用 force=true 强制刷新缓存，添加时间戳避免缓存
+        const res = await fetchWithRetry(`/api/public/summary?force=true&_t=${Date.now()}`, { 
+          maxRetries: 3, 
+          retryDelay: 1000,
+          timeout: 10000 // 10秒超时
+        });
         if (!res.ok) {
-          console.error('加载目录摘要失败: HTTP', res.status);
+          console.error('[首页] 加载目录摘要失败: HTTP', res.status);
+          // 即使失败也设置默认值，避免显示异常
+          setCatalogSummary({
+            totalPodcasts: 0,
+            totalMinutes: 0,
+          });
           return;
         }
         const data = await res.json();
-        console.log('目录摘要数据:', data);
+        console.log('[首页] 目录摘要数据:', data);
         setCatalogSummary({
           totalPodcasts: data.totalPodcasts ?? 0,
           totalMinutes: data.totalDurationMinutes ?? Math.round((data.totalDurationSeconds ?? 0) / 60),
         });
       } catch (error) {
-        console.error('加载目录摘要失败:', error);
+        console.error('[首页] 加载目录摘要失败:', error);
+        // 即使失败也设置默认值
+        setCatalogSummary({
+          totalPodcasts: 0,
+          totalMinutes: 0,
+        });
       }
     };
+    // 立即加载summary，不等待其他数据
     loadSummary();
   }, []);
 

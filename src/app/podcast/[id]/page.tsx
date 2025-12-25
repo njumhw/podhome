@@ -91,7 +91,7 @@ export default function PodcastDetailPage() {
   const [showVisitorLimitModal, setShowVisitorLimitModal] = useState(false);
   const [visitorLimitInfo, setVisitorLimitInfo] = useState<{ count: number; limit: number } | null>(null);
   const [isContentLimited, setIsContentLimited] = useState(false); // 内容是否受限
-  const [isEnglishOriginal, setIsEnglishOriginal] = useState(false); // 是否显示英文原文（默认显示中文翻译）
+  const [isEnglishOriginal, setIsEnglishOriginal] = useState(true); // 是否显示英文原文（默认显示英文，如果有翻译则显示中文）
   
   // 共享的点赞状态，用于同步两个点赞按钮
   const [sharedLikeState, setSharedLikeState] = useState<{ liked: boolean; likeCount: number } | null>(null);
@@ -135,9 +135,11 @@ export default function PodcastDetailPage() {
       const data = await res.json();
       setPodcast(data);
       
-      // 如果有翻译字段，默认显示英文原文（isEnglishOriginal = true）
+      // 如果有翻译字段（说明是英文播客），默认显示英文总结
       if (data.translatedSummary || data.translatedTranscript) {
-        setIsEnglishOriginal(true);
+        setIsEnglishOriginal(true); // 默认显示英文
+      } else {
+        setIsEnglishOriginal(false); // 中文播客，只显示中文
       }
       
       // 初始化共享点赞状态（从播客数据获取初始值）
@@ -880,8 +882,8 @@ export default function PodcastDetailPage() {
                 <SummaryDisplay 
                   summary={
                     isEnglishOriginal && podcast.translatedSummary
-                      ? podcast.summary  // 显示英文原文
-                      : (podcast.translatedSummary || podcast.summary)  // 默认显示中文翻译，如果没有翻译则显示原文
+                      ? podcast.summary  // 显示英文总结（英文播客的summary字段）
+                      : (podcast.translatedSummary || podcast.summary)  // 显示中文总结（如果有translatedSummary则显示，否则显示summary）
                   }
                   report={
                     isEnglishOriginal && podcast.translatedSummary

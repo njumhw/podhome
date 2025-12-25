@@ -94,7 +94,11 @@ async function generateSummary(): Promise<PodcastSummary> {
 
 export async function getPodcastSummary(force = false): Promise<PodcastSummary> {
 	const now = Date.now();
-	if (!force && cache && cache.expiresAt > now) {
+	
+	// force=true时，强制刷新，不使用缓存
+	if (force) {
+		console.log('[getPodcastSummary] force=true，强制刷新，忽略缓存');
+	} else if (cache && cache.expiresAt > now) {
 		console.log('[getPodcastSummary] 使用缓存数据');
 		return cache.summary;
 	}
@@ -112,9 +116,9 @@ export async function getPodcastSummary(force = false): Promise<PodcastSummary> 
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		console.error('[getPodcastSummary] 生成摘要失败:', errorMessage);
 		
-		// 如果有缓存，返回缓存数据
+		// 如果有缓存（即使过期），返回缓存数据，避免显示0
 		if (cache) {
-			console.log('[getPodcastSummary] 返回过期缓存数据');
+			console.log('[getPodcastSummary] 生成失败，返回缓存数据（即使可能过期）');
 			return cache.summary;
 		}
 		

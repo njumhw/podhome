@@ -212,8 +212,8 @@ export default function MulerunResultPage() {
           </div>
         )}
 
-        {/* 报告大纲 */}
-        {podcast.reportOutline && (
+        {/* 报告大纲 - MuleRun界面不显示大纲，只显示总结 */}
+        {/* {podcast.reportOutline && (
           <div className="mb-12">
             <h2 className="text-2xl font-semibold text-gray-900 mb-6">报告大纲</h2>
             <div className="mulerun-prose prose prose-lg max-w-none text-gray-700">
@@ -222,9 +222,9 @@ export default function MulerunResultPage() {
               </ReactMarkdown>
             </div>
           </div>
-        )}
+        )} */}
 
-        {!podcast.summary && !podcast.reportOutline && (
+        {!podcast.summary && (
           <div className="text-center text-gray-500 py-12">
             <p>暂无内容</p>
           </div>
