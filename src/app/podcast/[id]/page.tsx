@@ -125,6 +125,7 @@ export default function PodcastDetailPage() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       
+      let data: any = null;
       try {
         // 添加时间戳防止缓存
         const res = await fetch(`/api/public/podcast?id=${id}&t=${Date.now()}`, {
@@ -141,7 +142,7 @@ export default function PodcastDetailPage() {
             throw new Error(`服务器错误 (${res.status})`);
           }
         }
-        const data = await res.json();
+        data = await res.json();
         setPodcast(data);
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
@@ -152,7 +153,7 @@ export default function PodcastDetailPage() {
       }
       
       // 如果有翻译字段（说明是英文播客），默认显示英文总结
-      if (data.translatedSummary || data.translatedTranscript) {
+      if (data && (data.translatedSummary || data.translatedTranscript)) {
         setIsEnglishOriginal(true); // 默认显示英文
       } else {
         setIsEnglishOriginal(false); // 中文播客，只显示中文
@@ -163,7 +164,7 @@ export default function PodcastDetailPage() {
       const userToCheck = currentUser !== undefined ? currentUser : user;
       setSharedLikeState({
         liked: false, // 将在下面从API获取实际状态
-        likeCount: data.likeCount || 0,
+        likeCount: data?.likeCount || 0,
       });
       
       // 获取实际的点赞状态（如果用户已登录）
@@ -186,11 +187,11 @@ export default function PodcastDetailPage() {
       // 注意：只有真正的 Visitor（未登录用户）才会受限
       // 已登录用户（包括 READER, PODCASTER, PODCASTER_VIP, ADMIN）都不应该被限制
       // 如果用户已登录，即使 API 返回 isLimited，也应该忽略（可能是 API 端的 bug）
-      const isLimited = !user && (data.isLimited || data.visitorLimitExceeded);
+      const isLimited = !user && data && (data.isLimited || data.visitorLimitExceeded);
       setIsContentLimited(isLimited);
       
       // 只有 Visitor 才显示 visitorInfo
-      if (!user && data.visitorInfo) {
+      if (!user && data && data.visitorInfo) {
         const info = {
           count: data.visitorInfo.used ?? 0,
           limit: data.visitorInfo.total ?? 3,
