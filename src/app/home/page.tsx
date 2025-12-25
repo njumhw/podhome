@@ -286,7 +286,7 @@ export default function HomePage() {
             const res = await fetchWithRetry(`/api/public/summary?_t=${Date.now()}`, { 
               maxRetries: 2,
               retryDelay: 1000,
-              timeout: 5000
+              timeout: 10000 // 增加到10秒，因为Summary查询可能需要2-3秒
             });
             if (!res.ok) {
               console.error('[首页] 加载目录摘要失败: HTTP', res.status);

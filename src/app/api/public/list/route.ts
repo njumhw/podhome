@@ -300,11 +300,15 @@ export async function GET(request: NextRequest) {
         }
         
         // 使用查询超时，防止慢查询阻塞
+        // 使用likeCount字段排序，提升性能（避免JOIN查询）
         const hotItemsRaw = await withQueryTimeout(
           () => prisma.podcast.findMany({
             where: optimizedHotWhere,
             select: hotSelectFields,
-            orderBy: { updatedAt: 'desc' },
+            orderBy: [
+              { likeCount: 'desc' }, // 按点赞数降序
+              { updatedAt: 'desc' }  // 点赞数相同，按更新时间降序
+            ],
             take: Math.min(200, Math.max(limit * 4, 60))
           }),
           15000, // 15秒超时
