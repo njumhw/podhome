@@ -221,7 +221,7 @@ export default function PodcastDetailPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ audioCacheId: id }),
+          body: JSON.stringify({ podcastId: id }), // 修复：传递podcastId而不是audioCacheId
         });
       } catch (logError) {
         // 访问日志记录失败不影响主要功能
