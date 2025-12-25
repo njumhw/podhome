@@ -947,7 +947,7 @@ export default function PodcastDetailPage() {
             )}
 
             {!isEditing && (
-              <div className="mt-6 flex flex-wrap items-center gap-3 justify-between border border-slate-200 dark:border-white/10 rounded-lg px-4 py-3 bg-white dark:bg-black/30 shadow-none">
+              <div className="mt-6 flex flex-wrap items-center gap-3 justify-between border border-slate-200 dark:border-white/10 rounded-lg px-4 py-3 bg-white dark:bg-white [data-theme='light']:bg-white shadow-none">
                 <div className="text-sm text-slate-900 dark:text-zinc-300 font-mono">
                   值得一读？快点赞并分享给你的小伙伴们吧
                 </div>
