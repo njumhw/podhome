@@ -1013,14 +1013,53 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 				const isPartialSuccess = reportGenerationFailed;
 				console.log(`播客已保存到数据库: ${podcast.id}${isPartialSuccess ? '（报告生成失败，但ASR和清洗数据已保存）' : ''}`);
 				
-				// 异步刷新summary缓存（不阻塞主流程）
+				// 异步刷新summary缓存和预热播客详情缓存（不阻塞主流程）
 				if (!reportGenerationFailed && podcast.status === 'READY') {
 					setImmediate(async () => {
 						try {
+							// 刷新summary缓存
 							const { refreshSummaryCache } = await import('./services/podcastSummary');
 							await refreshSummaryCache();
+							
+							// 预热播客详情缓存（优化：播客处理完成后立即缓存，提升首次访问速度）
+							const { cache, cacheKeys } = await import('@/utils/cache');
+							const cacheKey = cacheKeys.podcast(podcast.id);
+							// 查询完整的播客数据用于缓存（只查询基本信息，不包含transcript）
+							const cachedPodcast = await db.podcast.findUnique({
+								where: { id: podcast.id },
+								select: {
+									id: true,
+									title: true,
+									showAuthor: true,
+									publishedAt: true,
+									audioUrl: true,
+									sourceUrl: true,
+									summary: true,
+									translatedSummary: true,
+									topicId: true,
+									updatedAt: true,
+									status: true,
+								}
+							});
+							
+							if (cachedPodcast) {
+								// 查询topic信息
+								if (cachedPodcast.topicId) {
+									const topic = await db.topic.findUnique({
+										where: { id: cachedPodcast.topicId },
+										select: { name: true }
+									});
+									(cachedPodcast as any).topic = topic;
+								} else {
+									(cachedPodcast as any).topic = null;
+								}
+								
+								// 缓存24小时（READY状态的播客数据很少变化）
+								await cache.set(cacheKey, cachedPodcast, 24 * 60 * 60 * 1000);
+								console.log(`[processAudioInternal] 播客详情缓存已预热: id=${podcast.id}`);
+							}
 						} catch (error) {
-							console.warn('[processAudioInternal] 刷新summary缓存失败（不影响主流程）:', error);
+							console.warn('[processAudioInternal] 刷新缓存失败（不影响主流程）:', error);
 						}
 					});
 				}

@@ -121,32 +121,52 @@ export async function GET(request: NextRequest) {
         // 添加查询超时保护，防止长时间阻塞（5秒超时，如果之前很快，5秒应该足够）
         const { withQueryTimeout } = await import('@/utils/query-timeout');
         
-        // 优化：先查询基本信息（小字段），不包含topic关联查询，避免JOIN导致的性能问题
-        // 这样可以确保即使大字段查询慢，基本信息也能快速返回
+        // 优化1：使用findUnique替代findFirst（当有id时，id是主键，findUnique直接通过主键索引查找，O(1)复杂度）
+        // 优化2：并行查询基本信息和topic（如果通过id查询且知道topicId，可以并行查询）
         const queryStartTime = Date.now();
+        
+        // 如果有id，使用findUnique（更快）；否则使用findFirst（url查询）
+        const queryMethod = id 
+          ? () => prisma.podcast.findUnique({
+              where: { id },
+              select: {
+                id: true,
+                title: true,
+                showAuthor: true,
+                publishedAt: true,
+                audioUrl: true,
+                sourceUrl: true,
+                summary: true,
+                translatedSummary: true,
+                topicId: true, // 只查询topicId，不关联查询topic表
+                updatedAt: true
+              }
+            })
+          : () => prisma.podcast.findFirst({
+              where: whereClause,
+              select: {
+                id: true,
+                title: true,
+                showAuthor: true,
+                publishedAt: true,
+                audioUrl: true,
+                sourceUrl: true,
+                summary: true,
+                translatedSummary: true,
+                topicId: true,
+                updatedAt: true
+              }
+            });
+        
         podcast = await withQueryTimeout(
-          () => prisma.podcast.findFirst({
-            where: whereClause,
-            select: {
-              id: true,
-              title: true,
-              showAuthor: true,
-              publishedAt: true,
-              audioUrl: true,
-              sourceUrl: true,
-              summary: true,
-              translatedSummary: true,
-              topicId: true, // 只查询topicId，不关联查询topic表
-              updatedAt: true
-            }
-          }),
+          queryMethod,
           10000, // 10秒超时（第一次查询可能需要建立连接，给更多时间）
           '播客详情查询超时（基本信息）'
         );
         const queryDuration = Date.now() - queryStartTime;
-        console.log(`[api/public/podcast] 基本信息查询完成: id=${id}, 耗时=${queryDuration}ms`);
+        console.log(`[api/public/podcast] 基本信息查询完成: id=${id}, 耗时=${queryDuration}ms, 方法=${id ? 'findUnique' : 'findFirst'}`);
         
-        // 如果找到播客，再查询topic信息（如果需要）
+        // 如果找到播客，查询topic信息（优化：如果podcast有topicId，立即查询，不等待）
         if (podcast && (podcast as any).topicId) {
           try {
             const topicStartTime = Date.now();
@@ -155,7 +175,7 @@ export async function GET(request: NextRequest) {
                 where: { id: (podcast as any).topicId },
                 select: { name: true }
               }),
-              5000, // 5秒超时（给更多时间）
+              5000, // 5秒超时
               '播客详情查询超时（topic）'
             );
             const topicDuration = Date.now() - topicStartTime;
@@ -216,10 +236,14 @@ export async function GET(request: NextRequest) {
         const totalDbQueryDuration = Date.now() - dbQueryStartTime;
         console.log(`[api/public/podcast] 数据库查询总耗时: id=${id}, 耗时=${totalDbQueryDuration}ms`);
         
-        // 如果找到播客且使用id查询，存入缓存（1小时TTL）
+        // 如果找到播客且使用id查询，存入缓存（优化：延长缓存时间）
+        // READY状态的播客数据很少变化，可以缓存24小时；PROCESSING状态的播客缓存5分钟
         if (podcast && cacheKey) {
-          await cache.set(cacheKey, podcast, 60 * 60 * 1000); // 1小时
-          console.log(`[api/public/podcast] 播客数据已缓存: id=${id}`);
+          const cacheTTL = (podcast as any).status === 'READY' 
+            ? 24 * 60 * 60 * 1000  // 24小时（READY状态的播客数据很少变化）
+            : 5 * 60 * 1000;        // 5分钟（PROCESSING状态的播客可能还在更新）
+          await cache.set(cacheKey, podcast, cacheTTL);
+          console.log(`[api/public/podcast] 播客数据已缓存: id=${id}, TTL=${cacheTTL}ms, status=${(podcast as any).status}`);
         }
       } catch (error: any) {
         const errorMessage = error instanceof Error ? error.message : String(error);
