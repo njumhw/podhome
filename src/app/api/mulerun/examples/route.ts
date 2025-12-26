@@ -11,20 +11,17 @@ import { db } from '@/server/db';
  */
 export async function GET(req: NextRequest) {
   try {
-    // 根据标题查找示例播客
-    // 这些是之前用户提到的三个示例播客
-    const exampleTitles = [
-      '014 对谈赵林',
-      'OpenAI首席研究官Mark Chen',
-      'E211 和张云帆聊聊：怎样不靠运气赚钱',
+    // 根据ID查找示例播客
+    const exampleIds = [
+      'cmjlt3jhm000gly8izc6i1z86',
+      'cmjl2axe90005lyuqvpj52oes',
+      'cmie7fjg2002glymxlejtstr0',
     ];
 
     const podcasts = await db.podcast.findMany({
       where: {
         status: 'READY',
-        OR: exampleTitles.map(title => ({
-          title: { contains: title },
-        })),
+        id: { in: exampleIds },
       },
       select: {
         id: true,
@@ -35,14 +32,16 @@ export async function GET(req: NextRequest) {
         status: true,
         sourceUrl: true,
       },
-      orderBy: {
-        updatedAt: 'desc',
-      },
-      take: 3,
+      // 按照exampleIds的顺序排序
     });
 
+    // 按照exampleIds的顺序排序
+    const sortedPodcasts = exampleIds
+      .map(id => podcasts.find(p => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => p !== undefined);
+
     // 如果找不到，返回一些最新的播客作为示例
-    if (podcasts.length === 0) {
+    if (sortedPodcasts.length === 0) {
       const latestPodcasts = await db.podcast.findMany({
         where: {
           status: 'READY',
@@ -68,7 +67,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      podcasts,
+      podcasts: sortedPodcasts,
     });
   } catch (error) {
     console.error('[MuleRun] 获取示例播客失败:', error);

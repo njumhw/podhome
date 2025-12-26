@@ -390,14 +390,8 @@ function ProcessedPodcastCard({ query }: { query: Query }) {
       </h3>
       
       {query.podcast.showAuthor && (
-        <p className="text-sm text-gray-600 mb-3">
+        <p className="text-sm text-gray-600 mb-4">
           {query.podcast.showAuthor}
-        </p>
-      )}
-      
-      {query.podcast.summary && (
-        <p className="text-sm text-gray-700 line-clamp-3 mb-4 leading-relaxed">
-          {query.podcast.summary.replace(/#{1,6}\s*/g, '').replace(/\*\*/g, '').substring(0, 120)}...
         </p>
       )}
       

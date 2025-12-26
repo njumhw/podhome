@@ -17,6 +17,9 @@ interface PodcastDetail {
   showAuthor?: string;
   audioUrl?: string;
   summary?: string;
+  translatedSummary?: string; // 中文翻译总结（英文播客）
+  originalTranscript?: string; // ASR原文（英文播客）
+  translatedTranscript?: string; // 中文翻译原文（英文播客）
   reportOutline?: string;
   status: string;
 }
@@ -28,6 +31,7 @@ export default function MulerunResultPage() {
   const [podcast, setPodcast] = useState<PodcastDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEnglishOriginal, setIsEnglishOriginal] = useState(true); // 是否显示英文原文（默认显示英文，如果有翻译则显示中文）
 
   useEffect(() => {
     if (!id) return;
@@ -62,9 +66,20 @@ export default function MulerunResultPage() {
             showAuthor: data.author || data.showAuthor,
             audioUrl: data.audioUrl,
             summary: data.summary,
+            translatedSummary: data.translatedSummary,
+            originalTranscript: data.originalTranscript,
+            translatedTranscript: data.translatedTranscript,
             reportOutline: data.reportOutline,
             status: 'READY',
           });
+          
+          // 如果是英文播客（有translatedSummary或translatedTranscript），默认显示英文
+          if (data.translatedSummary || data.translatedTranscript) {
+            setIsEnglishOriginal(true); // 默认显示英文
+          } else {
+            setIsEnglishOriginal(false); // 中文播客，只显示中文
+          }
+          
           console.log('[MuleRun] 播客数据已设置:', data.id, data.title);
         } else {
           console.error('[MuleRun] 数据格式无效:', data);
@@ -201,12 +216,32 @@ export default function MulerunResultPage() {
         )}
 
         {/* 摘要 */}
-        {podcast.summary && (
+        {(podcast.summary || podcast.translatedSummary) && (
           <div className="mb-12">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-6">摘要</h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900">摘要</h2>
+              {/* 语言切换按钮（仅英文播客显示） */}
+              {podcast.translatedSummary && (
+                <button
+                  onClick={() => setIsEnglishOriginal(!isEnglishOriginal)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-mono border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-gray-700 transition-colors"
+                  title={isEnglishOriginal ? '切换到中文翻译' : '切换到英文原文'}
+                >
+                  <span>{isEnglishOriginal ? 'EN' : '中'}</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                </button>
+              )}
+            </div>
             <div className="mulerun-prose prose prose-lg max-w-none text-gray-700">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {podcast.summary}
+                {(() => {
+                  if (isEnglishOriginal && podcast.translatedSummary) {
+                    return podcast.summary || '';
+                  }
+                  return podcast.translatedSummary || podcast.summary || '';
+                })()}
               </ReactMarkdown>
             </div>
           </div>
