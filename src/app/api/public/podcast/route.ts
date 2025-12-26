@@ -237,13 +237,13 @@ export async function GET(request: NextRequest) {
         console.log(`[api/public/podcast] 数据库查询总耗时: id=${id}, 耗时=${totalDbQueryDuration}ms`);
         
         // 如果找到播客且使用id查询，存入缓存（优化：延长缓存时间）
-        // READY状态的播客数据很少变化，可以缓存24小时；PROCESSING状态的播客缓存5分钟
+        // READY状态的播客数据很少变化，可以缓存5天；PROCESSING状态的播客缓存5分钟
         if (podcast && cacheKey) {
           const cacheTTL = (podcast as any).status === 'READY' 
-            ? 24 * 60 * 60 * 1000  // 24小时（READY状态的播客数据很少变化）
-            : 5 * 60 * 1000;        // 5分钟（PROCESSING状态的播客可能还在更新）
+            ? 5 * 24 * 60 * 60 * 1000  // 5天（READY状态的播客数据很少变化，几乎不会修改）
+            : 5 * 60 * 1000;            // 5分钟（PROCESSING状态的播客可能还在更新）
           await cache.set(cacheKey, podcast, cacheTTL);
-          console.log(`[api/public/podcast] 播客数据已缓存: id=${id}, TTL=${cacheTTL}ms, status=${(podcast as any).status}`);
+          console.log(`[api/public/podcast] 播客数据已缓存: id=${id}, TTL=${cacheTTL}ms (${(podcast as any).status === 'READY' ? '5天' : '5分钟'}), status=${(podcast as any).status}`);
         }
       } catch (error: any) {
         const errorMessage = error instanceof Error ? error.message : String(error);

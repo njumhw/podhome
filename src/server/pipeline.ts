@@ -277,9 +277,9 @@ export async function runPipeline(podcastId: string) {
 					(cachedPodcast as any).topic = null;
 				}
 				
-				// 缓存24小时（READY状态的播客数据很少变化）
-				await cache.set(cacheKey, cachedPodcast, 24 * 60 * 60 * 1000);
-				console.log(`[runPipeline] 播客详情缓存已预热: id=${podcastId}`);
+				// 缓存5天（READY状态的播客数据很少变化，几乎不会修改）
+				await cache.set(cacheKey, cachedPodcast, 5 * 24 * 60 * 60 * 1000);
+				console.log(`[runPipeline] 播客详情缓存已预热: id=${podcastId}, TTL=5天`);
 			}
 		} catch (error) {
 			console.warn('[runPipeline] 预热缓存失败（不影响主流程）:', error);
