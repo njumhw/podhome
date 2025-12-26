@@ -97,7 +97,9 @@ export async function GET(request: NextRequest) {
       const queryStartTime = Date.now();
       
       // 使用查询超时，防止慢查询阻塞
-      // 先查询数据，count查询可以异步进行（对于latest类型直接跳过count）
+      // 优化：只查询必要字段，减少数据传输和查询时间
+      // 列表查询不需要所有字段，只查询显示所需字段
+      // 不关联查询topic表（避免JOIN），只查询topicId，后续批量查询topic
       const selectFields: Record<string, any> = {
         id: true,
         title: true,
@@ -105,7 +107,7 @@ export async function GET(request: NextRequest) {
         publishedAt: true,
         audioUrl: true,
         sourceUrl: true,
-        topic: { select: { name: true } },
+        topicId: true, // 只查询topicId，不关联查询topic表（避免JOIN）
         updatedAt: true,
         createdAt: true
       };
@@ -132,16 +134,25 @@ export async function GET(request: NextRequest) {
       });
       
       // 对于latest类型，使用估算值而不是精确count（提高性能）
-      const total = type === 'latest' 
-        ? limit * 10 // 估算值，避免慢查询
-        : await withQueryTimeout(
-            () => prisma.podcast.count({ where: optimizedWhere }),
-            10000, // count查询10秒超时
-            'count查询超时'
-          ).catch(() => items.length); // count失败时使用items.length作为估算值
+      // 优化：如果items为空，total应该为0，不要返回估算值
+      let total: number;
+      if (items.length === 0) {
+        // 如果查询结果为空，total应该为0
+        total = 0;
+      } else if (type === 'latest') {
+        // latest类型使用估算值（基于实际查询结果）
+        total = Math.max(items.length, limit * 2); // 使用更合理的估算值
+      } else {
+        // 其他类型使用精确count
+        total = await withQueryTimeout(
+          () => prisma.podcast.count({ where: optimizedWhere }),
+          10000, // count查询10秒超时
+          'count查询超时'
+        ).catch(() => items.length); // count失败时使用items.length作为fallback
+      }
       
       const queryEndTime = Date.now();
-      console.log(`[API /api/public/list] 数据库查询完成: 耗时=${queryEndTime - queryStartTime}ms, 返回${items.length}条数据`);
+      console.log(`[API /api/public/list] 数据库查询完成: 耗时=${queryEndTime - queryStartTime}ms, 返回${items.length}条数据, total=${total}`);
       
       podcastItemsRaw = items;
       podcastTotal = total;
@@ -164,8 +175,9 @@ export async function GET(request: NextRequest) {
         });
         podcastItemsRaw = fallbackItems;
         // 使用实际查询结果的数量作为总数估算
-        podcastTotal = Math.max(fallbackItems.length, limit * 2);
-        console.log(`[API /api/public/list] latest回退查询完成: 返回${fallbackItems.length}条数据`);
+        // 优化：如果fallbackItems为空，total应该为0
+        podcastTotal = fallbackItems.length === 0 ? 0 : Math.max(fallbackItems.length, limit * 2);
+        console.log(`[API /api/public/list] latest回退查询完成: 返回${fallbackItems.length}条数据, total=${podcastTotal}`);
       }
     } catch (dbError: any) {
       const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
@@ -225,13 +237,53 @@ export async function GET(request: NextRequest) {
         seen.set(key, item);
       }
     }
-    const podcastItems = Array.from(seen.values());
+    let podcastItems = Array.from(seen.values());
+    
+    // 优化：如果去重后items为空，保留至少部分数据（避免完全为空）
+    if (podcastItems.length === 0 && podcastItemsRaw.length > 0) {
+      console.warn(`[API /api/public/list] 去重后为空，保留前${Math.min(10, podcastItemsRaw.length)}个数据`);
+      podcastItems = podcastItemsRaw.slice(0, Math.min(10, podcastItemsRaw.length));
+    }
     
     // 如果去重后数量显著减少，记录警告
     if (podcastItemsRaw.length > 0 && podcastItems.length < podcastItemsRaw.length * 0.5) {
       console.warn(`[API /api/public/list] 播客去重：原始 ${podcastItemsRaw.length} 个，去重后 ${podcastItems.length} 个`);
     }
 
+    // 优化：如果podcastItems有topicId，批量查询topic信息（避免N+1查询）
+    const topicIds = new Set<string>();
+    podcastItems.forEach(item => {
+      if (item.topicId) {
+        topicIds.add(item.topicId);
+      }
+    });
+    
+    // 批量查询topic信息
+    const topicsMap = new Map<string, { name: string } | null>();
+    if (topicIds.size > 0) {
+      try {
+        const topics = await prisma.topic.findMany({
+          where: { id: { in: Array.from(topicIds) } },
+          select: { id: true, name: true }
+        });
+        topics.forEach(topic => {
+          topicsMap.set(topic.id, { name: topic.name });
+        });
+        // 对于查询不到的topicId，设置为null
+        topicIds.forEach(id => {
+          if (!topicsMap.has(id)) {
+            topicsMap.set(id, null);
+          }
+        });
+      } catch (topicError) {
+        console.warn(`[API /api/public/list] 批量查询topic失败:`, topicError);
+        // 如果批量查询失败，所有topic设置为null
+        topicIds.forEach(id => {
+          topicsMap.set(id, null);
+        });
+      }
+    }
+    
     // 格式化数据
     let items = podcastItems.map(item => ({
       id: item.id,
@@ -242,12 +294,19 @@ export async function GET(request: NextRequest) {
       audioUrl: item.audioUrl,
       sourceUrl: item.sourceUrl,
       summary: includeSummary ? item.summary : null,
-      topic: item.topic,
+      topic: item.topicId ? topicsMap.get(item.topicId) : null, // 使用批量查询的topic
       updatedAt: item.updatedAt,
       likeCount: 0 // 默认0，hot分支会用聚合结果覆盖
     }));
 
+    // 优化：确保total和items一致，如果items为空，total应该为0
     let total = podcastTotal;
+    if (items.length === 0) {
+      total = 0; // 如果items为空，total应该为0，不要返回估算值
+    } else {
+      // 确保total >= items.length
+      total = Math.max(total, items.length);
+    }
 
     // 如果是热度排序，使用优化的数据库查询
     if (type === 'hot' || type === 'hot_all') {
@@ -283,6 +342,7 @@ export async function GET(request: NextRequest) {
           updatedAt: { gte: hotLookbackDate }
         };
         
+        // 优化：只查询必要字段，不关联查询topic表（避免JOIN）
         const hotSelectFields: Record<string, any> = {
           id: true,
           title: true,
@@ -291,7 +351,7 @@ export async function GET(request: NextRequest) {
           audioUrl: true,
           sourceUrl: true,
           updatedAt: true,
-          topic: { select: { name: true } },
+          topicId: true, // 只查询topicId，不关联查询topic表（避免JOIN）
           likeCount: true // 使用缓存的likeCount字段，避免JOIN查询
         };
         
@@ -395,6 +455,37 @@ export async function GET(request: NextRequest) {
           return bUpdatedAt.getTime() - aUpdatedAt.getTime(); // 点赞数相同，按更新时间降序
         });
 
+        // 优化：批量查询hot列表的topic信息（避免N+1查询）
+        const hotTopicIds = new Set<string>();
+        hotItemsUnique.forEach(item => {
+          if ((item as any).topicId) {
+            hotTopicIds.add((item as any).topicId);
+          }
+        });
+        
+        const hotTopicsMap = new Map<string, { name: string } | null>();
+        if (hotTopicIds.size > 0) {
+          try {
+            const hotTopics = await prisma.topic.findMany({
+              where: { id: { in: Array.from(hotTopicIds) } },
+              select: { id: true, name: true }
+            });
+            hotTopics.forEach(topic => {
+              hotTopicsMap.set(topic.id, { name: topic.name });
+            });
+            hotTopicIds.forEach(id => {
+              if (!hotTopicsMap.has(id)) {
+                hotTopicsMap.set(id, null);
+              }
+            });
+          } catch (hotTopicError) {
+            console.warn(`[API /api/public/list] 批量查询hot topic失败:`, hotTopicError);
+            hotTopicIds.forEach(id => {
+              hotTopicsMap.set(id, null);
+            });
+          }
+        }
+        
         items = hotItemsUnique.slice(0, limit).map(i => ({
           id: i.id,
           title: i.title || '未知标题',
@@ -405,12 +496,26 @@ export async function GET(request: NextRequest) {
           sourceUrl: i.sourceUrl,
           summary: includeSummary ? (i as any).summary : null,
           updatedAt: i.updatedAt,
-          topic: i.topic,
+          topic: (i as any).topicId ? hotTopicsMap.get((i as any).topicId) : null, // 使用批量查询的topic
           likeCount: i.likeCount || 0 // 直接使用likeCount字段
         }));
         
+        // 优化：确保hot查询的total和items一致
         total = hotItemsUnique.length;
+        if (items.length === 0) {
+          total = 0; // 如果items为空，total应该为0
+        } else {
+          // 确保total >= items.length
+          total = Math.max(total, items.length);
+        }
       }
+    }
+    
+    // 最终确保total和items一致（双重检查）
+    if (items.length === 0) {
+      total = 0;
+    } else {
+      total = Math.max(total, items.length);
     }
     
     console.log(`[API /api/public/list] 最终返回数量: ${items.length}, 总数: ${total}, 类型: ${type}`);
@@ -431,27 +536,28 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total: total || items.length, // 确保total不为0（如果查询失败，使用items.length作为fallback）
-        totalPages: Math.ceil((total || items.length) / limit),
-        hasNext: offset + limit < (total || items.length),
+        total: total, // 优化：total已经确保与items一致，不需要fallback
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
         hasPrev: page > 1
       }
     };
     
     console.log(`[API /api/public/list] 响应数据: items=${response.items.length}, pagination.total=${response.pagination.total}, hasNext=${response.pagination.hasNext}`);
 
-    // 缓存策略：latest 类型使用30秒短期缓存，平衡实时性和性能
+    // 优化缓存策略：延长缓存时间，提升性能
     let ttl: number;
     let cacheControl: string;
     
     if (type === 'latest') {
-      // latest类型使用30秒短期缓存，平衡实时性和性能
-      ttl = 30 * 1000; // 30秒
-      cacheControl = 'public, max-age=30, s-maxage=30, stale-while-revalidate=10';
+      // latest类型：从30秒延长到3分钟（数据变化不频繁，提升缓存命中率）
+      ttl = 3 * 60 * 1000; // 3分钟
+      cacheControl = 'public, max-age=180, s-maxage=180, stale-while-revalidate=30';
       await cache.set(cacheKey, response, ttl);
     } else if (type === 'hot') {
-      ttl = 5 * 60 * 1000; // 5分钟
-      cacheControl = 'public, max-age=300, s-maxage=300, stale-while-revalidate=60';
+      // hot类型：从5分钟延长到10分钟（排序计算慢，延长缓存时间）
+      ttl = 10 * 60 * 1000; // 10分钟
+      cacheControl = 'public, max-age=600, s-maxage=600, stale-while-revalidate=120';
       await cache.set(cacheKey, response, ttl);
     } else if (type === 'hot_all') {
       ttl = HOT_ALL_CACHE_TTL;

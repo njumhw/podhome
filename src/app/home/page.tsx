@@ -339,10 +339,16 @@ export default function HomePage() {
         } else {
           const errorText = await hotRes.text();
           console.error('[首页] 获取热门播客失败:', hotRes.status, errorText);
+          // 优化：查询失败时清空数据，确保显示状态正确
+          setHot([]);
+          setHotDisplayCount(0);
           setHotHasMore(false);
         }
       } catch (error) {
         console.error('[首页] 获取热门播客失败:', error);
+        // 优化：查询失败时清空数据，确保显示状态正确
+        setHot([]);
+        setHotDisplayCount(0);
         setHotHasMore(false);
       } finally {
         setLoading(prev => ({ ...prev, hot: false }));
