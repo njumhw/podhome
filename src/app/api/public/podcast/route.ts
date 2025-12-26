@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
               updatedAt: true
             }
           }),
-          5000, // 5秒超时（只查询小字段，应该很快，如果5秒还查不出来说明有问题）
+          10000, // 10秒超时（第一次查询可能需要建立连接，给更多时间）
           '播客详情查询超时（基本信息）'
         );
         const queryDuration = Date.now() - queryStartTime;
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
                 where: { id: (podcast as any).topicId },
                 select: { name: true }
               }),
-              3000, // 3秒超时
+              5000, // 5秒超时（给更多时间）
               '播客详情查询超时（topic）'
             );
             const topicDuration = Date.now() - topicStartTime;

@@ -119,11 +119,14 @@ export default function PodcastDetailPage() {
   }, [podcast?.id]);
 
 
-  const loadPodcast = async (currentUser?: any, includeTranscript = false) => {
+  const loadPodcast = async (currentUser?: any, includeTranscript = false, retryCount = 0) => {
+    const maxRetries = 2; // 最多重试2次
+    const retryDelay = 1000; // 重试间隔1秒
+    
     try {
-      // 添加超时控制（8秒，基本信息查询应该很快）
+      // 添加超时控制（15秒，给第一次查询更多时间建立连接）
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       
       let data: any = null;
       try {
@@ -136,21 +139,66 @@ export default function PodcastDetailPage() {
         clearTimeout(timeoutId);
         
         if (!res.ok) {
+          // 404错误：真的不存在，不重试
           if (res.status === 404) {
             throw new Error('播客不存在');
-          } else if (res.status === 503) {
-            throw new Error('数据库连接问题，请稍后重试');
+          } 
+          // 503错误或超时：查询失败，可以重试
+          else if (res.status === 503 || res.status === 408) {
+            const errorMsg = res.status === 503 ? '数据库连接问题，请稍后重试' : '请求超时，请稍后重试';
+            // 如果还有重试次数，自动重试
+            if (retryCount < maxRetries) {
+              console.log(`[播客详情] 查询失败，${retryDelay}ms后重试 (${retryCount + 1}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              return loadPodcast(currentUser, includeTranscript, retryCount + 1);
+            }
+            throw new Error(errorMsg);
           } else {
             throw new Error(`服务器错误 (${res.status})`);
           }
         }
         data = await res.json();
+        
+        // 如果返回的数据为空，可能是查询失败，尝试重试
+        if (!data || !data.id) {
+          if (retryCount < maxRetries) {
+            console.log(`[播客详情] 返回数据为空，${retryDelay}ms后重试 (${retryCount + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return loadPodcast(currentUser, includeTranscript, retryCount + 1);
+          }
+          throw new Error('播客数据加载失败，请稍后重试');
+        }
+        
         setPodcast(data);
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
+        
+        // 超时错误：可以重试
         if (fetchError.name === 'AbortError') {
+          if (retryCount < maxRetries) {
+            console.log(`[播客详情] 请求超时，${retryDelay}ms后重试 (${retryCount + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return loadPodcast(currentUser, includeTranscript, retryCount + 1);
+          }
           throw new Error('请求超时：播客详情加载时间过长，请刷新页面重试');
         }
+        
+        // 404错误：真的不存在，不重试
+        if (fetchError.message === '播客不存在') {
+          throw fetchError;
+        }
+        
+        // 其他错误：如果是网络错误或503，可以重试
+        if (retryCount < maxRetries && (
+          fetchError.message.includes('数据库连接') ||
+          fetchError.message.includes('超时') ||
+          fetchError.message.includes('网络')
+        )) {
+          console.log(`[播客详情] 查询失败: ${fetchError.message}，${retryDelay}ms后重试 (${retryCount + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          return loadPodcast(currentUser, includeTranscript, retryCount + 1);
+        }
+        
         throw fetchError;
       }
       
@@ -231,13 +279,20 @@ export default function PodcastDetailPage() {
       console.error('Failed to load podcast:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       
-      // 根据错误类型设置更具体的错误信息
-      if (errorMessage.includes('数据库连接') || errorMessage.includes('数据库查询失败')) {
-        setError('数据库连接问题，请稍后重试');
-      } else if (errorMessage.includes('播客不存在')) {
+      // 区分错误类型：404（不存在）和其他错误（查询失败）
+      if (errorMessage === '播客不存在' || errorMessage.includes('不存在')) {
+        // 真的不存在，设置错误
         setError('播客不存在');
+        setPodcast(null);
       } else {
-        setError(`加载播客失败: ${errorMessage}`);
+        // 查询失败（超时、503等），设置友好的错误信息
+        if (errorMessage.includes('数据库连接') || errorMessage.includes('数据库查询失败')) {
+          setError('数据库连接问题，请稍后重试');
+        } else if (errorMessage.includes('超时') || errorMessage.includes('timeout')) {
+          setError('请求超时，请稍后重试');
+        } else {
+          setError(`加载播客失败: ${errorMessage}`);
+        }
       }
     } finally {
       setLoading(false);
@@ -595,7 +650,8 @@ export default function PodcastDetailPage() {
     );
   }
 
-  if (error || !podcast) {
+  // 只有在真的不存在（404）时才显示错误页面
+  if (error && error.includes('不存在')) {
     return (
       <div className="min-h-screen bg-black">
         <div className="max-w-[1536px] mx-auto px-8 py-12">
@@ -604,6 +660,43 @@ export default function PodcastDetailPage() {
             <Link href="/home" className="text-indigo-400 hover:text-indigo-300 transition-colors font-mono text-sm">
               返回首页
             </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // 如果没有播客数据且不在加载中，可能是查询失败
+  if (!podcast && !loading && error) {
+    return (
+      <div className="min-h-screen bg-black">
+        <div className="max-w-[1536px] mx-auto px-8 py-12">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-white dark:text-white [data-theme='light']:text-foreground mb-6 font-sans">
+              {error || '加载失败'}
+            </h1>
+            <p className="text-zinc-400 dark:text-zinc-500 [data-theme='light']:text-slate-600 mb-4">
+              请刷新页面重试
+            </p>
+            <Link href="/home" className="text-indigo-400 hover:text-indigo-300 transition-colors font-mono text-sm">
+              返回首页
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // 如果没有播客数据，显示加载中（重试机制会处理）
+  if (!podcast) {
+    return (
+      <div className="min-h-screen bg-black dark:bg-black [data-theme='light']:bg-background">
+        <div className="max-w-[1536px] mx-auto px-8 py-12 space-y-8">
+          <div className="skeleton-block h-12 w-3/4"></div>
+          <div className="skeleton-block h-4 w-1/3"></div>
+          <div className="space-y-10">
+            <div className="skeleton-block h-96 w-full"></div>
+            <div className="skeleton-block h-96 w-full"></div>
           </div>
         </div>
       </div>
