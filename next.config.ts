@@ -15,6 +15,8 @@ const nextConfig: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
   },
+  // 启用 standalone 输出，用于 Docker 部署
+  output: 'standalone',
 };
 
 export default nextConfig;

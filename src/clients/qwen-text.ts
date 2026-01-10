@@ -11,8 +11,8 @@ export async function qwenChat(messages: ChatMessage[], options?: { model?: stri
 	// 优先使用调用方传入的 model，其次使用环境变量 QWEN_MODEL_NAME，最后回退到 qwen-flash
 	const model = options?.model || (env.QWEN_MODEL_NAME as string) || "qwen-flash";
 	const temperature = options?.temperature ?? 0.3;
-	// 默认将输出上限提高到 32k，可被调用方覆盖
-	const max_tokens = options?.maxTokens ?? 32000;
+	// 默认将输出上限提高到 64k（qwen3-max 支持），可被调用方覆盖
+	const max_tokens = options?.maxTokens ?? 64000;
 
 	const baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 	const endpoint = `${baseUrl}/chat/completions`;

@@ -58,6 +58,7 @@ export default function PodcastDetailPage() {
   
   const [podcast, setPodcast] = useState<PodcastDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingASR, setLoadingASR] = useState(false); // 独立的ASR加载状态
   const [error, setError] = useState<string | null>(null);
   
   const [comments, setComments] = useState<Comment[]>([]);
@@ -72,10 +73,13 @@ export default function PodcastDetailPage() {
   const [showFullscreenScript, setShowFullscreenScript] = useState(false);
   const [showASR, setShowASR] = useState(false); // 控制ASR原文的展开/收起（移除清洗版相关状态）
   const [asrTab, setAsrTab] = useState<'asr' | 'outline'>('asr'); // ASR原文区域的tab：'asr' 或 'outline'
+  // 独立的ASR transcript状态，避免更新podcast导致整个页面重新渲染
+  const [asrTranscript, setAsrTranscript] = useState<{ originalTranscript: string | null; translatedTranscript: string | null } | null>(null);
   const [copySuccess, setCopySuccess] = useState('');
   const [downloadStatus, setDownloadStatus] = useState('');
   const [copiedText, setCopiedText] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [asrCopied, setAsrCopied] = useState(false); // ASR原文复制提示状态
   const [editData, setEditData] = useState({
     title: '',
     author: '',
@@ -118,6 +122,40 @@ export default function PodcastDetailPage() {
     }
   }, [podcast?.id]);
 
+
+  // 单独加载 ASR transcript 的函数，避免刷新整个页面
+  const loadASRTranscript = async () => {
+    try {
+      setLoadingASR(true); // 使用独立的加载状态
+      const url = `/api/public/podcast?id=${id}&t=${Date.now()}&includeTranscript=true`;
+      const res = await fetch(url);
+      
+      if (!res.ok) {
+        throw new Error('加载ASR原文失败');
+      }
+      
+      const data = await res.json();
+      
+      // 调试：打印返回的数据
+      console.log('[ASR加载] API返回的数据:', {
+        originalTranscript: data.originalTranscript ? `${data.originalTranscript.substring(0, 50)}...` : 'null',
+        translatedTranscript: data.translatedTranscript ? `${data.translatedTranscript.substring(0, 50)}...` : 'null',
+      });
+      
+      // 只更新独立的ASR状态，不更新podcast对象，避免整个页面重新渲染
+      setAsrTranscript({
+        originalTranscript: data.originalTranscript || null,
+        translatedTranscript: data.translatedTranscript || null,
+      });
+      
+      setShowASR(true); // 加载成功后自动展开
+    } catch (error) {
+      console.error('加载ASR原文失败:', error);
+      toast.error('加载ASR原文失败，请稍后重试');
+    } finally {
+      setLoadingASR(false); // 使用独立的加载状态
+    }
+  };
 
   const loadPodcast = async (currentUser?: any, includeTranscript = false, retryCount = 0) => {
     const maxRetries = 2; // 最多重试2次
@@ -1040,8 +1078,8 @@ export default function PodcastDetailPage() {
             )}
 
             {!isEditing && (
-              <div className="mt-6 flex flex-wrap items-center gap-3 justify-between border border-slate-200 dark:border-white/10 rounded-lg px-4 py-3 bg-white dark:bg-black [data-theme='light']:!bg-white shadow-none">
-                <div className="text-sm text-slate-900 dark:text-zinc-300 font-mono">
+              <div className="like-share-section mt-6 flex flex-wrap items-center gap-3 justify-between border border-slate-200 dark:border-white/10 [data-theme='light']:border-slate-200 rounded-lg px-4 py-3 bg-white dark:bg-black shadow-none">
+                <div className="like-share-text text-sm text-slate-900 dark:text-zinc-300 font-mono">
                   值得一读？快点赞并分享给你的小伙伴们吧
                 </div>
                 <div className="flex items-center gap-2">
@@ -1059,7 +1097,7 @@ export default function PodcastDetailPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleShare}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 border border-white/5 rounded-lg hover:bg-white/5 transition-colors font-mono"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-400 [data-theme='light']:text-slate-700 border border-white/5 dark:border-white/5 [data-theme='light']:border-slate-300 rounded-lg hover:bg-white/5 dark:hover:bg-white/5 [data-theme='light']:hover:bg-slate-100 transition-colors font-mono"
                       title="分享播客"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1068,7 +1106,7 @@ export default function PodcastDetailPage() {
                       分享
                     </button>
                     {shareCopied && (
-                      <span className="text-xs text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-600 font-mono">
+                      <span className="text-xs text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-700 font-mono">
                         已复制链接
                       </span>
                     )}
@@ -1168,11 +1206,10 @@ export default function PodcastDetailPage() {
           </div>
 
           {/* ASR Transcript - Compact Style */}
-          {/* 优化：即使transcript未加载，也显示区域，点击"展开全文"时再加载 */}
-          {(podcast.originalTranscript || podcast.translatedTranscript || showASR) && (
-            <div className="mt-6 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/30 shadow-sm">
+          {/* 优化：始终显示ASR区域，但内容按需加载，点击"查看ASR原文"时再加载 */}
+          <div className="asr-transcript-section mt-6 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/30 shadow-sm">
               {/* Header: Compact header */}
-              <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-black/40 border-b border-slate-200 dark:border-white/10">
+              <div className={`flex items-center justify-between px-3 py-2 bg-white dark:bg-black/40 ${showASR ? 'border-b border-slate-200 dark:border-white/10' : ''}`}>
                 <div className="flex items-center gap-2">
                   <div className="flex gap-1">
                     <div className="w-2 h-2 rounded-full bg-red-500/60"></div>
@@ -1181,7 +1218,7 @@ export default function PodcastDetailPage() {
                   </div>
                   <h2 className="text-xs font-mono text-slate-600 dark:text-zinc-300">ASR Transcript</h2>
                   {/* 翻译切换按钮（仅当有翻译时显示） */}
-                  {podcast.translatedTranscript && (
+                  {(asrTranscript?.translatedTranscript || podcast.translatedTranscript) && (
                     <button
                       onClick={() => setIsEnglishOriginal(!isEnglishOriginal)}
                       className="ml-2 px-2 py-0.5 text-xs font-mono border border-slate-200 dark:border-white/10 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-zinc-300 transition-colors"
@@ -1195,23 +1232,16 @@ export default function PodcastDetailPage() {
                   <button
                     onClick={async () => {
                       // 如果当前是收起状态，且transcript未加载，先加载transcript
-                      if (!showASR && (!podcast.originalTranscript && !podcast.translatedTranscript)) {
-                        try {
-                          setLoading(true);
-                          // 重新加载播客数据，包含transcript
-                          await loadPodcast(undefined, true);
-                        } catch (error) {
-                          console.error('加载transcript失败:', error);
-                          toast.error('加载全文失败，请稍后重试');
-                        } finally {
-                          setLoading(false);
-                        }
+                      const hasTranscript = asrTranscript?.originalTranscript || asrTranscript?.translatedTranscript || podcast.originalTranscript || podcast.translatedTranscript;
+                      if (!showASR && !hasTranscript) {
+                        await loadASRTranscript();
+                      } else {
+                        setShowASR(!showASR);
                       }
-                      setShowASR(!showASR);
                     }}
                     className="px-2 py-1 text-xs text-slate-500 dark:text-zinc-400 border border-slate-200 dark:border-white/10 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors font-mono"
                   >
-                    {showASR ? '收起' : '展开全文'}
+                    {showASR ? '收起' : ((asrTranscript?.originalTranscript || asrTranscript?.translatedTranscript || podcast.originalTranscript || podcast.translatedTranscript) ? '展开全文' : '查看ASR原文')}
                   </button>
                 )}
               </div>
@@ -1230,7 +1260,7 @@ export default function PodcastDetailPage() {
               ) : (
                 showASR ? (
                   <div 
-                    className="p-6 font-mono text-sm overflow-y-auto relative bg-white dark:bg-black/40 text-slate-900 dark:text-zinc-200"
+                    className="asr-content-area p-6 font-mono text-sm overflow-y-auto relative bg-white dark:bg-black/40 text-slate-900 dark:text-zinc-200"
                     style={{ 
                       height: '400px', 
                       wordWrap: 'break-word', 
@@ -1242,19 +1272,60 @@ export default function PodcastDetailPage() {
                       e.stopPropagation();
                     }}
                   >
-                    <div className="flex items-center justify-end gap-2 mb-4 pb-2 border-b border-slate-200 dark:border-white/10">
-                      <button
-                        onClick={() => handleCopy(
-                          isEnglishOriginal && podcast.translatedTranscript
-                            ? podcast.originalTranscript || ''
-                            : (podcast.translatedTranscript || podcast.originalTranscript || ''),
-                          'ASR原文'
+                    <div className="flex items-center justify-end gap-2 mb-4 pb-2 border-b border-slate-200 dark:border-white/10 [data-theme='light']:border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            const original = asrTranscript?.originalTranscript || podcast.originalTranscript;
+                            const translated = asrTranscript?.translatedTranscript || podcast.translatedTranscript;
+                            const textToCopy = isEnglishOriginal && translated
+                              ? original || ''
+                              : (translated || original || '');
+                            
+                            // 使用与分享链接相同的复制逻辑
+                            if (navigator.clipboard && window.isSecureContext) {
+                              try {
+                                await navigator.clipboard.writeText(textToCopy);
+                                setAsrCopied(true);
+                                setTimeout(() => setAsrCopied(false), 2000);
+                                return;
+                              } catch (err) {
+                                console.warn('Clipboard API 失败，尝试降级方案:', err);
+                              }
+                            }
+                            
+                            // 降级方案
+                            try {
+                              const textarea = document.createElement('textarea');
+                              textarea.value = textToCopy;
+                              textarea.style.position = 'fixed';
+                              textarea.style.left = '-999999px';
+                              textarea.style.top = '-999999px';
+                              document.body.appendChild(textarea);
+                              textarea.focus();
+                              textarea.select();
+                              const successful = document.execCommand('copy');
+                              document.body.removeChild(textarea);
+                              if (successful) {
+                                setAsrCopied(true);
+                                setTimeout(() => setAsrCopied(false), 2000);
+                              }
+                            } catch (err) {
+                              console.error('复制失败:', err);
+                              toast.error('复制失败，请手动选择文本复制');
+                            }
+                          }}
+                          className="px-2 py-1 text-xs text-slate-600 dark:text-zinc-400 [data-theme='light']:text-slate-700 border border-slate-200 dark:border-white/10 [data-theme='light']:border-slate-300 rounded hover:bg-slate-100 dark:hover:bg-white/10 [data-theme='light']:hover:bg-slate-200 transition-colors font-mono"
+                          title="复制ASR原文"
+                        >
+                          复制
+                        </button>
+                        {asrCopied && (
+                          <span className="text-xs text-zinc-500 dark:text-zinc-500 [data-theme='light']:text-slate-700 font-mono">
+                            已复制
+                          </span>
                         )}
-                        className="px-2 py-1 text-xs text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-white/10 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors font-mono"
-                        title="复制ASR原文"
-                      >
-                        复制
-                      </button>
+                      </div>
                       <button
                         onClick={() => setShowFullscreenScript(true)}
                         className={`px-2 py-1 text-xs ${accentStyle.text} border ${accentStyle.border} rounded hover:${accentStyle.bg} transition-colors font-mono`}
@@ -1262,23 +1333,33 @@ export default function PodcastDetailPage() {
                         全屏
                       </button>
                     </div>
-                    {loading ? (
+                    {loadingASR ? (
                       <div className="flex items-center justify-center h-full py-20">
-                        <div className="text-slate-400 dark:text-zinc-500">加载中...</div>
+                        <div className="text-slate-400 dark:text-zinc-500 [data-theme='light']:text-slate-500">加载中...</div>
                       </div>
-                    ) : (podcast.originalTranscript || podcast.translatedTranscript) ? (
-                      <>
-                        <span className="text-slate-400 dark:text-zinc-500">$ </span>
-                        {isEnglishOriginal && podcast.translatedTranscript
-                          ? podcast.originalTranscript  // 显示英文原文
-                          : (podcast.translatedTranscript || podcast.originalTranscript)  // 默认显示中文翻译，如果没有翻译则显示原文
-                        }
-                      </>
-                    ) : (
-                      <div className="flex items-center justify-center h-full py-20 text-slate-400 dark:text-zinc-500">
-                        暂无ASR原文
-                      </div>
-                    )}
+                    ) : (() => {
+                      // 优先使用独立的ASR状态，如果没有则使用podcast中的
+                      const original = asrTranscript?.originalTranscript || podcast.originalTranscript;
+                      const translated = asrTranscript?.translatedTranscript || podcast.translatedTranscript;
+                      
+                      if (original || translated) {
+                        return (
+                          <>
+                            <span className="text-slate-400 dark:text-zinc-500 [data-theme='light']:text-slate-500">$ </span>
+                            {isEnglishOriginal && translated
+                              ? original  // 显示英文原文
+                              : (translated || original)  // 默认显示中文翻译，如果没有翻译则显示原文
+                            }
+                          </>
+                        );
+                      } else {
+                        return (
+                          <div className="flex items-center justify-center h-full py-20 text-slate-400 dark:text-zinc-500 [data-theme='light']:text-slate-500">
+                            暂无ASR原文
+                          </div>
+                        );
+                      }
+                    })()}
                     {/* 内容受限遮罩 */}
                     {isContentLimited && (
                       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/60 to-black/90 backdrop-blur-sm flex items-end justify-center pb-8 pointer-events-auto">
@@ -1315,7 +1396,6 @@ export default function PodcastDetailPage() {
                 ) : null
               )}
             </div>
-          )}
         </div>
       </div>
 
@@ -1328,8 +1408,8 @@ export default function PodcastDetailPage() {
         onTopicChange={handleTopicChange}
       />
 
-      {/* 复制成功提示 */}
-      {copySuccess && (
+      {/* 复制成功提示（仅用于非ASR的复制，ASR复制使用内联提示） */}
+      {copySuccess && !copySuccess.includes('ASR原文') && (
         <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 transition-opacity duration-300">
           {copySuccess}
         </div>
@@ -1420,16 +1500,52 @@ export default function PodcastDetailPage() {
             <div className="flex justify-between items-center p-6 border-b border-white/5">
               <h2 className={`text-2xl font-bold font-sans ${accentStyle.text}`}>ASR原文</h2>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleCopy(podcast.originalTranscript || '', 'ASR原文')}
-                  className="text-sm text-zinc-400 hover:text-zinc-300 px-3 py-1.5 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-1 font-mono"
-                  title="复制ASR原文"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  复制
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      const textToCopy = podcast.originalTranscript || '';
+                      if (navigator.clipboard && window.isSecureContext) {
+                        try {
+                          await navigator.clipboard.writeText(textToCopy);
+                          setAsrCopied(true);
+                          setTimeout(() => setAsrCopied(false), 2000);
+                          return;
+                        } catch (err) {
+                          console.warn('Clipboard API 失败，尝试降级方案:', err);
+                        }
+                      }
+                      try {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = textToCopy;
+                        textarea.style.position = 'fixed';
+                        textarea.style.left = '-999999px';
+                        textarea.style.top = '-999999px';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        const successful = document.execCommand('copy');
+                        document.body.removeChild(textarea);
+                        if (successful) {
+                          setAsrCopied(true);
+                          setTimeout(() => setAsrCopied(false), 2000);
+                        }
+                      } catch (err) {
+                        console.error('复制失败:', err);
+                        toast.error('复制失败，请手动选择文本复制');
+                      }
+                    }}
+                    className="text-sm text-zinc-400 hover:text-zinc-300 px-3 py-1.5 border border-white/5 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-1 font-mono"
+                    title="复制ASR原文"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    复制
+                  </button>
+                  {asrCopied && (
+                    <span className="text-xs text-zinc-400 font-mono">已复制</span>
+                  )}
+                </div>
                 <button
                   onClick={() => setShowFullscreenScript(false)}
                   className="text-zinc-400 hover:text-white text-2xl transition-colors"

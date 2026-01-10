@@ -100,19 +100,24 @@ export async function GET(request: NextRequest) {
     // 注意：reportOutline字段可能还不存在（如果迁移未执行），使用findMany+select来避免字段不存在错误
     // 添加查询超时，避免长时间阻塞
     let podcast: any = null;
+    let resolvedFromAudioCache = false; // 提前定义，避免作用域问题
     
     // 尝试从缓存获取（只对id查询使用缓存，url查询不使用缓存）
+    // 注意：如果includeTranscript=true，即使从缓存获取了数据，也需要查询大字段
     const cacheKey = id ? cacheKeys.podcast(id) : null;
-    if (cacheKey) {
+    let fromCache = false;
+    if (cacheKey && !includeTranscript) {
+      // 只有在不需要transcript时才使用缓存（因为缓存不包含大字段）
       const cached = await cache.get(cacheKey);
       if (cached) {
         console.log(`[api/public/podcast] 从缓存获取播客: id=${id}`);
         podcast = cached;
+        fromCache = true;
       }
     }
     
-    // 如果缓存未命中，查询数据库
-    if (!podcast) {
+    // 如果缓存未命中或需要加载transcript，查询数据库
+    if (!podcast || (includeTranscript && fromCache)) {
       const dbQueryStartTime = Date.now();
       try {
         console.log(`[api/public/podcast] 开始查询播客: id=${id}, whereClause=`, JSON.stringify(whereClause));
@@ -194,35 +199,83 @@ export async function GET(request: NextRequest) {
         // 优化：默认不加载大字段，只有在用户点击"看全文"时才加载（通过includeTranscript参数控制）
         if (podcast && includeTranscript) {
           try {
-            const largeFields = await withQueryTimeout(
-              () => prisma.podcast.findFirst({
-                where: whereClause,
-                select: {
-                  id: true,
-                  transcript: true,
-                  originalTranscript: true,
-                  translatedTranscript: true,
-                }
-              }),
-              15000, // 15秒超时
-              '播客详情查询超时（大字段）'
-            );
+            let largeFields: any = null;
             
-            // 合并大字段到podcast对象
-            if (largeFields) {
-              (podcast as any).transcript = largeFields.transcript;
-              (podcast as any).originalTranscript = largeFields.originalTranscript;
-              (podcast as any).translatedTranscript = largeFields.translatedTranscript;
+            // 根据播客来源选择不同的表查询
+            if (resolvedFromAudioCache) {
+              // 如果播客来自AudioCache表，检查是否已经有transcript数据
+              // 注意：第一次查询AudioCache时，无论includeTranscript是true还是false，都会查询transcript字段
+              // 所以如果podcast.originalTranscript已经有值，说明第一次查询时已经获取了数据
+              const hasExistingData = podcast.originalTranscript !== null && podcast.originalTranscript !== undefined;
+              console.log(`[api/public/podcast] AudioCache播客检查: id=${podcast.id}, originalTranscript长度=${podcast.originalTranscript?.length || 0}, translatedTranscript长度=${podcast.translatedTranscript?.length || 0}, hasExistingData=${hasExistingData}`);
+              
+              if (hasExistingData) {
+                console.log(`[api/public/podcast] AudioCache播客已有transcript数据，无需再次查询: id=${podcast.id}`);
+                // 数据已经在第一次查询时获取，不需要再次查询
+              } else {
+                // 如果第一次查询时没有获取到transcript（可能是数据库中的值确实是null），现在再次查询确认
+                console.log(`[api/public/podcast] AudioCache播客transcript为空，尝试再次查询: id=${podcast.id}, whereClause=`, JSON.stringify(whereClause));
+                largeFields = await withQueryTimeout(
+                  () => prisma.audioCache.findUnique({
+                    where: { id: podcast.id }, // 使用findUnique直接通过id查询，更可靠
+                    select: {
+                      id: true,
+                      transcript: true,
+                      translatedTranscript: true,
+                    }
+                  }),
+                  15000, // 15秒超时
+                  '播客详情查询超时（AudioCache大字段）'
+                );
+                
+                if (largeFields) {
+                  console.log(`[api/public/podcast] AudioCache大字段查询成功: id=${largeFields.id}, transcript长度=${largeFields.transcript?.length || 0}, translatedTranscript长度=${largeFields.translatedTranscript?.length || 0}, transcript是否为null=${largeFields.transcript === null}`);
+                  // AudioCache的transcript就是originalTranscript
+                  (podcast as any).originalTranscript = largeFields.transcript;
+                  (podcast as any).translatedTranscript = largeFields.translatedTranscript || null;
+                } else {
+                  console.warn(`[api/public/podcast] AudioCache大字段查询返回null: id=${podcast.id}`);
+                }
+              }
+            } else {
+              // 如果播客来自Podcast表，查询Podcast表的大字段
+              // 使用findUnique直接通过id查询，更可靠
+              console.log(`[api/public/podcast] 查询Podcast表大字段: id=${podcast.id}`);
+              largeFields = await withQueryTimeout(
+                () => prisma.podcast.findUnique({
+                  where: { id: podcast.id },
+                  select: {
+                    id: true,
+                    transcript: true,
+                    originalTranscript: true,
+                    translatedTranscript: true,
+                  }
+                }),
+                15000, // 15秒超时
+                '播客详情查询超时（Podcast大字段）'
+              );
+              
+              if (largeFields) {
+                console.log(`[api/public/podcast] Podcast大字段查询成功: id=${largeFields.id}, originalTranscript长度=${largeFields.originalTranscript?.length || 0}, translatedTranscript长度=${largeFields.translatedTranscript?.length || 0}, originalTranscript是否为null=${largeFields.originalTranscript === null}`);
+                (podcast as any).transcript = largeFields.transcript;
+                (podcast as any).originalTranscript = largeFields.originalTranscript;
+                (podcast as any).translatedTranscript = largeFields.translatedTranscript;
+              } else {
+                console.warn(`[api/public/podcast] Podcast大字段查询返回null: id=${podcast.id}`);
+              }
             }
           } catch (largeFieldsError: any) {
             // 如果大字段查询失败，设置为null，不影响基本信息返回
             console.warn(`[api/public/podcast] 大字段查询失败，继续返回基本信息:`, largeFieldsError);
-            (podcast as any).transcript = null;
-            (podcast as any).originalTranscript = null;
-            (podcast as any).translatedTranscript = null;
+            // 对于AudioCache，可能已经有transcript数据了，不要覆盖
+            if (!resolvedFromAudioCache) {
+              (podcast as any).transcript = null;
+              (podcast as any).originalTranscript = null;
+              (podcast as any).translatedTranscript = null;
+            }
           }
-        } else if (podcast) {
-          // 如果不需要加载transcript，设置为null
+        } else if (podcast && !resolvedFromAudioCache) {
+          // 如果不需要加载transcript，设置为null（但AudioCache已经在上面设置了，不要覆盖）
           (podcast as any).transcript = null;
           (podcast as any).originalTranscript = null;
           (podcast as any).translatedTranscript = null;
@@ -272,11 +325,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    let resolvedFromAudioCache = false;
     // 如果在Podcast表没找到，查AudioCache表
     if (!podcast) {
       console.log(`[api/public/podcast] Podcast表未找到，尝试查询AudioCache表`);
       try {
+        // 优化：根据includeTranscript决定是否查询大字段
+        // 如果includeTranscript=false，不查询transcript字段，提升性能
         const audioCache = await prisma.audioCache.findFirst({
           where: whereClause,
           select: {
@@ -286,8 +340,10 @@ export async function GET(request: NextRequest) {
             audioUrl: true,
             summary: true,
             translatedSummary: true,
-            transcript: true,
-            translatedTranscript: true,
+            ...(includeTranscript ? {
+              transcript: true,
+              translatedTranscript: true,
+            } : {}),
             script: true,
             // report字段已删除
             publishedAt: true,
@@ -298,7 +354,9 @@ export async function GET(request: NextRequest) {
         });
 
         if (audioCache) {
-          console.log(`[api/public/podcast] AudioCache表找到播客: ${audioCache.id}`);
+          const transcriptLength = (audioCache as any).transcript?.length || 0;
+          const translatedTranscriptLength = (audioCache as any).translatedTranscript?.length || 0;
+          console.log(`[api/public/podcast] AudioCache表找到播客: ${audioCache.id}, includeTranscript=${includeTranscript}, transcript长度=${transcriptLength}, translatedTranscript长度=${translatedTranscriptLength}, transcript是否为null=${(audioCache as any).transcript === null}, transcript是否为undefined=${(audioCache as any).transcript === undefined}`);
           resolvedFromAudioCache = true;
           podcast = {
             id: audioCache.id,
@@ -311,11 +369,12 @@ export async function GET(request: NextRequest) {
             translatedSummary: audioCache.translatedSummary || null,
             topic: audioCache.topic,
             transcript: null, // 清洗稿已移除
-            originalTranscript: audioCache.transcript,  // ASR原文
-            translatedTranscript: audioCache.translatedTranscript || null,
+            originalTranscript: includeTranscript ? ((audioCache as any).transcript || null) : null,  // ASR原文（只有includeTranscript=true时才查询）
+            translatedTranscript: includeTranscript ? ((audioCache as any).translatedTranscript || null) : null,
             reportOutline: null, // AudioCache没有reportOutline字段
             updatedAt: audioCache.updatedAt
           };
+          console.log(`[api/public/podcast] 设置podcast.originalTranscript: 长度=${podcast.originalTranscript?.length || 0}, 是否为null=${podcast.originalTranscript === null}, 是否为undefined=${podcast.originalTranscript === undefined}`);
         } else {
           console.log(`[api/public/podcast] AudioCache表也未找到播客`);
         }
@@ -371,6 +430,9 @@ export async function GET(request: NextRequest) {
     // 已登录用户和 MuleRun 用户都不应该被限制
     let summaryToReturn = podcast.summary;
     let transcriptToReturn = podcast.originalTranscript || podcast.transcript;
+    
+    // 调试日志：检查transcript数据
+    console.log(`[api/public/podcast] 准备返回数据: id=${podcast.id}, includeTranscript=${includeTranscript}, originalTranscript长度=${podcast.originalTranscript?.length || 0}, transcript长度=${podcast.transcript?.length || 0}, transcriptToReturn长度=${transcriptToReturn?.length || 0}, resolvedFromAudioCache=${resolvedFromAudioCache}`);
     
     // 只有 Visitor 且权限已用完时才限制内容
     if (!user && !isMulerunRequest && visitorLimitExceeded) {

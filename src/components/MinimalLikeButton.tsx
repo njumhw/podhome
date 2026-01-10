@@ -104,8 +104,8 @@ export default function MinimalLikeButton({
       disabled={loading}
       className={`group flex items-center gap-3 px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
         liked 
-          ? 'border-transparent bg-transparent dark:bg-transparent hover:bg-slate-50 dark:hover:bg-white/5' 
-          : 'border-transparent hover:bg-slate-50/60 dark:hover:bg-white/5'
+          ? 'border-transparent bg-transparent dark:bg-transparent hover:bg-slate-50 dark:hover:bg-white/5 [data-theme="light"]:hover:bg-slate-100' 
+          : 'border-transparent hover:bg-slate-50/60 dark:hover:bg-white/5 [data-theme="light"]:hover:bg-slate-100'
       } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${className}`}
     >
       {/* Heart icon */}
@@ -118,7 +118,7 @@ export default function MinimalLikeButton({
         strokeLinecap="round"
         strokeLinejoin="round"
         className={`w-[18px] h-[18px] transition-colors ${
-          liked ? '' : 'text-zinc-500 group-hover:text-zinc-300'
+          liked ? '' : 'text-zinc-500 dark:text-zinc-500 [data-theme="light"]:text-slate-700 group-hover:text-zinc-300 dark:group-hover:text-zinc-300 [data-theme="light"]:group-hover:text-slate-800'
         }`}
       >
         <defs>
@@ -131,7 +131,7 @@ export default function MinimalLikeButton({
         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
       </svg>
       <span className={`text-xs font-mono ${
-        liked ? 'text-rose-400' : 'text-zinc-600 group-hover:text-zinc-400'
+        liked ? 'text-rose-400' : 'text-zinc-600 dark:text-zinc-600 [data-theme="light"]:text-slate-800 group-hover:text-zinc-400 dark:group-hover:text-zinc-400 [data-theme="light"]:group-hover:text-slate-900'
       }`}>
         {likeCount}
       </span>

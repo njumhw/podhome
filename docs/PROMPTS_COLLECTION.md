@@ -31,13 +31,12 @@ Please generate a professional podcast summary/report based on the ASR transcrip
 - Conflict handling: Follow the ASR transcript, maintain the original meaning
 - Information priority: Cover all key viewpoints, data, cases and logic, ensure information completeness
 
-**Output Length and Comprehensiveness Requirements (Important!):**
-- **Maximize output length**: Please fully utilize the model's 32,000 token output limit to generate the longest possible report
-- **Target output length**: Summary length should be at least 25% of the ASR transcript length (the more detailed, the better). If the ASR transcript is 100,000 characters, the target output should be at least 25,000 characters or more
+**Information Density and Comprehensiveness Requirements (Important!):**
+- **Density priority**: Report length should be completely determined by the information density of the source content. If the podcast has rich content, dense viewpoints, and complex logic, expand in detail; if the content is shallow, viewpoints are simple, and information is limited, be concise. Do not force expansion to meet word count.
 - **Comprehensive coverage**: Must cover all main viewpoints, secondary viewpoints, related arguments, specific cases, data, citations, and details mentioned in the podcast
-- **Do not over-compress**: Do not delete important information for the sake of brevity. It is better to have a longer report than to sacrifice completeness
-- **Deep expansion**: For each viewpoint, provide a complete logical chain, argumentation process, supporting arguments, and specific cases
-- **No word count limit mindset**: Within the 32K token limit, generate the most detailed and comprehensive report possible
+- **Do not over-compress**: Do not delete important information for the sake of brevity, but also do not pad or repeat to reach a certain length
+- **Deep expansion**: For each viewpoint, provide a complete logical chain, argumentation process, supporting arguments, and specific cases, but only if these contents actually exist and have value. Do not fabricate or force expansion.
+- **Quality over quantity**: Prioritize information value and logical coherence over report length. A concise, high-quality report is better than a long, repetitive one.
 
 **Writing Style Requirements (Critical!):**
 1. **Long sentences priority**: Use complete, complex long sentences for in-depth elaboration. Each paragraph should contain multiple interrelated sentences, forming a complete argumentation chain
@@ -72,7 +71,7 @@ Please generate a professional podcast summary/report based on the ASR transcrip
 - **Maximize information value**: Prioritize retaining all important viewpoints, arguments, cases, and data
 - **Absolutely prohibit adding content**: Do not add any information, viewpoints, or explanations not mentioned in the podcast
 - **Faithful to original principle**: All content must be strictly based on the provided content, no additions allowed
-- **Length target**: Fully utilize the 32K token limit to generate the most detailed and comprehensive report possible
+- **No padding or repetition**: Do not repeat the same viewpoint in different words, do not pad content to reach a certain length, ensure each sentence provides new information increment
 
 **Information Density and Length Principles:**
 - Density priority: Report length should be completely determined by the information density of the source content, do not force expansion to meet word count
@@ -81,11 +80,11 @@ Please generate a professional podcast summary/report based on the ASR transcrip
 - Deduplication check: Ensure each sentence provides new information increment, avoid "repetitive talk" or "synonymous repetition"
 
 **Important Reminders:**
-- Do not sacrifice information completeness and comprehensiveness for the sake of brevity
-- It is better to have a longer report than to sacrifice coverage of all important viewpoints and arguments
-- Within the 32K token limit, generate the most detailed and comprehensive report possible
+- Report length is completely determined by content information density, do not pad or repeat to reach a certain length target
+- Ensure each viewpoint, argument, case, citation provides new information increment, avoid synonymous repetition
+- Do not sacrifice information completeness for brevity, but also do not pad or repeat for length
 - Goal: Let readers fully understand the core content of the podcast through the report, without needing to listen to the original audio
-- **Style goal**: Generate a professional report like McKinsey research reports or investment company research reports, suitable for in-depth reading, logically rigorous, with complete argumentation
+- **Style goal**: Generate a professional report like McKinsey research reports or investment company research reports, suitable for in-depth reading, logically rigorous, with complete argumentation, but concise and information-dense
 ```
 
 ### 中文播客系统提示词
@@ -162,7 +161,7 @@ Please generate an extremely detailed podcast report outline/framework based on 
 **Important Requirements (Must Strictly Follow):**
 - ✅ **Must cover all themes and viewpoints in the ASR transcript** (including main and secondary)
 - ✅ **Outline should be extremely detailed**, containing **all** key viewpoints, arguments, cases, data under each theme
-- ✅ **Target length: 8,000-12,000 characters** (ensure all content is covered, do not compress)
+- ✅ **Comprehensiveness over length**: The outline should be as detailed as necessary to cover all important content, but length is determined by information density, not a fixed target
 - ✅ **Do not over-compress**, ensure **all important information** is in the outline
 - ✅ **Do not omit secondary viewpoints**, even secondary viewpoints must be included
 - ✅ **Do not omit data**, all numbers and statistical information must be included
@@ -225,7 +224,7 @@ Please generate an extremely detailed, complete, and clearly structured report o
 **重要要求（必须严格遵守）：**
 - ✅ **必须覆盖ASR原文中的所有主题和观点**（包括主要和次要）
 - ✅ **大纲应该极其详细**，包含每个主题下的**所有**关键观点、论据、案例、数据
-- ✅ **目标长度：8,000-12,000字符**（确保覆盖所有内容，不要压缩）
+- ✅ **全面性优于长度**：大纲应该足够详细以覆盖所有重要内容，但长度由信息密度决定，而不是固定目标
 - ✅ **不要过度压缩**，要确保**所有重要信息**都在大纲中
 - ✅ **不要省略次要观点**，即使是次要观点也要包含
 - ✅ **不要省略数据**，所有数字、统计信息都要包含
@@ -287,11 +286,11 @@ Please generate a complete and detailed podcast summary/report based on the foll
    - Then check the ASR transcript, if important content not in the outline is found, also supplement it to the report
    - Ensure the report completely covers all core content of the podcast
 
-**Output Length Requirements (Extremely Important!):**
-- **Must fully utilize the 32,000 token output limit**, generate as long and detailed a report as possible
-- **Target output length should be at least 25% of ASR transcript length** (if ASR transcript is 109,000 characters, target should be 27,250 characters or more)
-- **Do not compress content for fear of being too long**, within the 32K token limit, generate the most detailed report possible
-- **If report length is far below target (e.g., below 20% of ASR transcript), it means content expansion is insufficient and needs regeneration**
+**Information Density and Length Principles (Important!):**
+- **Density priority**: Report length should be completely determined by the information density of the source content. If the podcast has rich content, dense viewpoints, and complex logic, expand in detail; if the content is shallow, viewpoints are simple, and information is limited, be concise. Do not force expansion to meet word count.
+- **Do not compress important content**: Do not delete important information for the sake of brevity, but also do not pad or repeat to reach a certain length
+- **Quality over quantity**: Prioritize information value and logical coherence. A concise, high-quality report that fully covers all important content is better than a long, repetitive one.
+- **No fixed length target**: There is no minimum length requirement. The report should be as long as necessary to comprehensively cover all important content, but no longer.
 
 **Content Quality Requirements:**
 - **Must cover all themes and viewpoints in the outline** (this is a hard requirement, cannot be missed)
@@ -361,11 +360,11 @@ Please generate a complete, coherent, professional, detailed, and comprehensive 
    - 然后检查ASR原文，如果发现重要内容未在大纲中，也要补充到报告中
    - 确保报告完整覆盖播客的所有核心内容
 
-**输出长度要求（极其重要！）：**
-- **必须充分利用32,000 token输出上限**，生成尽可能长、尽可能详尽的报告
-- **目标输出长度应至少达到ASR原文长度的25%**（如果ASR原文为109,000字符，目标应为27,250字符或更多）
-- **不要因为担心过长而压缩内容**，在32K token限制内，尽可能生成最详尽的报告
-- **如果报告长度远低于目标（如低于ASR原文的20%），说明内容展开不充分，需要重新生成**
+**信息密度与长度原则（重要！）：**
+- **密度优先**：报告长度应完全取决于源内容的信息密度。如果播客内容干货多、观点密集、逻辑复杂，请详尽展开；如果内容较浅、观点简单、信息量有限，请简明扼要。不要为了凑字数而强行扩写。
+- **不要压缩重要内容**：不要为了简洁而删除重要信息，但也不要为了达到某个长度而注水或重复
+- **质量优于数量**：优先考虑信息价值和逻辑连贯性。一份简洁、高质量、全面覆盖所有重要内容的报告，优于一份冗长、重复的报告。
+- **无固定长度目标**：没有最低长度要求。报告应该足够长以全面覆盖所有重要内容，但不应更长。
 
 **内容质量要求：**
 - **必须覆盖大纲中的所有主题和观点**（这是硬性要求，不能遗漏）
@@ -423,11 +422,11 @@ Please generate a comprehensive and detailed podcast summary/report based on the
    - **Important**: Do not only list viewpoints, expand in depth. For each main viewpoint, provide at least 2-3 detailed arguments or cases, and 1-2 important quote excerpts
    - Use long sentences and coherent paragraphs, avoid scattered listings
 
-**Output Length Requirements (Extremely Important!):**
-- **Must fully utilize the 32,000 token output limit**, generate as long and detailed a report as possible
-- **Target output length should be at least 25% of ASR transcript length** (if ASR transcript is 100,000 characters, target should be 25,000 characters or more)
-- **Do not compress content for fear of being too long**, within the 32K token limit, generate the most detailed report possible
-- **If report length is far below target (e.g., below 20% of ASR transcript), it means content expansion is insufficient and needs regeneration**
+**Information Density and Length Principles (Important!):**
+- **Density priority**: Report length should be completely determined by the information density of the source content. If the podcast has rich content, dense viewpoints, and complex logic, expand in detail; if the content is shallow, viewpoints are simple, and information is limited, be concise. Do not force expansion to meet word count.
+- **Do not compress important content**: Do not delete important information for the sake of brevity, but also do not pad or repeat to reach a certain length
+- **Quality over quantity**: Prioritize information value and logical coherence. A concise, high-quality report that fully covers all important content is better than a long, repetitive one.
+- **No fixed length target**: There is no minimum length requirement. The report should be as long as necessary to comprehensively cover all important content, but no longer.
 
 **Content Quality Requirements:**
 - **Must cover all main viewpoints, secondary viewpoints, related arguments, specific cases, data, citations, and details**
@@ -520,7 +519,7 @@ Please generate a detailed report summary based on the following podcast content
 2. **Retain all key information**: Include all main viewpoints, secondary viewpoints, related arguments, specific cases, data, citations, and details
 3. **Full expansion**: For each main viewpoint, provide at least 2-3 detailed arguments or case support
 4. **Use long sentences and coherent paragraphs**: Avoid scattered listings, use complete long sentences for in-depth elaboration
-5. **Target length**: Each chunk's summary should be fully expanded, do not over-compress, target length should reach 20-30% of input content
+5. **Length principle**: Each chunk's summary should be fully expanded based on information density, do not over-compress, but also do not pad to reach a certain percentage
 6. **Markdown format**: Use titles, paragraphs, bold, etc. Markdown format to organize content
 
 Please generate a detailed, coherent, and professional report summary.
@@ -538,7 +537,7 @@ Please generate a detailed, coherent, and professional report summary.
 2. **保留所有关键信息**：包括所有主要观点、次要观点、相关论据、具体案例、数据、引用和细节
 3. **充分展开**：对于每个主要观点，至少提供2-3个详细论据或案例支撑
 4. **使用长句子和连贯段落**：避免散点式罗列，使用完整的长句子进行深入阐述
-5. **目标长度**：每个块的摘要应该充分展开，不要过度压缩，目标长度应达到输入内容的20-30%
+5. **长度原则**：每个块的摘要应该根据信息密度充分展开，不要过度压缩，但也不要为了达到某个百分比而注水
 6. **Markdown格式**：使用标题、段落、粗体等Markdown格式组织内容
 
 请生成一份详细、连贯、专业的报告摘要。
@@ -556,7 +555,7 @@ Please integrate the following multiple report segments into a complete, coheren
 2. **Maintain logical coherence**: Ensure smooth logical connections between segments, use transition words and connectors
 3. **Remove duplicate content**: Identify and remove duplicate viewpoints and expressions, but do not over-compress
 4. **Detailed expansion**: For each main viewpoint, provide a complete logical chain, argumentation process, supporting arguments, and specific cases
-5. **Target length**: Fully utilize the 32K token output limit, generate as detailed and comprehensive a report as possible. Target length should reach 20-30% of original podcast content
+5. **Length principle**: Generate as detailed and comprehensive a report as possible based on information density. Do not pad to reach a certain percentage of original content.
 6. **Use long sentences and coherent paragraphs**: Avoid scattered listings, use complete long sentences for in-depth elaboration
 7. **Markdown format**: Use titles, paragraphs, bold, etc. Markdown format to organize content
 
@@ -580,7 +579,7 @@ Please generate a complete, coherent, professional, detailed, and comprehensive 
 2. **保持逻辑连贯**：确保各片段之间的逻辑连接顺畅，使用过渡词和连接词
 3. **删除重复内容**：识别并删除重复的观点和表述，但不要过度压缩
 4. **详细展开**：对于每个主要观点，要提供完整的逻辑链条、论证过程、支撑论据和具体案例
-5. **目标长度**：充分利用32K token输出上限，生成尽可能详尽、全面的报告。目标长度应达到原始播客内容的20-30%
+5. **长度原则**：根据信息密度生成尽可能详尽、全面的报告。不要为了达到原始内容的某个百分比而注水。
 6. **使用长句子和连贯段落**：避免散点式罗列，使用完整的长句子进行深入阐述
 7. **Markdown格式**：使用标题、段落、粗体等Markdown格式组织内容
 
@@ -689,11 +688,11 @@ Please generate a complete, coherent, professional, detailed, and comprehensive 
 ### 触发条件
 
 1. **两轮生成**：当音频段落数 > 60 时触发
-   - 第一轮：生成详细大纲（8,000-12,000字符）
-   - 第二轮：基于大纲+ASR原文生成完整报告（目标长度：ASR原文的25%）
+   - 第一轮：生成详细大纲（长度由信息密度决定）
+   - 第二轮：基于大纲+ASR原文生成完整报告（长度由信息密度决定）
 
 2. **单轮生成**：当音频段落数 ≤ 60 时触发
-   - 直接基于ASR原文生成报告（目标长度：ASR原文的25%）
+   - 直接基于ASR原文生成报告（长度由信息密度决定）
 
 3. **分块处理**：当输入超过900K tokens时触发
    - 将ASR原文分块处理
@@ -710,8 +709,8 @@ Please generate a complete, coherent, professional, detailed, and comprehensive 
 ### 关键参数
 
 - **最大输出Token**：32,000 tokens
-- **目标输出长度**：ASR原文长度的25%（至少20%）
-- **大纲长度**：8,000-12,000字符
+- **输出长度**：由信息密度决定，无固定目标
+- **大纲长度**：由信息密度决定，无固定目标
 - **两轮生成阈值**：段落数 > 60
 - **分块处理阈值**：输入 > 900K tokens
 
@@ -723,4 +722,5 @@ Please generate a complete, coherent, professional, detailed, and comprehensive 
 - 支持中英文双语提示词
 - 两轮生成阈值从40调整为60
 - 添加引用逻辑和去重检查机制
+- 2025-01-04：移除固定长度目标要求，强化"信息密度优先"原则，避免"为了字数多而多"的倾向
 

@@ -300,6 +300,49 @@ body > * {
   background-color: #ffffff !important;
 }
 
+/* 强制覆盖 dark:bg-black 在白色主题下 */
+[data-theme='light'] .dark\:bg-black {
+  background-color: #ffffff !important;
+}
+
+/* 点赞分享区域在白色主题下强制白色背景 */
+[data-theme='light'] .like-share-section {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important; /* slate-200 */
+}
+
+/* 点赞分享区域文字在白色主题下强制深色 */
+[data-theme='light'] .like-share-text {
+  color: #0f172a !important; /* slate-900 - 更深的颜色 */
+}
+
+/* ASR Transcript 区域在白色主题下强制白色背景 */
+[data-theme='light'] .asr-transcript-section {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important; /* slate-200 */
+}
+
+[data-theme='light'] .asr-transcript-section > div:first-child {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important; /* slate-200 */
+}
+
+/* ASR Transcript header 文字在白色主题下强制深色 */
+[data-theme='light'] .asr-transcript-section h2,
+[data-theme='light'] .asr-transcript-section button {
+  color: #475569 !important; /* slate-600 */
+}
+
+[data-theme='light'] .asr-transcript-section button:hover {
+  background-color: #f1f5f9 !important; /* slate-100 */
+}
+
+/* ASR 内容区域在白色主题下强制白色背景 */
+[data-theme='light'] .asr-content-area {
+  background-color: #ffffff !important;
+  color: #0f172a !important; /* slate-900 */
+}
+
 [data-theme='light'] .bg-black\/40 {
   background-color: rgba(15, 23, 42, 0.05) !important;
 }
