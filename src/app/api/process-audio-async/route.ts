@@ -6,6 +6,7 @@ import { getSessionUser } from "@/server/auth";
 import { db } from "@/server/db";
 import { taskQueue } from "@/server/task-queue";
 import { checkUserUploadLimit } from "@/server/user-limits";
+import { normalizePodcastUrl } from "@/utils/url-normalizer";
 
 const bodySchema = z.object({
   url: z.string().url(),
@@ -39,6 +40,12 @@ export async function POST(req: NextRequest) {
     const { url } = parsed.data;
     console.log(`[process-audio-async] 收到处理请求: ${url}, 耗时: ${Date.now() - startTime}ms`);
     
+    // 标准化URL（移除查询参数等，确保相同内容的URL被视为同一个）
+    const normalizedUrl = normalizePodcastUrl(url);
+    if (normalizedUrl !== url) {
+      console.log(`[process-audio-async] URL已标准化: ${url} -> ${normalizedUrl}`);
+    }
+    
     // 检查用户认证
     let user = null;
     
@@ -65,12 +72,12 @@ export async function POST(req: NextRequest) {
       return jsonError(limitCheck.reason || "今日处理额度已用完，请明天再试", 429);
     }
     
-    console.log(`开始异步处理播客链接: ${url}`);
+    console.log(`开始异步处理播客链接: ${normalizedUrl}`);
     
     // ========== 重复检查：在添加任务前检查是否已存在相同 URL 的播客 ==========
     const existingPodcast = await db.podcast.findFirst({
       where: {
-        sourceUrl: url,
+        sourceUrl: normalizedUrl,
         status: 'READY', // 只检查已完成的播客
       },
       select: {
@@ -84,7 +91,7 @@ export async function POST(req: NextRequest) {
     });
     
     if (existingPodcast) {
-      console.log(`[process-audio-async] ⚠️ 播客已存在，跳过重复处理: url=${url.substring(0, 100)}..., existingId=${existingPodcast.id}`);
+      console.log(`[process-audio-async] ⚠️ 播客已存在，跳过重复处理: url=${normalizedUrl.substring(0, 100)}..., existingId=${existingPodcast.id}`);
       return Response.json({
         success: true,
         taskId: null,
@@ -97,7 +104,7 @@ export async function POST(req: NextRequest) {
     // 检查是否正在处理中（避免并发处理）
     const processingPodcast = await db.podcast.findFirst({
       where: {
-        sourceUrl: url,
+        sourceUrl: normalizedUrl,
         status: 'PROCESSING',
       },
       select: {
@@ -119,7 +126,7 @@ export async function POST(req: NextRequest) {
       
       // 如果处理时间超过30分钟，可能是卡住了，允许重新处理
       if (processingMinutes < 30) {
-        console.log(`[process-audio-async] ⚠️ 播客正在处理中，跳过重复处理: url=${url.substring(0, 100)}..., processingId=${processingPodcast.id}, 已处理${processingMinutes}分钟`);
+        console.log(`[process-audio-async] ⚠️ 播客正在处理中，跳过重复处理: url=${normalizedUrl.substring(0, 100)}..., processingId=${processingPodcast.id}, 已处理${processingMinutes}分钟`);
         return Response.json({
           success: true,
           taskId: null,
@@ -133,13 +140,13 @@ export async function POST(req: NextRequest) {
     }
     // ========================================================================
     
-    // 添加任务到队列
+    // 添加任务到队列（使用标准化后的URL）
     let taskId: string;
     try {
       taskId = await taskQueue.addTask({
         type: 'PODCAST_PROCESSING',
         data: {
-          url,
+          url: normalizedUrl, // 使用标准化后的URL
           userId: user?.id
         }
       });

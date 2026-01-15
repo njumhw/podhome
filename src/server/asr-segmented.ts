@@ -583,6 +583,14 @@ export async function transcribeAudioWithSegmentation(
       const errorMsg = `所有 ${count} 个音频分段OSS上传均失败，请检查OSS配置和网络连接。可能原因：1) OSS配置错误 2) 网络连接问题 3) OSS权限问题 4) 音频文件格式问题`;
       console.error(`❌ ${errorMsg}`);
       console.error(`   建议：检查开发服务器日志中的详细OSS错误信息`);
+      console.error(`   环境变量检查:`, {
+        hasAccessKeyId: !!process.env.ALIYUN_ACCESS_KEY_ID,
+        hasAccessKeySecret: !!process.env.ALIYUN_ACCESS_KEY_SECRET,
+        hasRegion: !!process.env.ALIYUN_OSS_REGION,
+        hasBucket: !!process.env.ALIYUN_OSS_BUCKET,
+        region: process.env.ALIYUN_OSS_REGION,
+        bucket: process.env.ALIYUN_OSS_BUCKET,
+      });
       throw new Error(errorMsg);
     }
     

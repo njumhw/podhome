@@ -11,6 +11,7 @@ import { generateReportWhole } from "@/clients/report-generator";
 import { qwenChat, ChatMessage } from "@/clients/qwen-text";
 import { analyzeError, logErrorAnalysis, createErrorContext } from "@/utils/error-analyzer";
 import { Prisma } from "@prisma/client";
+import { normalizePodcastUrl } from "@/utils/url-normalizer";
 
 // 语言检测（基于 ASR 返回）
 function detectLanguage(asrResult: any): string {
@@ -99,11 +100,17 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 	try {
 		console.log(`开始内部处理播客链接: ${url}`);
 		
+		// 标准化URL（移除查询参数等，确保相同内容的URL被视为同一个）
+		const normalizedUrl = normalizePodcastUrl(url);
+		if (normalizedUrl !== url) {
+			console.log(`URL已标准化: ${url} -> ${normalizedUrl}`);
+		}
+		
 		// ========== 重复检查：在开始处理前检查是否已存在相同 URL 的播客 ==========
-		// 检查是否已存在相同 sourceUrl 的已完成播客
+		// 检查是否已存在相同 sourceUrl 的已完成播客（使用标准化后的URL）
 		const existingPodcast = await db.podcast.findFirst({
 			where: {
-				sourceUrl: url,
+				sourceUrl: normalizedUrl,
 				status: 'READY', // 只检查已完成的播客
 			},
 			select: {
@@ -118,7 +125,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		});
 		
 		if (existingPodcast) {
-			console.log(`⚠️ 播客已存在，跳过重复处理: sourceUrl=${url.substring(0, 100)}..., existingId=${existingPodcast.id}, status=${existingPodcast.status}`);
+			console.log(`⚠️ 播客已存在，跳过重复处理: sourceUrl=${normalizedUrl.substring(0, 100)}..., existingId=${existingPodcast.id}, status=${existingPodcast.status}`);
 			// 返回已存在的播客信息，而不是重新处理
 			return {
 				id: existingPodcast.id,
@@ -132,7 +139,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		// 检查是否正在处理中（避免并发处理）
 		const processingPodcast = await db.podcast.findFirst({
 			where: {
-				sourceUrl: url,
+				sourceUrl: normalizedUrl,
 				status: 'PROCESSING', // 检查正在处理的播客
 			},
 			select: {
@@ -154,7 +161,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 			
 			// 如果处理时间超过30分钟，可能是卡住了，允许重新处理
 			if (processingMinutes < 30) {
-				console.log(`⚠️ 播客正在处理中，跳过重复处理: sourceUrl=${url.substring(0, 100)}..., processingId=${processingPodcast.id}, 已处理${processingMinutes}分钟`);
+				console.log(`⚠️ 播客正在处理中，跳过重复处理: sourceUrl=${normalizedUrl.substring(0, 100)}..., processingId=${processingPodcast.id}, 已处理${processingMinutes}分钟`);
 				return {
 					id: processingPodcast.id,
 					title: processingPodcast.title,
@@ -177,6 +184,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 		console.log(`[步骤1] 开始时间: ${new Date().toISOString()}`);
 		try {
 			// 使用通用解析器（支持 Apple Podcasts 等所有平台）
+			// 注意：解析时使用原始URL，因为解析器可能需要完整的URL（包括查询参数）
 			console.log(`[步骤1] 准备调用通用解析器: ${url}`);
 			const universalResult = await parseUniversalPodcast(url);
 			console.log(`[步骤1] 通用解析器返回结果:`, universalResult ? '成功' : '失败');
@@ -619,15 +627,15 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					// 先自动标注主题（如果还没有主题）
 					let autoTaggedTopicId: string | null = null;
 					try {
-						const { autoTagPodcast } = await import('./topic-auto-tagger');
-						const suggestedTopic = await autoTagPodcast({
-							title: (meta.title || '未命名播客').substring(0, 500).trim(),
-							sourceUrl: url.substring(0, 2000).trim(),
-							description: meta.description ? meta.description.substring(0, 10000).trim() : null,
-							showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null,
-							summary: reportData?.summary || null,
-							originalTranscript: asrData.transcript || null,
-						});
+				const { autoTagPodcast } = await import('./topic-auto-tagger');
+				const suggestedTopic = await autoTagPodcast({
+					title: (meta.title || '未命名播客').substring(0, 500).trim(),
+					sourceUrl: normalizedUrl.substring(0, 2000).trim(),
+					description: meta.description ? meta.description.substring(0, 10000).trim() : null,
+					showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null,
+					summary: reportData?.summary || null,
+					originalTranscript: asrData.transcript || null,
+				});
 						
 						if (suggestedTopic) {
 							const topic = await db.topic.findUnique({
@@ -655,7 +663,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 
 					const podcastData: any = {
 						title: (meta.title || '未命名播客').substring(0, 500).trim(), // 限制title长度，避免过长，并去除首尾空格
-						sourceUrl: url.substring(0, 2000).trim(), // 限制URL长度，并去除首尾空格
+						sourceUrl: normalizedUrl.substring(0, 2000).trim(), // 使用标准化后的URL，限制长度，并去除首尾空格
 						audioUrl: meta.audioUrl ? meta.audioUrl.substring(0, 2000).trim() : null, // 限制URL长度，并去除首尾空格
 						description: meta.description ? meta.description.substring(0, 10000).trim() : null, // 限制description长度，并去除首尾空格
 						publishedAt: meta.publishedAt ? new Date(meta.publishedAt) : null,
@@ -915,7 +923,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 					const { autoTagPodcast } = await import('./topic-auto-tagger');
 					const suggestedTopic = await autoTagPodcast({
 						title: (meta.title || '未命名播客').substring(0, 500).trim(),
-						sourceUrl: url.substring(0, 2000).trim(),
+						sourceUrl: normalizedUrl.substring(0, 2000).trim(),
 						description: meta.description ? meta.description.substring(0, 10000).trim() : null,
 						showAuthor: meta.author ? meta.author.substring(0, 200).trim() : null,
 						summary: reportData?.summary || null,
@@ -947,7 +955,7 @@ export async function processAudioInternal(url: string, userId?: string, taskId?
 
 				const podcastData: any = {
 					title: (meta.title || '未命名播客').substring(0, 500).trim(),
-					sourceUrl: url.substring(0, 2000).trim(),
+					sourceUrl: normalizedUrl.substring(0, 2000).trim(), // 使用标准化后的URL
 					audioUrl: meta.audioUrl ? meta.audioUrl.substring(0, 2000).trim() : null,
 					description: meta.description ? meta.description.substring(0, 10000).trim() : null,
 					publishedAt: meta.publishedAt ? new Date(meta.publishedAt) : null,

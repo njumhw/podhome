@@ -115,7 +115,17 @@ function getOssClient(): OSS | null {
   } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorCode = (error as any)?.code;
+    const errorStatus = (error as any)?.status;
+    
     console.error('❌ 创建OSS客户端失败:', errorMessage);
+    if (errorCode) {
+      console.error(`   错误代码: ${errorCode}`);
+    }
+    if (errorStatus) {
+      console.error(`   HTTP状态: ${errorStatus}`);
+    }
+    console.error(`   配置信息: region=${OSS_REGION}, bucket=${OSS_BUCKET}`);
     if (errorStack) {
       console.error('   错误堆栈:', errorStack.substring(0, 500));
     }
@@ -160,9 +170,15 @@ export async function uploadToOssAndGetPublicUrl(
       bucket: OSS_BUCKET,
       region: OSS_REGION
     };
+    const errorMsg = `OSS客户端未配置或创建失败: ${JSON.stringify(errorDetails)}`;
     console.error('❌ OSS客户端未配置，无法上传文件', errorDetails);
     console.error('   文件路径:', path);
     console.error('   文件大小:', file.length, '字节');
+    // 如果环境变量都存在但客户端创建失败，说明可能是OSS SDK初始化问题
+    if (OSS_ACCESS_KEY_ID && OSS_ACCESS_KEY_SECRET && OSS_REGION && OSS_BUCKET && !client) {
+      console.error('   ⚠️ 环境变量已配置，但OSS客户端创建失败，可能是OSS SDK初始化问题');
+      console.error('   建议：检查OSS AccessKey是否有效，region格式是否正确');
+    }
     return null;
   }
   
@@ -196,6 +212,11 @@ export async function uploadToOssAndGetPublicUrl(
       console.log(`[OSS上传] 文件大小: ${file.length} 字节 (${(file.length / 1024).toFixed(2)} KB)`);
       console.log(`[OSS上传] Content-Type: ${contentType}`);
       console.log(`[OSS上传] Bucket: ${OSS_BUCKET}, Region: ${OSS_REGION}`);
+      
+      // 确保client是有效的OSS实例
+      if (!client || typeof (client as any).put !== 'function') {
+        throw new Error('OSS客户端无效：put方法不存在');
+      }
       
       const result = await client.put(path, file, { 
         headers: { 
@@ -279,6 +300,15 @@ export async function uploadToOssAndGetPublicUrl(
   }
   
   // 所有重试都失败，返回null让调用者处理
+  // 记录最后一次错误的详细信息
+  if (lastError) {
+    const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
+    const errorCode = (lastError as any)?.code;
+    console.error(`❌ [OSS上传] 所有重试均失败，最终错误: ${errorMessage}`);
+    if (errorCode) {
+      console.error(`   错误代码: ${errorCode}`);
+    }
+  }
   return null;
 }
 
