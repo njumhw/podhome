@@ -124,6 +124,73 @@ class TaskQueue {
       await this.initialize();
     }
 
+    // 检查是否有相同URL的正在运行或待处理的任务（避免重复处理）
+    if (taskData.type === 'PODCAST_PROCESSING' && taskData.data?.url) {
+      const url = taskData.data.url;
+      const { normalizePodcastUrl } = await import('@/utils/url-normalizer');
+      const normalizedUrl = normalizePodcastUrl(url);
+      
+      // 检查是否有相同URL的正在运行或待处理的任务
+      const existingTask = await dbRetry.taskQueue.findFirst({
+        where: {
+          type: 'PODCAST_PROCESSING',
+          status: {
+            in: ['PENDING', 'RUNNING']
+          },
+          data: {
+            path: ['url'],
+            equals: normalizedUrl
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          startedAt: true
+        }
+      }) as { id: string; status: string; createdAt: Date; startedAt: Date | null } | null;
+
+      if (existingTask) {
+        const taskAge = Date.now() - new Date(existingTask.createdAt).getTime();
+        const taskAgeMinutes = Math.floor(taskAge / 60000);
+        
+        // 检查任务是否已经失败（通过查询数据库获取最新状态）
+        const latestTask = await dbRetry.taskQueue.findUnique({
+          where: { id: existingTask.id },
+          select: { status: true, error: true, updatedAt: true }
+        }) as { status: string; error: string | null; updatedAt: Date } | null;
+        
+        // 如果任务已经失败，不返回旧任务ID，允许创建新任务
+        if (latestTask && latestTask.status === 'FAILED') {
+          console.log(`⚠️ 发现相同URL的任务已失败: ${existingTask.id}, 错误: ${latestTask.error?.substring(0, 100)}...`);
+          console.log(`   允许创建新任务`);
+          // 不返回旧任务ID，继续创建新任务
+        } else if (latestTask && latestTask.error && latestTask.status === 'PENDING') {
+          // 如果任务状态是PENDING但有错误信息，说明任务可能已经失败但被重置为PENDING
+          // 检查错误信息是否包含"音频下载失败"，如果是，允许创建新任务
+          if (latestTask.error.includes('音频下载失败')) {
+            console.log(`⚠️ 发现相同URL的任务有错误信息（可能是失败后重置）: ${existingTask.id}, 错误: ${latestTask.error.substring(0, 100)}...`);
+            console.log(`   允许创建新任务`);
+            // 不返回旧任务ID，继续创建新任务
+          } else if (taskAgeMinutes < 30) {
+            // 其他错误，如果任务运行时间少于30分钟，返回旧任务ID
+            console.log(`⚠️ 发现相同URL的正在处理的任务: ${existingTask.id}, 状态: ${existingTask.status}, 已运行: ${taskAgeMinutes}分钟`);
+            return existingTask.id;
+          }
+        } else if (taskAgeMinutes < 30) {
+          // 如果任务运行时间超过30分钟，可能是卡住了，允许创建新任务
+          console.log(`⚠️ 发现相同URL的正在处理的任务: ${existingTask.id}, 状态: ${existingTask.status}, 已运行: ${taskAgeMinutes}分钟`);
+          // 返回现有任务的ID，而不是创建新任务
+          return existingTask.id;
+        } else {
+          console.log(`⚠️ 发现相同URL的长时间运行的任务（${taskAgeMinutes}分钟），可能是卡住了，允许创建新任务`);
+        }
+      }
+    }
+
     const task: Task = {
       id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       type: 'PODCAST_PROCESSING',
@@ -471,7 +538,8 @@ class TaskQueue {
       
       // 检查是否是临时性网络错误（fetch failed、网络请求失败等）
       // 对于这类错误，如果重试次数未超限，不立即标记为失败，而是等待重试
-      const isTemporaryNetworkError = errorMessage.includes('fetch failed') || 
+      // 注意：音频下载失败不应该被视为临时性网络错误，因为音频下载失败通常是永久性的（如URL无效、文件不存在等）
+      const isTemporaryNetworkError = (errorMessage.includes('fetch failed') || 
                                        errorMessage.includes('网络请求失败') ||
                                        errorMessage.includes('ECONNREFUSED') ||
                                        errorMessage.includes('ETIMEDOUT') ||
@@ -480,7 +548,8 @@ class TaskQueue {
                                        errorMessage.includes('HTTP_429') ||
                                        errorMessage.includes('HTTP_403') ||
                                        errorMessage.includes('请求过于频繁') ||
-                                       errorMessage.includes('访问被禁止');
+                                       errorMessage.includes('访问被禁止')) &&
+                                       !errorMessage.includes('音频下载失败'); // 排除音频下载失败
       
       if (isTemporaryNetworkError) {
         const retryCount = this.retryAttempts.get(taskRecord.id) || 0;

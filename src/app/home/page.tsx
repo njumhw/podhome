@@ -1185,6 +1185,19 @@ export default function HomePage() {
     const pollInterval = setInterval(async () => {
       pollCount++;
       try {
+        // 检查用户是否已取消此任务（通过检查localStorage）
+        const existing = localStorage.getItem('processingPodcasts');
+        if (existing) {
+          const items = JSON.parse(existing);
+          const currentItem = items.find((item: any) => item.id === processingId);
+          // 如果任务状态不是'processing'，说明用户已取消或任务已完成，停止轮询
+          if (currentItem && currentItem.status !== 'processing') {
+            console.log(`🛑 检测到任务已取消或完成，停止轮询: ${processingId}, 状态: ${currentItem.status}`);
+            clearInterval(pollInterval);
+            return;
+          }
+        }
+        
         console.log(`📡 轮询任务状态 (第${pollCount}次): ${taskId}`);
         // 增加超时时间到30秒，因为长时间音频处理可能需要更长时间
         // 特别是对于22+分段的音频，服务器端处理时间可能较长

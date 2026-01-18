@@ -138,9 +138,38 @@ export async function POST(req: NextRequest) {
         console.log(`[process-audio-async] ⚠️ 播客处理时间过长（${processingMinutes}分钟），可能是卡住了，允许重新处理`);
       }
     }
+    
+    // 检查是否有相同URL的失败播客（状态为FAILED），如果失败时间超过5分钟，允许重新处理
+    const failedPodcast = await db.podcast.findFirst({
+      where: {
+        sourceUrl: normalizedUrl,
+        status: 'FAILED',
+      },
+      select: {
+        id: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+    
+    if (failedPodcast) {
+      const failedTime = Date.now() - new Date(failedPodcast.updatedAt).getTime();
+      const failedMinutes = Math.floor(failedTime / 60000);
+      
+      // 如果失败时间超过5分钟，允许重新处理
+      if (failedMinutes < 5) {
+        console.log(`[process-audio-async] ⚠️ 播客最近失败过（${failedMinutes}分钟前），跳过重复处理: url=${normalizedUrl.substring(0, 100)}...`);
+        // 不返回错误，而是继续处理，但记录警告
+      } else {
+        console.log(`[process-audio-async] ⚠️ 播客失败时间较长（${failedMinutes}分钟前），允许重新处理`);
+      }
+    }
     // ========================================================================
     
     // 添加任务到队列（使用标准化后的URL）
+    // 注意：taskQueue.addTask 内部已经检查了是否有相同URL的正在运行的任务
     let taskId: string;
     try {
       taskId = await taskQueue.addTask({
