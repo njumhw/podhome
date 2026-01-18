@@ -123,6 +123,7 @@ export const dbRetry = {
 	taskQueue: {
 		findFirst: (args: any) => DatabaseWrapper.findFirst(db.taskQueue, args),
 		findMany: (args: any) => DatabaseWrapper.findMany(db.taskQueue, args),
+		findUnique: (args: any) => DatabaseWrapper.findUnique(db.taskQueue, args),
 		create: (args: any) => DatabaseWrapper.create(db.taskQueue, args),
 		update: (args: any) => DatabaseWrapper.update(db.taskQueue, args),
 		delete: (args: any) => DatabaseWrapper.delete(db.taskQueue, args),
