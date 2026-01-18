@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/server/db';
+import { normalizePodcastUrl } from '@/utils/url-normalizer';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,14 +17,20 @@ export async function GET(request: NextRequest) {
     const isUrl = searchTerm.startsWith('http');
     
     if (isUrl) {
+      // 标准化URL，确保能匹配数据库中存储的标准化URL
+      const normalizedUrl = normalizePodcastUrl(searchTerm);
+      
       // 按URL搜索 - 只查Podcast表（已发布的播客）
+      // 同时搜索原始URL和标准化URL，以兼容新旧数据
       const cached = await prisma.podcast.findFirst({
         where: {
           AND: [
             {
               OR: [
-                { sourceUrl: searchTerm },
-                { audioUrl: searchTerm }
+                { sourceUrl: searchTerm },      // 原始URL
+                { sourceUrl: normalizedUrl },   // 标准化URL
+                { audioUrl: searchTerm },       // 原始URL（audioUrl）
+                { audioUrl: normalizedUrl }    // 标准化URL（audioUrl）
               ]
             },
             { status: 'READY' } // 只返回已发布的播客

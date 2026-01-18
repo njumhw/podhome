@@ -2,6 +2,7 @@
 import { db } from "@/server/db";
 import { dbRetry } from "@/server/db-retry";
 import { processAudioInternal } from "@/server/audio-processor";
+import { normalizePodcastUrl } from "@/utils/url-normalizer";
 
 export interface Task {
   id: string;
@@ -610,12 +611,18 @@ class TaskQueue {
         }
 
         try {
+          // 标准化URL，确保能匹配数据库中存储的标准化URL
+          const normalizedUrl = normalizePodcastUrl(url);
+          
           // 检查数据库中是否存在对应的播客（通过 sourceUrl 或 audioUrl 匹配）
+          // 同时搜索原始URL和标准化URL，以兼容新旧数据
           const podcastResult = await dbRetry.podcast.findFirst({
             where: {
               OR: [
-                { sourceUrl: url },
-                { audioUrl: url }
+                { sourceUrl: url },           // 原始URL
+                { sourceUrl: normalizedUrl }, // 标准化URL
+                { audioUrl: url },            // 原始URL（audioUrl）
+                { audioUrl: normalizedUrl }   // 标准化URL（audioUrl）
               ],
               status: 'READY' as any // 只检查已完成处理的播客
             },
